@@ -27,7 +27,8 @@ const TimesheetEntry = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [notes, setNotes] = useState('');
-  const [todayTimesheet, setTodayTimesheet] = useState<TodayTimesheet | null>(null);
+  const [todayTimesheets, setTodayTimesheets] = useState<TodayTimesheet[]>([]);
+  const [currentSession, setCurrentSession] = useState<TodayTimesheet | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   
@@ -74,7 +75,7 @@ const TimesheetEntry = () => {
       .select('*')
       .eq('user_id', user?.id)
       .eq('date', today)
-      .maybeSingle();
+      .order('created_at', { ascending: false });
 
     if (error) {
       toast({
@@ -83,10 +84,14 @@ const TimesheetEntry = () => {
         variant: "destructive",
       });
     } else {
-      setTodayTimesheet(data);
-      if (data) {
-        setSelectedProject(data.project_id || '');
-        setNotes(data.notes || '');
+      setTodayTimesheets(data || []);
+      // Trova la sessione corrente (quella senza end_time)
+      const activeSession = data?.find(t => t.start_time && !t.end_time) || null;
+      setCurrentSession(activeSession);
+      
+      if (activeSession) {
+        setSelectedProject(activeSession.project_id || '');
+        setNotes(activeSession.notes || '');
       }
     }
   };
@@ -121,37 +126,19 @@ const TimesheetEntry = () => {
       const now = new Date().toISOString();
       const today = new Date().toISOString().split('T')[0];
 
-      let error;
-      
-      if (todayTimesheet) {
-        // Update existing timesheet
-        const result = await supabase
-          .from('timesheets')
-          .update({
-            start_time: now,
-            start_location_lat: location.lat,
-            start_location_lng: location.lng,
-            project_id: selectedProject || null,
-            notes: notes || null,
-          })
-          .eq('id', todayTimesheet.id);
-        error = result.error;
-      } else {
-        // Create new timesheet
-        const result = await supabase
-          .from('timesheets')
-          .insert({
-            user_id: user?.id,
-            date: today,
-            start_time: now,
-            start_location_lat: location.lat,
-            start_location_lng: location.lng,
-            project_id: selectedProject || null,
-            notes: notes || null,
-            created_by: user?.id,
-          });
-        error = result.error;
-      }
+      // Crea sempre una nuova sessione
+      const { error } = await supabase
+        .from('timesheets')
+        .insert({
+          user_id: user?.id,
+          date: today,
+          start_time: now,
+          start_location_lat: location.lat,
+          start_location_lng: location.lng,
+          project_id: selectedProject || null,
+          notes: notes || null,
+          created_by: user?.id,
+        });
 
       if (error) throw error;
 
@@ -173,7 +160,7 @@ const TimesheetEntry = () => {
   };
 
   const clockOut = async () => {
-    if (!todayTimesheet) return;
+    if (!currentSession) return;
 
     setIsLoading(true);
     
@@ -189,7 +176,7 @@ const TimesheetEntry = () => {
           end_location_lng: location.lng,
           notes: notes || null,
         })
-        .eq('id', todayTimesheet.id);
+        .eq('id', currentSession.id);
 
       if (error) throw error;
 
@@ -210,7 +197,7 @@ const TimesheetEntry = () => {
     }
   };
 
-  const isWorking = todayTimesheet?.start_time && !todayTimesheet?.end_time;
+  const isWorking = currentSession?.start_time && !currentSession?.end_time;
 
   return (
     <Card>
@@ -270,31 +257,42 @@ const TimesheetEntry = () => {
           />
         </div>
 
-        {todayTimesheet && (
+        {todayTimesheets.length > 0 && (
           <div className="p-3 bg-muted rounded-lg">
-            <div className="text-sm space-y-1">
-              {todayTimesheet.start_time && (
-                <div className="flex justify-between">
-                  <span>Entrata:</span>
-                  <span className="font-medium">
-                    {new Date(todayTimesheet.start_time).toLocaleTimeString('it-IT', { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    })}
-                  </span>
+            <div className="text-sm space-y-2">
+              <div className="font-medium">Sessioni di oggi:</div>
+              {todayTimesheets.map((session, index) => (
+                <div key={session.id} className="space-y-1 border-l-2 border-primary pl-2">
+                  <div className="flex justify-between">
+                    <span>Sessione {index + 1}:</span>
+                  </div>
+                  {session.start_time && (
+                    <div className="flex justify-between">
+                      <span>Entrata:</span>
+                      <span className="font-medium">
+                        {new Date(session.start_time).toLocaleTimeString('it-IT', { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })}
+                      </span>
+                    </div>
+                  )}
+                  {session.end_time && (
+                    <div className="flex justify-between">
+                      <span>Uscita:</span>
+                      <span className="font-medium">
+                        {new Date(session.end_time).toLocaleTimeString('it-IT', { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })}
+                      </span>
+                    </div>
+                  )}
+                  {!session.end_time && session.start_time && (
+                    <div className="text-xs text-primary">Sessione attiva</div>
+                  )}
                 </div>
-              )}
-              {todayTimesheet.end_time && (
-                <div className="flex justify-between">
-                  <span>Uscita:</span>
-                  <span className="font-medium">
-                    {new Date(todayTimesheet.end_time).toLocaleTimeString('it-IT', { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    })}
-                  </span>
-                </div>
-              )}
+              ))}
             </div>
           </div>
         )}
