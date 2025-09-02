@@ -51,7 +51,7 @@ const TimesheetStats = () => {
     
     const { data, error } = await supabase
       .from('timesheets')
-      .select('start_time, end_time, total_hours, overtime_hours, night_hours')
+      .select('date, start_time, end_time, total_hours, overtime_hours, night_hours')
       .eq('user_id', user?.id)
       .gte('date', firstDay.toISOString().split('T')[0])
       .lte('date', lastDay.toISOString().split('T')[0])
@@ -64,21 +64,45 @@ const TimesheetStats = () => {
         variant: "destructive",
       });
     } else {
-      const monthlyStats = data.reduce(
-        (acc, curr) => {
-          // Calcola le ore dalla differenza tra start_time e end_time se total_hours non è disponibile
-          let sessionHours = curr.total_hours || 0;
-          if (!curr.total_hours && curr.start_time && curr.end_time) {
-            const start = new Date(curr.start_time);
-            const end = new Date(curr.end_time);
-            sessionHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-          }
+      // Raggruppa per data per contare correttamente i giorni lavorativi
+      const dayGroups = data.reduce((acc, curr) => {
+        const dateKey = curr.date;
+        if (!acc[dateKey]) {
+          acc[dateKey] = [];
+        }
+        acc[dateKey].push(curr);
+        return acc;
+      }, {} as Record<string, typeof data>);
+
+      // Calcola statistiche per giorno e poi somma
+      const monthlyStats = Object.values(dayGroups).reduce(
+        (acc, daySessions) => {
+          let dayTotalHours = 0;
+          let dayOvertimeHours = 0;
+          let dayNightHours = 0;
+
+          // Somma tutte le sessioni del giorno
+          daySessions.forEach(session => {
+            let sessionHours = session.total_hours || 0;
+            if (!session.total_hours && session.start_time && session.end_time) {
+              const start = new Date(session.start_time);
+              const end = new Date(session.end_time);
+              sessionHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+            }
+
+            dayTotalHours += sessionHours;
+            dayOvertimeHours += session.overtime_hours || 0;
+            dayNightHours += session.night_hours || 0;
+          });
+
+          // Se il giorno ha ore lavorate, conta come giorno lavorativo
+          const hasWorkedHours = dayTotalHours > 0;
 
           return {
-            totalHours: acc.totalHours + sessionHours,
-            overtimeHours: acc.overtimeHours + (curr.overtime_hours || 0),
-            nightHours: acc.nightHours + (curr.night_hours || 0),
-            workingDays: curr.start_time && curr.end_time ? acc.workingDays + 1 : acc.workingDays,
+            totalHours: acc.totalHours + dayTotalHours,
+            overtimeHours: acc.overtimeHours + dayOvertimeHours,
+            nightHours: acc.nightHours + dayNightHours,
+            workingDays: acc.workingDays + (hasWorkedHours ? 1 : 0),
           };
         },
         { totalHours: 0, overtimeHours: 0, nightHours: 0, workingDays: 0 }
