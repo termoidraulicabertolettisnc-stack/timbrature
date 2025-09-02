@@ -121,18 +121,37 @@ const TimesheetEntry = () => {
       const now = new Date().toISOString();
       const today = new Date().toISOString().split('T')[0];
 
-      const { error } = await supabase
-        .from('timesheets')
-        .insert({
-          user_id: user?.id,
-          date: today,
-          start_time: now,
-          start_location_lat: location.lat,
-          start_location_lng: location.lng,
-          project_id: selectedProject || null,
-          notes: notes || null,
-          created_by: user?.id,
-        });
+      let error;
+      
+      if (todayTimesheet) {
+        // Update existing timesheet
+        const result = await supabase
+          .from('timesheets')
+          .update({
+            start_time: now,
+            start_location_lat: location.lat,
+            start_location_lng: location.lng,
+            project_id: selectedProject || null,
+            notes: notes || null,
+          })
+          .eq('id', todayTimesheet.id);
+        error = result.error;
+      } else {
+        // Create new timesheet
+        const result = await supabase
+          .from('timesheets')
+          .insert({
+            user_id: user?.id,
+            date: today,
+            start_time: now,
+            start_location_lat: location.lat,
+            start_location_lng: location.lng,
+            project_id: selectedProject || null,
+            notes: notes || null,
+            created_by: user?.id,
+          });
+        error = result.error;
+      }
 
       if (error) throw error;
 
