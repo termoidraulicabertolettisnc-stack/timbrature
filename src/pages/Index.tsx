@@ -2,8 +2,10 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Clock, LogOut, User } from 'lucide-react';
+import TimesheetEntry from '@/components/TimesheetEntry';
+import TimesheetHistory from '@/components/TimesheetHistory';
+import TimesheetStats from '@/components/TimesheetStats';
 
 const Index = () => {
   const { user, signOut, loading } = useAuth();
@@ -56,60 +58,18 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Welcome Section */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <CardTitle>Benvenuto!</CardTitle>
-              <CardDescription>
-                Inizia a tracciare le tue ore di lavoro
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                L'app è pronta per l'uso. Presto potrai timbrare entrate e uscite.
-              </p>
-            </CardContent>
-          </Card>
+        {/* Main Content */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Left Column - Timesheet Entry */}
+          <div className="lg:col-span-1">
+            <TimesheetEntry />
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Prossimi Passi</CardTitle>
-              <CardDescription>
-                Funzionalità in arrivo
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• Timbratura con GPS</li>
-                <li>• Gestione commesse</li>
-                <li>• Report mensili</li>
-              </ul>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Il Tuo Profilo</CardTitle>
-              <CardDescription>
-                Informazioni account
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 text-sm">
-                <div>
-                  <span className="font-medium">Email: </span>
-                  <span className="text-muted-foreground">{user.email}</span>
-                </div>
-                <div>
-                  <span className="font-medium">ID: </span>
-                  <span className="text-muted-foreground font-mono text-xs">
-                    {user.id.slice(0, 8)}...
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Right Column - History and Stats */}
+          <div className="lg:col-span-2 space-y-6">
+            <TimesheetStats />
+            <TimesheetHistory />
+          </div>
         </div>
       </div>
     </div>
