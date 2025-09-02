@@ -14,7 +14,316 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      audit_logs: {
+        Row: {
+          action: string
+          changed_at: string
+          changed_by: string
+          id: string
+          new_values: Json | null
+          old_values: Json | null
+          record_id: string
+          table_name: string
+        }
+        Insert: {
+          action: string
+          changed_at?: string
+          changed_by: string
+          id?: string
+          new_values?: Json | null
+          old_values?: Json | null
+          record_id: string
+          table_name: string
+        }
+        Update: {
+          action?: string
+          changed_at?: string
+          changed_by?: string
+          id?: string
+          new_values?: Json | null
+          old_values?: Json | null
+          record_id?: string
+          table_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_audit_logs_changed_by"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      companies: {
+        Row: {
+          address: string | null
+          city: string
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          city?: string
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          city?: string
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      company_settings: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          lunch_break_type: Database["public"]["Enums"]["lunch_break_type"]
+          meal_voucher_policy: Database["public"]["Enums"]["meal_voucher_type"]
+          night_shift_end: string
+          night_shift_start: string
+          overtime_calculation: Database["public"]["Enums"]["overtime_type"]
+          saturday_handling: Database["public"]["Enums"]["saturday_type"]
+          standard_daily_hours: number
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
+          meal_voucher_policy?: Database["public"]["Enums"]["meal_voucher_type"]
+          night_shift_end?: string
+          night_shift_start?: string
+          overtime_calculation?: Database["public"]["Enums"]["overtime_type"]
+          saturday_handling?: Database["public"]["Enums"]["saturday_type"]
+          standard_daily_hours?: number
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
+          meal_voucher_policy?: Database["public"]["Enums"]["meal_voucher_type"]
+          night_shift_end?: string
+          night_shift_start?: string
+          overtime_calculation?: Database["public"]["Enums"]["overtime_type"]
+          saturday_handling?: Database["public"]["Enums"]["saturday_type"]
+          standard_daily_hours?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_settings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          email: string
+          first_name: string
+          id: string
+          is_active: boolean
+          last_name: string
+          role: Database["public"]["Enums"]["user_role"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          email: string
+          first_name: string
+          id?: string
+          is_active?: boolean
+          last_name: string
+          role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          email?: string
+          first_name?: string
+          id?: string
+          is_active?: boolean
+          last_name?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_profiles_company"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          company_id: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      timesheets: {
+        Row: {
+          created_at: string
+          created_by: string
+          date: string
+          end_location_lat: number | null
+          end_location_lng: number | null
+          end_time: string | null
+          id: string
+          is_holiday: boolean
+          is_saturday: boolean
+          lunch_end_time: string | null
+          lunch_start_time: string | null
+          meal_voucher_earned: boolean
+          night_hours: number | null
+          notes: string | null
+          overtime_hours: number | null
+          project_id: string | null
+          start_location_lat: number | null
+          start_location_lng: number | null
+          start_time: string | null
+          total_hours: number | null
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          date: string
+          end_location_lat?: number | null
+          end_location_lng?: number | null
+          end_time?: string | null
+          id?: string
+          is_holiday?: boolean
+          is_saturday?: boolean
+          lunch_end_time?: string | null
+          lunch_start_time?: string | null
+          meal_voucher_earned?: boolean
+          night_hours?: number | null
+          notes?: string | null
+          overtime_hours?: number | null
+          project_id?: string | null
+          start_location_lat?: number | null
+          start_location_lng?: number | null
+          start_time?: string | null
+          total_hours?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          date?: string
+          end_location_lat?: number | null
+          end_location_lng?: number | null
+          end_time?: string | null
+          id?: string
+          is_holiday?: boolean
+          is_saturday?: boolean
+          lunch_end_time?: string | null
+          lunch_start_time?: string | null
+          meal_voucher_earned?: boolean
+          night_hours?: number | null
+          notes?: string | null
+          overtime_hours?: number | null
+          project_id?: string | null
+          start_location_lat?: number | null
+          start_location_lng?: number | null
+          start_time?: string | null
+          total_hours?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_timesheets_created_by"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "fk_timesheets_updated_by"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "fk_timesheets_user"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "timesheets_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +332,11 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      lunch_break_type: "30_minuti" | "60_minuti" | "libera"
+      meal_voucher_type: "oltre_6_ore" | "sempre_parttime" | "conteggio_giorni"
+      overtime_type: "dopo_8_ore" | "sempre"
+      saturday_type: "trasferta" | "straordinario"
+      user_role: "dipendente" | "amministratore"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +463,12 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      lunch_break_type: ["30_minuti", "60_minuti", "libera"],
+      meal_voucher_type: ["oltre_6_ore", "sempre_parttime", "conteggio_giorni"],
+      overtime_type: ["dopo_8_ore", "sempre"],
+      saturday_type: ["trasferta", "straordinario"],
+      user_role: ["dipendente", "amministratore"],
+    },
   },
 } as const
