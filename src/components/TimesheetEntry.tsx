@@ -114,15 +114,6 @@ const TimesheetEntry = () => {
   };
 
   const clockIn = async () => {
-    if (!selectedProject) {
-      toast({
-        title: "Errore",
-        description: "Seleziona una commessa",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsLoading(true);
     
     try {
@@ -138,7 +129,7 @@ const TimesheetEntry = () => {
           start_time: now,
           start_location_lat: location.lat,
           start_location_lng: location.lng,
-          project_id: selectedProject,
+          project_id: selectedProject || null,
           notes: notes || null,
           created_by: user?.id,
         });
@@ -293,7 +284,7 @@ const TimesheetEntry = () => {
           {!isWorking ? (
             <Button
               onClick={clockIn}
-              disabled={isLoading || !selectedProject}
+              disabled={isLoading}
               className="flex-1"
               size="lg"
             >
