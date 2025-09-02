@@ -30,6 +30,17 @@ const TimesheetStats = () => {
     }
   }, [user]);
 
+  // Aggiungi polling per aggiornare le statistiche ogni 30 secondi
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (user) {
+        loadStats();
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [user]);
+
   const loadStats = async () => {
     setIsLoading(true);
     
@@ -40,11 +51,11 @@ const TimesheetStats = () => {
     
     const { data, error } = await supabase
       .from('timesheets')
-      .select('total_hours, overtime_hours, night_hours')
+      .select('start_time, end_time, total_hours, overtime_hours, night_hours')
       .eq('user_id', user?.id)
       .gte('date', firstDay.toISOString().split('T')[0])
       .lte('date', lastDay.toISOString().split('T')[0])
-      .not('total_hours', 'is', null);
+      .not('start_time', 'is', null);
 
     if (error) {
       toast({
@@ -54,12 +65,22 @@ const TimesheetStats = () => {
       });
     } else {
       const monthlyStats = data.reduce(
-        (acc, curr) => ({
-          totalHours: acc.totalHours + (curr.total_hours || 0),
-          overtimeHours: acc.overtimeHours + (curr.overtime_hours || 0),
-          nightHours: acc.nightHours + (curr.night_hours || 0),
-          workingDays: acc.workingDays + 1,
-        }),
+        (acc, curr) => {
+          // Calcola le ore dalla differenza tra start_time e end_time se total_hours non è disponibile
+          let sessionHours = curr.total_hours || 0;
+          if (!curr.total_hours && curr.start_time && curr.end_time) {
+            const start = new Date(curr.start_time);
+            const end = new Date(curr.end_time);
+            sessionHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+          }
+
+          return {
+            totalHours: acc.totalHours + sessionHours,
+            overtimeHours: acc.overtimeHours + (curr.overtime_hours || 0),
+            nightHours: acc.nightHours + (curr.night_hours || 0),
+            workingDays: curr.start_time && curr.end_time ? acc.workingDays + 1 : acc.workingDays,
+          };
+        },
         { totalHours: 0, overtimeHours: 0, nightHours: 0, workingDays: 0 }
       );
       
