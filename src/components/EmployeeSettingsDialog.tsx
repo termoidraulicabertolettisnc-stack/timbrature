@@ -60,6 +60,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
     meal_voucher_policy: null,
     night_shift_start: null,
     night_shift_end: null,
+    overtime_monthly_compensation: null,
   });
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -110,6 +111,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
           meal_voucher_policy: null,
           night_shift_start: null,
           night_shift_end: null,
+          overtime_monthly_compensation: null,
         });
       }
     } catch (error) {
@@ -176,6 +178,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
       meal_voucher_policy: null,
       night_shift_start: null,
       night_shift_end: null,
+      overtime_monthly_compensation: null,
     });
     setHasChanges(true);
   };
