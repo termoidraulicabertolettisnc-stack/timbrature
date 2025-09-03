@@ -15,7 +15,7 @@ interface CompanySettings {
   company_id: string;
   standard_daily_hours: number;
   lunch_break_type: 'libera' | '30_minuti' | '60_minuti';
-  overtime_calculation: 'dopo_8_ore' | 'oltre_standard';
+  overtime_calculation: 'dopo_8_ore' | 'sempre';
   saturday_handling: 'trasferta' | 'straordinario';
   meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni';
   night_shift_start: string;
@@ -296,12 +296,12 @@ export default function AdminSettings() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="dopo_8_ore">Dopo 8 Ore Effettive</SelectItem>
-                  <SelectItem value="oltre_standard">Oltre Orario Standard</SelectItem>
+                  <SelectItem value="sempre">Sempre</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
+               <p className="text-xs text-muted-foreground">
                 {settings.overtime_calculation === 'dopo_8_ore' && 'Straordinari calcolati dopo 8 ore di lavoro effettivo'}
-                {settings.overtime_calculation === 'oltre_standard' && `Straordinari calcolati oltre ${settings.standard_daily_hours} ore standard`}
+                {settings.overtime_calculation === 'sempre' && `Straordinari sempre calcolati`}
               </p>
             </div>
           </CardContent>
