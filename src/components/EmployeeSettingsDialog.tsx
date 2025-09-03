@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -60,7 +59,6 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
     meal_voucher_policy: null,
     night_shift_start: null,
     night_shift_end: null,
-    overtime_monthly_compensation: null,
   });
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -111,7 +109,6 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
           meal_voucher_policy: null,
           night_shift_start: null,
           night_shift_end: null,
-          overtime_monthly_compensation: null,
         });
       }
     } catch (error) {
@@ -178,7 +175,6 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
       meal_voucher_policy: null,
       night_shift_start: null,
       night_shift_end: null,
-      overtime_monthly_compensation: null,
     });
     setHasChanges(true);
   };
@@ -398,31 +394,6 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
                   </p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Monthly Overtime Compensation */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Compensazione Straordinari Mensile</CardTitle>
-              <CardDescription>
-                Abilita la compensazione degli straordinari con le ore mancanti nel mese corrente
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="overtime-compensation"
-                  checked={settings.overtime_monthly_compensation || false}
-                  onCheckedChange={(checked) => updateSetting('overtime_monthly_compensation', checked)}
-                />
-                <Label htmlFor="overtime-compensation">
-                  Abilita compensazione mensile straordinari
-                </Label>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Quando abilitato, gli straordinari vengono compensati con le ore mancanti dello stesso mese
-              </p>
             </CardContent>
           </Card>
 

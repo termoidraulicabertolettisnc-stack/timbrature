@@ -55,7 +55,7 @@ export default function AdminTimesheets() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState<'daily' | 'weekly' | 'monthly' | 'overtime'>('daily');
+  const [activeView, setActiveView] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   
   // Filtri
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
@@ -219,11 +219,10 @@ export default function AdminTimesheets() {
 
       {/* Tabs per vista */}
       <Tabs value={activeView} onValueChange={(value) => setActiveView(value as any)}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="daily">Vista Giornaliera</TabsTrigger>
           <TabsTrigger value="weekly">Vista Settimanale</TabsTrigger>
           <TabsTrigger value="monthly">Vista Mensile</TabsTrigger>
-          <TabsTrigger value="overtime">Straordinari</TabsTrigger>
         </TabsList>
 
         {/* Filtri */}
@@ -320,10 +319,6 @@ export default function AdminTimesheets() {
             loading={loading} 
             onEdit={(id) => console.log('Edit timesheet:', id)}
           />
-        </TabsContent>
-
-        <TabsContent value="overtime">
-          <OvertimeTracker />
         </TabsContent>
       </Tabs>
     </div>
