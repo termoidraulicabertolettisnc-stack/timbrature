@@ -132,6 +132,79 @@ export type Database = {
           },
         ]
       }
+      employee_settings: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string
+          id: string
+          lunch_break_type:
+            | Database["public"]["Enums"]["lunch_break_type"]
+            | null
+          meal_voucher_policy:
+            | Database["public"]["Enums"]["meal_voucher_type"]
+            | null
+          night_shift_end: string | null
+          night_shift_start: string | null
+          overtime_calculation:
+            | Database["public"]["Enums"]["overtime_type"]
+            | null
+          saturday_handling: Database["public"]["Enums"]["saturday_type"] | null
+          standard_daily_hours: number | null
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          lunch_break_type?:
+            | Database["public"]["Enums"]["lunch_break_type"]
+            | null
+          meal_voucher_policy?:
+            | Database["public"]["Enums"]["meal_voucher_type"]
+            | null
+          night_shift_end?: string | null
+          night_shift_start?: string | null
+          overtime_calculation?:
+            | Database["public"]["Enums"]["overtime_type"]
+            | null
+          saturday_handling?:
+            | Database["public"]["Enums"]["saturday_type"]
+            | null
+          standard_daily_hours?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          lunch_break_type?:
+            | Database["public"]["Enums"]["lunch_break_type"]
+            | null
+          meal_voucher_policy?:
+            | Database["public"]["Enums"]["meal_voucher_type"]
+            | null
+          night_shift_end?: string | null
+          night_shift_start?: string | null
+          overtime_calculation?:
+            | Database["public"]["Enums"]["overtime_type"]
+            | null
+          saturday_handling?:
+            | Database["public"]["Enums"]["saturday_type"]
+            | null
+          standard_daily_hours?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           company_id: string | null
