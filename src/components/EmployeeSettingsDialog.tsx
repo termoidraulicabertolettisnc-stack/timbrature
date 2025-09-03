@@ -406,7 +406,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
             <CardHeader>
               <CardTitle>Compensazione Straordinari Mensile</CardTitle>
               <CardDescription>
-                Abilita la compensazione degli straordinari con le ore mancanti nel mese
+                Abilita la compensazione degli straordinari con le ore mancanti nel mese corrente
               </CardDescription>
             </CardHeader>
             <CardContent>
