@@ -1,14 +1,16 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAdmin } from '@/hooks/use-admin';
 import { Button } from '@/components/ui/button';
-import { Clock, LogOut, User } from 'lucide-react';
+import { Clock, LogOut, User, Settings } from 'lucide-react';
 import TimesheetEntry from '@/components/TimesheetEntry';
 import TimesheetHistory from '@/components/TimesheetHistory';
 import TimesheetStats from '@/components/TimesheetStats';
 
 const Index = () => {
   const { user, signOut, loading } = useAuth();
+  const { isAdmin } = useAdmin();
   const navigate = useNavigate();
 
   // Redirect unauthenticated users to login
@@ -47,6 +49,16 @@ const Index = () => {
               <User className="h-4 w-4" />
               <span>{user.email}</span>
             </div>
+            {isAdmin && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => navigate('/admin')}
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Admin
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
