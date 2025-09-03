@@ -9,10 +9,11 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Users, UserPlus, Edit, Trash2, Search, Shield, User } from 'lucide-react';
+import { Users, UserPlus, Edit, Trash2, Search, Shield, User, Settings } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+import { EmployeeSettingsDialog } from '@/components/EmployeeSettingsDialog';
 
 interface Employee {
   user_id: string;
@@ -43,7 +44,9 @@ export default function AdminEmployees() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [settingsEmployee, setSettingsEmployee] = useState<Employee | null>(null);
   const [formData, setFormData] = useState<EmployeeFormData>({
     email: '',
     first_name: '',
@@ -175,6 +178,11 @@ export default function AdminEmployees() {
       is_active: employee.is_active,
     });
     setIsEditDialogOpen(true);
+  };
+
+  const openSettingsDialog = (employee: Employee) => {
+    setSettingsEmployee(employee);
+    setIsSettingsDialogOpen(true);
   };
 
   const resetForm = () => {
@@ -438,25 +446,33 @@ export default function AdminEmployees() {
                       <TableCell>
                         {format(parseISO(employee.created_at), 'dd/MM/yyyy', { locale: it })}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditDialog(employee)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteEmployee(employee)}
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+                       <TableCell>
+                         <div className="flex gap-2">
+                           <Button
+                             variant="ghost"
+                             size="sm"
+                             onClick={() => openSettingsDialog(employee)}
+                             title={`Configura impostazioni per ${employee.first_name} ${employee.last_name}`}
+                           >
+                             <Settings className="h-4 w-4" />
+                           </Button>
+                           <Button
+                             variant="ghost"
+                             size="sm"
+                             onClick={() => openEditDialog(employee)}
+                           >
+                             <Edit className="h-4 w-4" />
+                           </Button>
+                           <Button
+                             variant="ghost"
+                             size="sm"
+                             onClick={() => handleDeleteEmployee(employee)}
+                             className="text-destructive hover:text-destructive"
+                           >
+                             <Trash2 className="h-4 w-4" />
+                           </Button>
+                         </div>
+                       </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -536,6 +552,21 @@ export default function AdminEmployees() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog Impostazioni Dipendente */}
+      {settingsEmployee && (
+        <EmployeeSettingsDialog
+          employee={{
+            id: settingsEmployee.user_id,
+            first_name: settingsEmployee.first_name,
+            last_name: settingsEmployee.last_name,
+            email: settingsEmployee.email,
+            company_id: settingsEmployee.company_id || '',
+          }}
+          open={isSettingsDialogOpen}
+          onOpenChange={setIsSettingsDialogOpen}
+        />
+      )}
     </div>
   );
 }
