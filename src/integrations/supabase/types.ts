@@ -149,6 +149,7 @@ export type Database = {
           overtime_calculation:
             | Database["public"]["Enums"]["overtime_type"]
             | null
+          overtime_monthly_compensation: boolean | null
           saturday_handling: Database["public"]["Enums"]["saturday_type"] | null
           standard_daily_hours: number | null
           updated_at: string
@@ -171,6 +172,7 @@ export type Database = {
           overtime_calculation?:
             | Database["public"]["Enums"]["overtime_type"]
             | null
+          overtime_monthly_compensation?: boolean | null
           saturday_handling?:
             | Database["public"]["Enums"]["saturday_type"]
             | null
@@ -195,6 +197,7 @@ export type Database = {
           overtime_calculation?:
             | Database["public"]["Enums"]["overtime_type"]
             | null
+          overtime_monthly_compensation?: boolean | null
           saturday_handling?:
             | Database["public"]["Enums"]["saturday_type"]
             | null

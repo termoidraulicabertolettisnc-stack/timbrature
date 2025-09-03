@@ -22,6 +22,7 @@ interface EmployeeSettings {
   meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni' | null;
   night_shift_start: string | null;
   night_shift_end: string | null;
+  overtime_monthly_compensation?: boolean | null;
 }
 
 interface CompanySettings {
