@@ -59,6 +59,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
     meal_voucher_policy: null,
     night_shift_start: null,
     night_shift_end: null,
+    overtime_monthly_compensation: null,
   });
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -109,6 +110,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
           meal_voucher_policy: null,
           night_shift_start: null,
           night_shift_end: null,
+          overtime_monthly_compensation: null,
         });
       }
     } catch (error) {
@@ -175,6 +177,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
       meal_voucher_policy: null,
       night_shift_start: null,
       night_shift_end: null,
+      overtime_monthly_compensation: null,
     });
     setHasChanges(true);
   };
@@ -391,6 +394,42 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
                   </Select>
                   <p className="text-xs text-muted-foreground">
                     Valore effettivo: {getEffectiveValue(settings.meal_voucher_policy, companySettings?.meal_voucher_policy)}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Monthly Overtime Compensation */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Compensazione Straordinari Mensile</CardTitle>
+              <CardDescription>
+                Se abilitato, gli straordinari vengono compensati mensilmente
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <Label>Compensazione Mensile</Label>
+                  <Select
+                    value={settings.overtime_monthly_compensation === null ? 'company_default' : settings.overtime_monthly_compensation ? 'enabled' : 'disabled'}
+                    onValueChange={(value) => updateSetting('overtime_monthly_compensation', 
+                      value === 'company_default' ? null : 
+                      value === 'enabled' ? true : false
+                    )}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleziona opzione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="company_default">Usa Default Aziendale</SelectItem>
+                      <SelectItem value="enabled">Abilitato</SelectItem>
+                      <SelectItem value="disabled">Disabilitato</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Valore effettivo: {settings.overtime_monthly_compensation === null ? 'Default Aziendale' : settings.overtime_monthly_compensation ? 'Abilitato' : 'Disabilitato'}
                   </p>
                 </div>
               </div>
