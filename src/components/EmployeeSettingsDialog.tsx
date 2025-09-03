@@ -270,14 +270,14 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
                 <div>
                   <Label>Tipo Pausa Pranzo</Label>
                   <Select
-                    value={settings.lunch_break_type || ''}
-                    onValueChange={(value) => updateSetting('lunch_break_type', value || null)}
+                    value={settings.lunch_break_type || 'company_default'}
+                    onValueChange={(value) => updateSetting('lunch_break_type', value === 'company_default' ? null : value)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={companySettings ? `Default: ${companySettings.lunch_break_type}` : 'Seleziona tipo'} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Usa Default Aziendale</SelectItem>
+                      <SelectItem value="company_default">Usa Default Aziendale</SelectItem>
                       <SelectItem value="libera">Libera</SelectItem>
                       <SelectItem value="30_minuti">30 minuti fissi</SelectItem>
                       <SelectItem value="60_minuti">60 minuti fissi</SelectItem>
@@ -305,14 +305,14 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
                 <div>
                   <Label>Calcolo Straordinari</Label>
                   <Select
-                    value={settings.overtime_calculation || ''}
-                    onValueChange={(value) => updateSetting('overtime_calculation', value || null)}
+                    value={settings.overtime_calculation || 'company_default'}
+                    onValueChange={(value) => updateSetting('overtime_calculation', value === 'company_default' ? null : value)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={companySettings ? `Default: ${companySettings.overtime_calculation}` : 'Seleziona metodo'} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Usa Default Aziendale</SelectItem>
+                      <SelectItem value="company_default">Usa Default Aziendale</SelectItem>
                       <SelectItem value="dopo_8_ore">Dopo 8 Ore Effettive</SelectItem>
                       <SelectItem value="sempre">Sempre</SelectItem>
                     </SelectContent>
@@ -339,14 +339,14 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
                 <div>
                   <Label>Gestione Sabato</Label>
                   <Select
-                    value={settings.saturday_handling || ''}
-                    onValueChange={(value) => updateSetting('saturday_handling', value || null)}
+                    value={settings.saturday_handling || 'company_default'}
+                    onValueChange={(value) => updateSetting('saturday_handling', value === 'company_default' ? null : value)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={companySettings ? `Default: ${companySettings.saturday_handling}` : 'Seleziona gestione'} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Usa Default Aziendale</SelectItem>
+                      <SelectItem value="company_default">Usa Default Aziendale</SelectItem>
                       <SelectItem value="trasferta">Trasferta</SelectItem>
                       <SelectItem value="straordinario">Straordinario</SelectItem>
                     </SelectContent>
@@ -373,14 +373,14 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
                 <div>
                   <Label>Politica Buoni Pasto</Label>
                   <Select
-                    value={settings.meal_voucher_policy || ''}
-                    onValueChange={(value) => updateSetting('meal_voucher_policy', value || null)}
+                    value={settings.meal_voucher_policy || 'company_default'}
+                    onValueChange={(value) => updateSetting('meal_voucher_policy', value === 'company_default' ? null : value)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={companySettings ? `Default: ${companySettings.meal_voucher_policy}` : 'Seleziona politica'} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Usa Default Aziendale</SelectItem>
+                      <SelectItem value="company_default">Usa Default Aziendale</SelectItem>
                       <SelectItem value="oltre_6_ore">Oltre 6 ore</SelectItem>
                       <SelectItem value="sempre_parttime">Sempre per part-time</SelectItem>
                       <SelectItem value="conteggio_giorni">Conteggio giorni</SelectItem>
