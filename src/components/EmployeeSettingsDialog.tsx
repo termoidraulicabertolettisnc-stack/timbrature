@@ -313,7 +313,9 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="company_default">Usa Default Aziendale</SelectItem>
-                      <SelectItem value="dopo_8_ore">Dopo 8 Ore Effettive</SelectItem>
+                      <SelectItem value="dopo_8_ore">
+                        Dopo {getEffectiveValue(settings.standard_daily_hours, companySettings?.standard_daily_hours)} Ore Effettive
+                      </SelectItem>
                       <SelectItem value="sempre">Sempre</SelectItem>
                     </SelectContent>
                   </Select>

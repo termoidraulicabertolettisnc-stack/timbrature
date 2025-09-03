@@ -295,12 +295,12 @@ export default function AdminSettings() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="dopo_8_ore">Dopo 8 Ore Effettive</SelectItem>
+                  <SelectItem value="dopo_8_ore">Dopo {settings.standard_daily_hours} Ore Effettive</SelectItem>
                   <SelectItem value="sempre">Sempre</SelectItem>
                 </SelectContent>
               </Select>
                <p className="text-xs text-muted-foreground">
-                {settings.overtime_calculation === 'dopo_8_ore' && 'Straordinari calcolati dopo 8 ore di lavoro effettivo'}
+                {settings.overtime_calculation === 'dopo_8_ore' && `Straordinari calcolati dopo ${settings.standard_daily_hours} ore di lavoro effettivo`}
                 {settings.overtime_calculation === 'sempre' && `Straordinari sempre calcolati`}
               </p>
             </div>
