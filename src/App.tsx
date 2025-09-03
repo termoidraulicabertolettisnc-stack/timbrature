@@ -10,6 +10,9 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminTimesheets from "./pages/admin/AdminTimesheets";
+import AdminEmployees from "./pages/admin/AdminEmployees";
+import AdminSettings from "./pages/admin/AdminSettings";
 
 const queryClient = new QueryClient();
 
@@ -31,6 +34,9 @@ const App = () => (
               </AdminRoute>
             }>
               <Route index element={<AdminDashboard />} />
+              <Route path="timesheets" element={<AdminTimesheets />} />
+              <Route path="employees" element={<AdminEmployees />} />
+              <Route path="settings" element={<AdminSettings />} />
             </Route>
             
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
