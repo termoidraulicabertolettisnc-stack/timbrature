@@ -13,6 +13,10 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminTimesheets from "./pages/admin/AdminTimesheets";
 import AdminEmployees from "./pages/admin/AdminEmployees";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminProjects from "./pages/admin/AdminProjects";
+import AdminConsolidation from "./pages/admin/AdminConsolidation";
+import AdminExport from "./pages/admin/AdminExport";
+import AdminAudit from "./pages/admin/AdminAudit";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +40,10 @@ const App = () => (
               <Route index element={<AdminDashboard />} />
               <Route path="timesheets" element={<AdminTimesheets />} />
               <Route path="employees" element={<AdminEmployees />} />
+              <Route path="projects" element={<AdminProjects />} />
+              <Route path="consolidation" element={<AdminConsolidation />} />
+              <Route path="export" element={<AdminExport />} />
+              <Route path="audit" element={<AdminAudit />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>
             
