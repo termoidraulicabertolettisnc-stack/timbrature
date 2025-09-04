@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CalendarIcon, Clock, Edit, Filter, Download, Users } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { CalendarIcon, Clock, Edit, Filter, Download, Users, ChevronDown, ChevronRight } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -46,6 +47,20 @@ interface TimesheetWithProfile {
   projects: {
     name: string;
   } | null;
+}
+
+interface EmployeeSummary {
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  total_hours: number;
+  overtime_hours: number;
+  night_hours: number;
+  meal_vouchers: number;
+  saturday_hours: number;
+  holiday_hours: number;
+  timesheets: TimesheetWithProfile[];
 }
 
 export default function AdminTimesheets() {
@@ -194,6 +209,47 @@ export default function AdminTimesheets() {
            projectName.includes(searchTerm.toLowerCase());
   });
 
+  // Aggrega i timesheet per dipendente
+  const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
+    const employeesMap = new Map<string, EmployeeSummary>();
+
+    filteredTimesheets.forEach(timesheet => {
+      if (!timesheet.profiles) return;
+
+      const key = timesheet.user_id;
+      if (!employeesMap.has(key)) {
+        employeesMap.set(key, {
+          user_id: timesheet.user_id,
+          first_name: timesheet.profiles.first_name,
+          last_name: timesheet.profiles.last_name,
+          email: timesheet.profiles.email,
+          total_hours: 0,
+          overtime_hours: 0,
+          night_hours: 0,
+          meal_vouchers: 0,
+          saturday_hours: 0,
+          holiday_hours: 0,
+          timesheets: []
+        });
+      }
+
+      const employee = employeesMap.get(key)!;
+      employee.timesheets.push(timesheet);
+      employee.total_hours += timesheet.total_hours || 0;
+      employee.overtime_hours += timesheet.overtime_hours || 0;
+      employee.night_hours += timesheet.night_hours || 0;
+      if (timesheet.meal_voucher_earned) employee.meal_vouchers += 1;
+      if (timesheet.is_saturday) employee.saturday_hours += timesheet.total_hours || 0;
+      if (timesheet.is_holiday) employee.holiday_hours += timesheet.total_hours || 0;
+    });
+
+    return Array.from(employeesMap.values()).sort((a, b) => 
+      `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
+    );
+  };
+
+  const employeeSummaries = aggregateTimesheetsByEmployee();
+
   const exportData = () => {
     // TODO: Implementare export
     toast({
@@ -298,24 +354,24 @@ export default function AdminTimesheets() {
 
         {/* Contenuto per ogni vista */}
         <TabsContent value="daily">
-          <TimesheetsTable 
-            timesheets={filteredTimesheets} 
+          <EmployeeSummaryTable 
+            employeeSummaries={employeeSummaries} 
             loading={loading} 
             onEdit={(id) => console.log('Edit timesheet:', id)}
           />
         </TabsContent>
         
         <TabsContent value="weekly">
-          <TimesheetsTable 
-            timesheets={filteredTimesheets} 
+          <EmployeeSummaryTable 
+            employeeSummaries={employeeSummaries} 
             loading={loading} 
             onEdit={(id) => console.log('Edit timesheet:', id)}
           />
         </TabsContent>
         
         <TabsContent value="monthly">
-          <TimesheetsTable 
-            timesheets={filteredTimesheets} 
+          <EmployeeSummaryTable 
+            employeeSummaries={employeeSummaries} 
             loading={loading} 
             onEdit={(id) => console.log('Edit timesheet:', id)}
           />
@@ -325,29 +381,30 @@ export default function AdminTimesheets() {
   );
 }
 
-// Componente tabella timesheets
-function TimesheetsTable({ 
-  timesheets, 
+// Componente tabella riassunto dipendenti
+function EmployeeSummaryTable({ 
+  employeeSummaries, 
   loading, 
   onEdit 
 }: { 
-  timesheets: TimesheetWithProfile[]; 
+  employeeSummaries: EmployeeSummary[]; 
   loading: boolean; 
   onEdit: (id: string) => void;
 }) {
-  const formatTime = (timeString: string | null) => {
-    if (!timeString) return '-';
-    return format(parseISO(timeString), 'HH:mm');
+  const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
+
+  const toggleEmployee = (userId: string) => {
+    const newExpanded = new Set(expandedEmployees);
+    if (newExpanded.has(userId)) {
+      newExpanded.delete(userId);
+    } else {
+      newExpanded.add(userId);
+    }
+    setExpandedEmployees(newExpanded);
   };
 
-  const formatHours = (hours: number | null) => {
-    if (!hours) return '0h';
+  const formatHours = (hours: number) => {
     return `${hours.toFixed(1)}h`;
-  };
-
-  const getEmployeeName = (timesheet: TimesheetWithProfile) => {
-    if (!timesheet.profiles) return 'Dipendente sconosciuto';
-    return `${timesheet.profiles.first_name} ${timesheet.profiles.last_name}`;
   };
 
   if (loading) {
@@ -368,79 +425,165 @@ function TimesheetsTable({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Users className="h-5 w-5" />
-          Timesheet ({timesheets.length})
+          Riepilogo Dipendenti ({employeeSummaries.length})
         </CardTitle>
         <CardDescription>
-          Elenco completo dei timesheet con possibilità di modifica
+          Totali per dipendente con dettaglio espandibile
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Data</TableHead>
-                <TableHead>Dipendente</TableHead>
-                <TableHead>Commessa</TableHead>
-                <TableHead>Entrata</TableHead>
-                <TableHead>Uscita</TableHead>
-                <TableHead>Pausa Pranzo</TableHead>
-                <TableHead>Ore Totali</TableHead>
-                <TableHead>Straordinari</TableHead>
-                <TableHead>Notturno</TableHead>
-                <TableHead>Extra</TableHead>
-                <TableHead>Azioni</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {timesheets.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                    Nessun timesheet trovato per i filtri selezionati
-                  </TableCell>
-                </TableRow>
-              ) : (
-                timesheets.map((timesheet) => (
-                  <TableRow key={timesheet.id}>
-                    <TableCell className="font-medium">
-                      {format(parseISO(timesheet.date), 'dd/MM/yyyy', { locale: it })}
-                    </TableCell>
-                    <TableCell>{getEmployeeName(timesheet)}</TableCell>
-                    <TableCell>{timesheet.projects?.name || 'Nessuna'}</TableCell>
-                    <TableCell>{formatTime(timesheet.start_time)}</TableCell>
-                    <TableCell>{formatTime(timesheet.end_time)}</TableCell>
-                    <TableCell>
-                      {timesheet.lunch_start_time && timesheet.lunch_end_time ? 
-                        `${formatTime(timesheet.lunch_start_time)} - ${formatTime(timesheet.lunch_end_time)}` : 
-                        '-'
+        <div className="space-y-2">
+          {employeeSummaries.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Nessun timesheet trovato per i filtri selezionati
+            </div>
+          ) : (
+            employeeSummaries.map((employee) => (
+              <Collapsible key={employee.user_id}>
+                <CollapsibleTrigger asChild>
+                  <div 
+                    className="flex items-center justify-between p-4 bg-secondary/50 rounded-lg hover:bg-secondary/70 cursor-pointer transition-colors"
+                    onClick={() => toggleEmployee(employee.user_id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      {expandedEmployees.has(employee.user_id) ? 
+                        <ChevronDown className="h-4 w-4" /> : 
+                        <ChevronRight className="h-4 w-4" />
                       }
-                    </TableCell>
-                    <TableCell>{formatHours(timesheet.total_hours)}</TableCell>
-                    <TableCell>{formatHours(timesheet.overtime_hours)}</TableCell>
-                    <TableCell>{formatHours(timesheet.night_hours)}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        {timesheet.is_saturday && <Badge variant="secondary">Sab</Badge>}
-                        {timesheet.is_holiday && <Badge variant="secondary">Fest</Badge>}
-                        {timesheet.meal_voucher_earned && <Badge variant="default">Buono</Badge>}
+                      <div>
+                        <div className="font-medium text-foreground">
+                          {employee.first_name} {employee.last_name}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {employee.email}
+                        </div>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onEdit(timesheet.id)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                    </div>
+                    
+                    <div className="flex items-center gap-6 text-sm">
+                      <div className="text-center">
+                        <div className="font-medium text-foreground">{formatHours(employee.total_hours)}</div>
+                        <div className="text-muted-foreground">Totali</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-medium text-foreground">{formatHours(employee.overtime_hours)}</div>
+                        <div className="text-muted-foreground">Straord.</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-medium text-foreground">{formatHours(employee.night_hours)}</div>
+                        <div className="text-muted-foreground">Nott.</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-medium text-foreground">{employee.meal_vouchers}</div>
+                        <div className="text-muted-foreground">Buoni</div>
+                      </div>
+                      {employee.saturday_hours > 0 && (
+                        <div className="text-center">
+                          <div className="font-medium text-foreground">{formatHours(employee.saturday_hours)}</div>
+                          <div className="text-muted-foreground">Sabato</div>
+                        </div>
+                      )}
+                      {employee.holiday_hours > 0 && (
+                        <div className="text-center">
+                          <div className="font-medium text-foreground">{formatHours(employee.holiday_hours)}</div>
+                          <div className="text-muted-foreground">Festivo</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="mt-2 ml-6">
+                    <TimesheetDetailsTable 
+                      timesheets={employee.timesheets} 
+                      onEdit={onEdit} 
+                    />
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            ))
+          )}
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// Componente tabella dettagli timesheet
+function TimesheetDetailsTable({ 
+  timesheets, 
+  onEdit 
+}: { 
+  timesheets: TimesheetWithProfile[]; 
+  onEdit: (id: string) => void;
+}) {
+  const formatTime = (timeString: string | null) => {
+    if (!timeString) return '-';
+    return format(parseISO(timeString), 'HH:mm');
+  };
+
+  const formatHours = (hours: number | null) => {
+    if (!hours) return '0h';
+    return `${hours.toFixed(1)}h`;
+  };
+
+  return (
+    <div className="bg-card border rounded-lg p-4">
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Data</TableHead>
+              <TableHead>Commessa</TableHead>
+              <TableHead>Entrata</TableHead>
+              <TableHead>Uscita</TableHead>
+              <TableHead>Pausa Pranzo</TableHead>
+              <TableHead>Ore Totali</TableHead>
+              <TableHead>Straordinari</TableHead>
+              <TableHead>Notturno</TableHead>
+              <TableHead>Extra</TableHead>
+              <TableHead>Azioni</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {timesheets.map((timesheet) => (
+              <TableRow key={timesheet.id}>
+                <TableCell className="font-medium">
+                  {format(parseISO(timesheet.date), 'dd/MM/yyyy', { locale: it })}
+                </TableCell>
+                <TableCell>{timesheet.projects?.name || 'Nessuna'}</TableCell>
+                <TableCell>{formatTime(timesheet.start_time)}</TableCell>
+                <TableCell>{formatTime(timesheet.end_time)}</TableCell>
+                <TableCell>
+                  {timesheet.lunch_start_time && timesheet.lunch_end_time ? 
+                    `${formatTime(timesheet.lunch_start_time)} - ${formatTime(timesheet.lunch_end_time)}` : 
+                    '-'
+                  }
+                </TableCell>
+                <TableCell>{formatHours(timesheet.total_hours)}</TableCell>
+                <TableCell>{formatHours(timesheet.overtime_hours)}</TableCell>
+                <TableCell>{formatHours(timesheet.night_hours)}</TableCell>
+                <TableCell>
+                  <div className="flex gap-1">
+                    {timesheet.is_saturday && <Badge variant="secondary">Sab</Badge>}
+                    {timesheet.is_holiday && <Badge variant="secondary">Fest</Badge>}
+                    {timesheet.meal_voucher_earned && <Badge variant="default">Buono</Badge>}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onEdit(timesheet.id)}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
   );
 }
