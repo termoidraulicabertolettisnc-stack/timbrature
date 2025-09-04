@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CalendarIcon, Clock, Edit, Filter, Download, Users, ChevronDown, ChevronRight } from 'lucide-react';
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, addDays, isSameDay } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { OvertimeTracker } from '@/components/OvertimeTracker';
@@ -61,6 +61,39 @@ interface EmployeeSummary {
   saturday_hours: number;
   holiday_hours: number;
   timesheets: TimesheetWithProfile[];
+}
+
+interface DailyHours {
+  date: string;
+  total_hours: number;
+  overtime_hours: number;
+  night_hours: number;
+  meal_vouchers: number;
+  timesheets: TimesheetWithProfile[];
+}
+
+interface EmployeeWeeklyData {
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  days: DailyHours[];
+  total_hours: number;
+  overtime_hours: number;
+  night_hours: number;
+  meal_vouchers: number;
+}
+
+interface EmployeeMonthlyData {
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  days: DailyHours[];
+  total_hours: number;
+  overtime_hours: number;
+  night_hours: number;
+  meal_vouchers: number;
 }
 
 export default function AdminTimesheets() {
@@ -250,6 +283,132 @@ export default function AdminTimesheets() {
 
   const employeeSummaries = aggregateTimesheetsByEmployee();
 
+  // Aggrega i dati per vista settimanale
+  const aggregateWeeklyData = (): EmployeeWeeklyData[] => {
+    const baseDate = parseISO(dateFilter);
+    const weekStart = startOfWeek(baseDate, { weekStartsOn: 1 });
+    const weekDays = eachDayOfInterval({
+      start: weekStart,
+      end: addDays(weekStart, 6)
+    });
+
+    const employeesMap = new Map<string, EmployeeWeeklyData>();
+
+    filteredTimesheets.forEach(timesheet => {
+      if (!timesheet.profiles) return;
+
+      const key = timesheet.user_id;
+      if (!employeesMap.has(key)) {
+        employeesMap.set(key, {
+          user_id: timesheet.user_id,
+          first_name: timesheet.profiles.first_name,
+          last_name: timesheet.profiles.last_name,
+          email: timesheet.profiles.email,
+          days: weekDays.map(day => ({
+            date: format(day, 'yyyy-MM-dd'),
+            total_hours: 0,
+            overtime_hours: 0,
+            night_hours: 0,
+            meal_vouchers: 0,
+            timesheets: []
+          })),
+          total_hours: 0,
+          overtime_hours: 0,
+          night_hours: 0,
+          meal_vouchers: 0
+        });
+      }
+
+      const employee = employeesMap.get(key)!;
+      const dayIndex = weekDays.findIndex(day => 
+        format(day, 'yyyy-MM-dd') === timesheet.date
+      );
+
+      if (dayIndex !== -1) {
+        const dayData = employee.days[dayIndex];
+        dayData.total_hours += timesheet.total_hours || 0;
+        dayData.overtime_hours += timesheet.overtime_hours || 0;
+        dayData.night_hours += timesheet.night_hours || 0;
+        if (timesheet.meal_voucher_earned) dayData.meal_vouchers += 1;
+        dayData.timesheets.push(timesheet);
+      }
+
+      employee.total_hours += timesheet.total_hours || 0;
+      employee.overtime_hours += timesheet.overtime_hours || 0;
+      employee.night_hours += timesheet.night_hours || 0;
+      if (timesheet.meal_voucher_earned) employee.meal_vouchers += 1;
+    });
+
+    return Array.from(employeesMap.values()).sort((a, b) => 
+      `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
+    );
+  };
+
+  // Aggrega i dati per vista mensile
+  const aggregateMonthlyData = (): EmployeeMonthlyData[] => {
+    const baseDate = parseISO(dateFilter);
+    const monthStart = startOfMonth(baseDate);
+    const monthEnd = endOfMonth(baseDate);
+    const monthDays = eachDayOfInterval({
+      start: monthStart,
+      end: monthEnd
+    });
+
+    const employeesMap = new Map<string, EmployeeMonthlyData>();
+
+    filteredTimesheets.forEach(timesheet => {
+      if (!timesheet.profiles) return;
+
+      const key = timesheet.user_id;
+      if (!employeesMap.has(key)) {
+        employeesMap.set(key, {
+          user_id: timesheet.user_id,
+          first_name: timesheet.profiles.first_name,
+          last_name: timesheet.profiles.last_name,
+          email: timesheet.profiles.email,
+          days: monthDays.map(day => ({
+            date: format(day, 'yyyy-MM-dd'),
+            total_hours: 0,
+            overtime_hours: 0,
+            night_hours: 0,
+            meal_vouchers: 0,
+            timesheets: []
+          })),
+          total_hours: 0,
+          overtime_hours: 0,
+          night_hours: 0,
+          meal_vouchers: 0
+        });
+      }
+
+      const employee = employeesMap.get(key)!;
+      const dayIndex = monthDays.findIndex(day => 
+        format(day, 'yyyy-MM-dd') === timesheet.date
+      );
+
+      if (dayIndex !== -1) {
+        const dayData = employee.days[dayIndex];
+        dayData.total_hours += timesheet.total_hours || 0;
+        dayData.overtime_hours += timesheet.overtime_hours || 0;
+        dayData.night_hours += timesheet.night_hours || 0;
+        if (timesheet.meal_voucher_earned) dayData.meal_vouchers += 1;
+        dayData.timesheets.push(timesheet);
+      }
+
+      employee.total_hours += timesheet.total_hours || 0;
+      employee.overtime_hours += timesheet.overtime_hours || 0;
+      employee.night_hours += timesheet.night_hours || 0;
+      if (timesheet.meal_voucher_earned) employee.meal_vouchers += 1;
+    });
+
+    return Array.from(employeesMap.values()).sort((a, b) => 
+      `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
+    );
+  };
+
+  const weeklyData = aggregateWeeklyData();
+  const monthlyData = aggregateMonthlyData();
+
   const exportData = () => {
     // TODO: Implementare export
     toast({
@@ -362,17 +521,19 @@ export default function AdminTimesheets() {
         </TabsContent>
         
         <TabsContent value="weekly">
-          <EmployeeSummaryTable 
-            employeeSummaries={employeeSummaries} 
+          <WeeklyView 
+            weeklyData={weeklyData} 
             loading={loading} 
+            dateFilter={dateFilter}
             onEdit={(id) => console.log('Edit timesheet:', id)}
           />
         </TabsContent>
         
         <TabsContent value="monthly">
-          <EmployeeSummaryTable 
-            employeeSummaries={employeeSummaries} 
+          <MonthlyView 
+            monthlyData={monthlyData} 
             loading={loading} 
+            dateFilter={dateFilter}
             onEdit={(id) => console.log('Edit timesheet:', id)}
           />
         </TabsContent>
@@ -504,6 +665,301 @@ function EmployeeSummaryTable({
             ))
           )}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Componente vista settimanale
+function WeeklyView({ 
+  weeklyData, 
+  loading, 
+  dateFilter,
+  onEdit 
+}: { 
+  weeklyData: EmployeeWeeklyData[]; 
+  loading: boolean; 
+  dateFilter: string;
+  onEdit: (id: string) => void;
+}) {
+  const formatHours = (hours: number) => {
+    if (hours === 0) return '-';
+    return `${hours.toFixed(1)}h`;
+  };
+
+  const baseDate = parseISO(dateFilter);
+  const weekStart = startOfWeek(baseDate, { weekStartsOn: 1 });
+  const weekDays = eachDayOfInterval({
+    start: weekStart,
+    end: addDays(weekStart, 6)
+  });
+
+  const dayNames = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex items-center justify-center">
+            <Clock className="h-6 w-6 animate-spin mr-2" />
+            Caricamento timesheet...
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CalendarIcon className="h-5 w-5" />
+          Vista Settimanale - {format(weekStart, 'dd/MM')} - {format(addDays(weekStart, 6), 'dd/MM/yyyy')}
+        </CardTitle>
+        <CardDescription>
+          Ore per giorno della settimana ({weeklyData.length} dipendenti)
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="font-semibold">Dipendente</TableHead>
+                {weekDays.map((day, index) => (
+                  <TableHead key={day.toISOString()} className="text-center min-w-[80px]">
+                    <div className="font-semibold">{dayNames[index]}</div>
+                    <div className="text-xs text-muted-foreground">{format(day, 'dd/MM')}</div>
+                  </TableHead>
+                ))}
+                <TableHead className="text-center font-semibold bg-secondary">Totale</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {weeklyData.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                    Nessun timesheet trovato per la settimana selezionata
+                  </TableCell>
+                </TableRow>
+              ) : (
+                weeklyData.map((employee) => (
+                  <TableRow key={employee.user_id}>
+                    <TableCell className="font-medium">
+                      <div>
+                        <div className="font-medium text-foreground">
+                          {employee.first_name} {employee.last_name}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {employee.email}
+                        </div>
+                      </div>
+                    </TableCell>
+                    {employee.days.map((day) => (
+                      <TableCell key={day.date} className="text-center">
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium">
+                            {formatHours(day.total_hours)}
+                          </div>
+                          {day.overtime_hours > 0 && (
+                            <Badge variant="secondary" className="text-xs">
+                              +{formatHours(day.overtime_hours)}
+                            </Badge>
+                          )}
+                          {day.meal_vouchers > 0 && (
+                            <Badge variant="outline" className="text-xs">
+                              {day.meal_vouchers}🍽️
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                    ))}
+                    <TableCell className="text-center bg-secondary/50">
+                      <div className="space-y-1">
+                        <div className="font-semibold text-lg">
+                          {formatHours(employee.total_hours)}
+                        </div>
+                        {employee.overtime_hours > 0 && (
+                          <div className="text-sm text-muted-foreground">
+                            Straord: {formatHours(employee.overtime_hours)}
+                          </div>
+                        )}
+                        {employee.meal_vouchers > 0 && (
+                          <div className="text-sm text-muted-foreground">
+                            Buoni: {employee.meal_vouchers}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Componente vista mensile
+function MonthlyView({ 
+  monthlyData, 
+  loading, 
+  dateFilter,
+  onEdit 
+}: { 
+  monthlyData: EmployeeMonthlyData[]; 
+  loading: boolean; 
+  dateFilter: string;
+  onEdit: (id: string) => void;
+}) {
+  const formatHours = (hours: number) => {
+    if (hours === 0) return '-';
+    return `${hours.toFixed(1)}h`;
+  };
+
+  const baseDate = parseISO(dateFilter);
+  const monthStart = startOfMonth(baseDate);
+  const monthEnd = endOfMonth(baseDate);
+  const monthDays = eachDayOfInterval({
+    start: monthStart,
+    end: monthEnd
+  });
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex items-center justify-center">
+            <Clock className="h-6 w-6 animate-spin mr-2" />
+            Caricamento timesheet...
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Raggruppa i giorni in settimane per una migliore visualizzazione
+  const weeks = [];
+  let currentWeek = [];
+  let weekStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+  
+  monthDays.forEach((day, index) => {
+    if (currentWeek.length === 0) {
+      weekStart = startOfWeek(day, { weekStartsOn: 1 });
+    }
+    
+    currentWeek.push(day);
+    
+    if (currentWeek.length === 7 || index === monthDays.length - 1) {
+      weeks.push({
+        start: weekStart,
+        days: [...currentWeek]
+      });
+      currentWeek = [];
+    }
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CalendarIcon className="h-5 w-5" />
+          Vista Mensile - {format(monthStart, 'MMMM yyyy', { locale: it })}
+        </CardTitle>
+        <CardDescription>
+          Ore per giorno del mese ({monthlyData.length} dipendenti)
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {monthlyData.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            Nessun timesheet trovato per il mese selezionato
+          </div>
+        ) : (
+          monthlyData.map((employee) => (
+            <Card key={employee.user_id} className="overflow-hidden">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg">
+                      {employee.first_name} {employee.last_name}
+                    </CardTitle>
+                    <CardDescription>{employee.email}</CardDescription>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold">{formatHours(employee.total_hours)}</div>
+                    <div className="text-sm text-muted-foreground">Totale mese</div>
+                  </div>
+                </div>
+                {(employee.overtime_hours > 0 || employee.meal_vouchers > 0) && (
+                  <div className="flex gap-4 text-sm">
+                    {employee.overtime_hours > 0 && (
+                      <span className="text-muted-foreground">
+                        Straordinari: {formatHours(employee.overtime_hours)}
+                      </span>
+                    )}
+                    {employee.meal_vouchers > 0 && (
+                      <span className="text-muted-foreground">
+                        Buoni pasto: {employee.meal_vouchers}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-3">
+                  {weeks.map((week, weekIndex) => (
+                    <div key={weekIndex}>
+                      <div className="text-xs text-muted-foreground mb-1">
+                        Settimana {format(week.start, 'dd/MM')} - {format(addDays(week.start, 6), 'dd/MM')}
+                      </div>
+                      <div className="grid grid-cols-7 gap-1">
+                        {week.days.map((day) => {
+                          const dayData = employee.days.find(d => d.date === format(day, 'yyyy-MM-dd'));
+                          const isToday = isSameDay(day, new Date());
+                          
+                          return (
+                            <div 
+                              key={day.toISOString()}
+                              className={`
+                                p-2 text-center border rounded-sm min-h-[60px] flex flex-col justify-center
+                                ${isToday ? 'bg-primary/10 border-primary' : 'bg-secondary/30 border-border'}
+                                ${dayData && dayData.total_hours > 0 ? 'bg-success/10' : ''}
+                              `}
+                            >
+                              <div className="text-xs font-medium mb-1">
+                                {format(day, 'dd')}
+                              </div>
+                              {dayData && dayData.total_hours > 0 ? (
+                                <div className="space-y-1">
+                                  <div className="text-xs font-medium">
+                                    {formatHours(dayData.total_hours)}
+                                  </div>
+                                  {dayData.overtime_hours > 0 && (
+                                    <div className="text-xs text-orange-600">
+                                      +{formatHours(dayData.overtime_hours)}
+                                    </div>
+                                  )}
+                                  {dayData.meal_vouchers > 0 && (
+                                    <div className="text-xs">🍽️</div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-muted-foreground">-</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
       </CardContent>
     </Card>
   );
