@@ -682,6 +682,18 @@ function WeeklyView({
   dateFilter: string;
   onEdit: (id: string) => void;
 }) {
+  const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
+
+  const toggleEmployee = (userId: string) => {
+    const newExpanded = new Set(expandedEmployees);
+    if (newExpanded.has(userId)) {
+      newExpanded.delete(userId);
+    } else {
+      newExpanded.add(userId);
+    }
+    setExpandedEmployees(newExpanded);
+  };
+
   const formatHours = (hours: number) => {
     if (hours === 0) return '-';
     return `${hours.toFixed(1)}h`;
@@ -709,6 +721,15 @@ function WeeklyView({
     );
   }
 
+  // Collect all timesheets for each employee
+  const getAllTimesheetsForEmployee = (employee: EmployeeWeeklyData): TimesheetWithProfile[] => {
+    const allTimesheets: TimesheetWithProfile[] = [];
+    employee.days.forEach(day => {
+      allTimesheets.push(...day.timesheets);
+    });
+    return allTimesheets;
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -721,82 +742,74 @@ function WeeklyView({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="font-semibold">Dipendente</TableHead>
-                {weekDays.map((day, index) => (
-                  <TableHead key={day.toISOString()} className="text-center min-w-[80px]">
-                    <div className="font-semibold">{dayNames[index]}</div>
-                    <div className="text-xs text-muted-foreground">{format(day, 'dd/MM')}</div>
-                  </TableHead>
-                ))}
-                <TableHead className="text-center font-semibold bg-secondary">Totale</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {weeklyData.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                    Nessun timesheet trovato per la settimana selezionata
-                  </TableCell>
-                </TableRow>
-              ) : (
-                weeklyData.map((employee) => (
-                  <TableRow key={employee.user_id}>
-                    <TableCell className="font-medium">
+        {weeklyData.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            Nessun timesheet trovato per la settimana selezionata
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {weeklyData.map((employee) => (
+              <Collapsible key={employee.user_id}>
+                <CollapsibleTrigger asChild>
+                  <div 
+                    className="flex items-center justify-between p-4 bg-secondary/50 rounded-lg hover:bg-secondary/70 cursor-pointer transition-colors"
+                    onClick={() => toggleEmployee(employee.user_id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      {expandedEmployees.has(employee.user_id) ? 
+                        <ChevronDown className="h-4 w-4" /> : 
+                        <ChevronRight className="h-4 w-4" />
+                      }
                       <div>
                         <div className="font-medium text-foreground">
                           {employee.first_name} {employee.last_name}
                         </div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-sm text-muted-foreground">
                           {employee.email}
                         </div>
                       </div>
-                    </TableCell>
-                    {employee.days.map((day) => (
-                      <TableCell key={day.date} className="text-center">
-                        <div className="space-y-1">
+                    </div>
+                    
+                    <div className="flex items-center gap-4 overflow-x-auto">
+                      {employee.days.map((day, index) => (
+                        <div key={day.date} className="text-center min-w-[60px]">
+                          <div className="text-xs text-muted-foreground">{dayNames[index]}</div>
                           <div className="text-sm font-medium">
                             {formatHours(day.total_hours)}
                           </div>
                           {day.overtime_hours > 0 && (
-                            <Badge variant="secondary" className="text-xs">
+                            <Badge variant="secondary" className="text-xs mt-1">
                               +{formatHours(day.overtime_hours)}
                             </Badge>
                           )}
-                          {day.meal_vouchers > 0 && (
-                            <Badge variant="outline" className="text-xs">
-                              {day.meal_vouchers}🍽️
-                            </Badge>
-                          )}
                         </div>
-                      </TableCell>
-                    ))}
-                    <TableCell className="text-center bg-secondary/50">
-                      <div className="space-y-1">
+                      ))}
+                      <div className="text-center min-w-[80px] bg-secondary/50 px-2 py-1 rounded">
+                        <div className="text-xs text-muted-foreground">Totale</div>
                         <div className="font-semibold text-lg">
                           {formatHours(employee.total_hours)}
                         </div>
                         {employee.overtime_hours > 0 && (
-                          <div className="text-sm text-muted-foreground">
+                          <div className="text-xs text-muted-foreground">
                             Straord: {formatHours(employee.overtime_hours)}
                           </div>
                         )}
-                        {employee.meal_vouchers > 0 && (
-                          <div className="text-sm text-muted-foreground">
-                            Buoni: {employee.meal_vouchers}
-                          </div>
-                        )}
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                    </div>
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="mt-2 ml-6">
+                    <TimesheetDetailsTable 
+                      timesheets={getAllTimesheetsForEmployee(employee)} 
+                      onEdit={onEdit} 
+                    />
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -814,6 +827,18 @@ function MonthlyView({
   dateFilter: string;
   onEdit: (id: string) => void;
 }) {
+  const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
+
+  const toggleEmployee = (userId: string) => {
+    const newExpanded = new Set(expandedEmployees);
+    if (newExpanded.has(userId)) {
+      newExpanded.delete(userId);
+    } else {
+      newExpanded.add(userId);
+    }
+    setExpandedEmployees(newExpanded);
+  };
+
   const formatHours = (hours: number) => {
     if (hours === 0) return '-';
     return `${hours.toFixed(1)}h`;
@@ -839,6 +864,15 @@ function MonthlyView({
       </Card>
     );
   }
+
+  // Collect all timesheets for each employee
+  const getAllTimesheetsForEmployee = (employee: EmployeeMonthlyData): TimesheetWithProfile[] => {
+    const allTimesheets: TimesheetWithProfile[] = [];
+    employee.days.forEach(day => {
+      allTimesheets.push(...day.timesheets);
+    });
+    return allTimesheets;
+  };
 
   // Raggruppa i giorni in settimane per una migliore visualizzazione
   const weeks = [];
@@ -872,92 +906,110 @@ function MonthlyView({
           Ore per giorno del mese ({monthlyData.length} dipendenti)
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4">
         {monthlyData.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             Nessun timesheet trovato per il mese selezionato
           </div>
         ) : (
           monthlyData.map((employee) => (
-            <Card key={employee.user_id} className="overflow-hidden">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-lg">
-                      {employee.first_name} {employee.last_name}
-                    </CardTitle>
-                    <CardDescription>{employee.email}</CardDescription>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold">{formatHours(employee.total_hours)}</div>
-                    <div className="text-sm text-muted-foreground">Totale mese</div>
-                  </div>
-                </div>
-                {(employee.overtime_hours > 0 || employee.meal_vouchers > 0) && (
-                  <div className="flex gap-4 text-sm">
-                    {employee.overtime_hours > 0 && (
-                      <span className="text-muted-foreground">
-                        Straordinari: {formatHours(employee.overtime_hours)}
-                      </span>
-                    )}
-                    {employee.meal_vouchers > 0 && (
-                      <span className="text-muted-foreground">
-                        Buoni pasto: {employee.meal_vouchers}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="space-y-3">
-                  {weeks.map((week, weekIndex) => (
-                    <div key={weekIndex}>
-                      <div className="text-xs text-muted-foreground mb-1">
-                        Settimana {format(week.start, 'dd/MM')} - {format(addDays(week.start, 6), 'dd/MM')}
+            <Collapsible key={employee.user_id}>
+              <CollapsibleTrigger asChild>
+                <Card className="cursor-pointer hover:bg-secondary/50 transition-colors">
+                  <CardHeader className="pb-3" onClick={() => toggleEmployee(employee.user_id)}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {expandedEmployees.has(employee.user_id) ? 
+                          <ChevronDown className="h-4 w-4" /> : 
+                          <ChevronRight className="h-4 w-4" />
+                        }
+                        <div>
+                          <CardTitle className="text-lg">
+                            {employee.first_name} {employee.last_name}
+                          </CardTitle>
+                          <CardDescription>{employee.email}</CardDescription>
+                        </div>
                       </div>
-                      <div className="grid grid-cols-7 gap-1">
-                        {week.days.map((day) => {
-                          const dayData = employee.days.find(d => d.date === format(day, 'yyyy-MM-dd'));
-                          const isToday = isSameDay(day, new Date());
-                          
-                          return (
-                            <div 
-                              key={day.toISOString()}
-                              className={`
-                                p-2 text-center border rounded-sm min-h-[60px] flex flex-col justify-center
-                                ${isToday ? 'bg-primary/10 border-primary' : 'bg-secondary/30 border-border'}
-                                ${dayData && dayData.total_hours > 0 ? 'bg-success/10' : ''}
-                              `}
-                            >
-                              <div className="text-xs font-medium mb-1">
-                                {format(day, 'dd')}
-                              </div>
-                              {dayData && dayData.total_hours > 0 ? (
-                                <div className="space-y-1">
-                                  <div className="text-xs font-medium">
-                                    {formatHours(dayData.total_hours)}
-                                  </div>
-                                  {dayData.overtime_hours > 0 && (
-                                    <div className="text-xs text-orange-600">
-                                      +{formatHours(dayData.overtime_hours)}
-                                    </div>
-                                  )}
-                                  {dayData.meal_vouchers > 0 && (
-                                    <div className="text-xs">🍽️</div>
-                                  )}
-                                </div>
-                              ) : (
-                                <div className="text-xs text-muted-foreground">-</div>
-                              )}
-                            </div>
-                          );
-                        })}
+                      <div className="text-right">
+                        <div className="text-2xl font-bold">{formatHours(employee.total_hours)}</div>
+                        <div className="text-sm text-muted-foreground">Totale mese</div>
                       </div>
                     </div>
-                  ))}
+                    {(employee.overtime_hours > 0 || employee.meal_vouchers > 0) && (
+                      <div className="flex gap-4 text-sm ml-7">
+                        {employee.overtime_hours > 0 && (
+                          <span className="text-muted-foreground">
+                            Straordinari: {formatHours(employee.overtime_hours)}
+                          </span>
+                        )}
+                        {employee.meal_vouchers > 0 && (
+                          <span className="text-muted-foreground">
+                            Buoni pasto: {employee.meal_vouchers}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="space-y-3 ml-7">
+                      {weeks.map((week, weekIndex) => (
+                        <div key={weekIndex}>
+                          <div className="text-xs text-muted-foreground mb-1">
+                            Settimana {format(week.start, 'dd/MM')} - {format(addDays(week.start, 6), 'dd/MM')}
+                          </div>
+                          <div className="grid grid-cols-7 gap-1">
+                            {week.days.map((day) => {
+                              const dayData = employee.days.find(d => d.date === format(day, 'yyyy-MM-dd'));
+                              const isToday = isSameDay(day, new Date());
+                              
+                              return (
+                                <div 
+                                  key={day.toISOString()}
+                                  className={`
+                                    p-2 text-center border rounded-sm min-h-[60px] flex flex-col justify-center
+                                    ${isToday ? 'bg-primary/10 border-primary' : 'bg-secondary/30 border-border'}
+                                    ${dayData && dayData.total_hours > 0 ? 'bg-success/10' : ''}
+                                  `}
+                                >
+                                  <div className="text-xs font-medium mb-1">
+                                    {format(day, 'dd')}
+                                  </div>
+                                  {dayData && dayData.total_hours > 0 ? (
+                                    <div className="space-y-1">
+                                      <div className="text-xs font-medium">
+                                        {formatHours(dayData.total_hours)}
+                                      </div>
+                                      {dayData.overtime_hours > 0 && (
+                                        <div className="text-xs text-orange-600">
+                                          +{formatHours(dayData.overtime_hours)}
+                                        </div>
+                                      )}
+                                      {dayData.meal_vouchers > 0 && (
+                                        <div className="text-xs">🍽️</div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs text-muted-foreground">-</div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-2 ml-6">
+                  <TimesheetDetailsTable 
+                    timesheets={getAllTimesheetsForEmployee(employee)} 
+                    onEdit={onEdit} 
+                  />
                 </div>
-              </CardContent>
-            </Card>
+              </CollapsibleContent>
+            </Collapsible>
           ))
         )}
       </CardContent>
