@@ -123,64 +123,221 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
     const lunchStartMinutes = timesheet.lunch_start_time ? timeToMinutes(timesheet.lunch_start_time) : null;
     const lunchEndMinutes = timesheet.lunch_end_time ? timeToMinutes(timesheet.lunch_end_time) : null;
 
-    // Determina il tipo di lavoro in base agli orari e ai dati
-    let workType: 'work' | 'overtime' | 'night' = 'work';
-    
-    // Se ci sono ore notturne, priorità al notturno
-    if (timesheet.night_hours && timesheet.night_hours > 0) {
-      workType = 'night';
-    } else if (timesheet.overtime_hours && timesheet.overtime_hours > 0) {
-      workType = 'overtime';
-    }
-    
-    // Verifica anche gli orari: prima delle 6 o dopo le 22 = notturno
+    const blocks: TimeBlock[] = [];
+    const totalHours = timesheet.total_hours || 0;
+    const overtimeHours = timesheet.overtime_hours || 0;
+    const nightHours = timesheet.night_hours || 0;
+    const regularHours = totalHours - overtimeHours;
+
+    // Determina se tutto il lavoro è notturno
     const startHour = Math.floor(startMinutes / 60);
     const endHour = Math.floor(endMinutes / 60);
-    if (startHour < 6 || endHour >= 22) {
-      workType = 'night';
-    }
+    const isFullyNightShift = nightHours > 0 && (startHour < 6 || endHour >= 22 || startHour >= 20);
 
-    const blocks: TimeBlock[] = [];
+    // Se è turno completamente notturno, tutto il blocco è notturno
+    if (isFullyNightShift) {
+      // Gestisci pausa pranzo se presente
+      if (lunchStartMinutes && lunchEndMinutes && 
+          lunchStartMinutes > startMinutes && lunchEndMinutes < endMinutes) {
+        
+        // Prima parte: dall'inizio alla pausa pranzo
+        blocks.push({
+          timesheet,
+          startMinutes,
+          endMinutes: lunchStartMinutes,
+          isLunchBreak: false,
+          type: 'night'
+        });
+        
+        // Pausa pranzo
+        blocks.push({
+          timesheet,
+          startMinutes: lunchStartMinutes,
+          endMinutes: lunchEndMinutes,
+          isLunchBreak: true,
+          type: 'work'
+        });
+        
+        // Seconda parte: dalla pausa pranzo alla fine
+        blocks.push({
+          timesheet,
+          startMinutes: lunchEndMinutes,
+          endMinutes,
+          isLunchBreak: false,
+          type: 'night'
+        });
+      } else {
+        // Blocco continuo notturno
+        blocks.push({
+          timesheet,
+          startMinutes,
+          endMinutes,
+          isLunchBreak: false,
+          type: 'night'
+        });
+      }
+    } else if (overtimeHours > 0 && totalHours > 8) {
+      // Se ci sono straordinari, dividi il tempo tra ore ordinarie e straordinarie
+      const totalWorkMinutes = endMinutes - startMinutes - (
+        lunchStartMinutes && lunchEndMinutes ? (lunchEndMinutes - lunchStartMinutes) : 0
+      );
+      const regularMinutes = Math.round((regularHours / totalHours) * totalWorkMinutes);
+      const overtimeStartMinutes = startMinutes + regularMinutes + (
+        lunchStartMinutes && lunchEndMinutes ? (lunchEndMinutes - lunchStartMinutes) : 0
+      );
 
-    // Se c'è pausa pranzo, dividi il blocco
-    if (lunchStartMinutes && lunchEndMinutes && 
-        lunchStartMinutes > startMinutes && lunchEndMinutes < endMinutes) {
-      
-      // Prima parte: dall'inizio alla pausa pranzo
-      blocks.push({
-        timesheet,
-        startMinutes,
-        endMinutes: lunchStartMinutes,
-        isLunchBreak: false,
-        type: workType
-      });
-      
-      // Pausa pranzo
-      blocks.push({
-        timesheet,
-        startMinutes: lunchStartMinutes,
-        endMinutes: lunchEndMinutes,
-        isLunchBreak: true,
-        type: 'work' // Il tipo non importa per la pausa pranzo
-      });
-      
-      // Seconda parte: dalla pausa pranzo alla fine
-      blocks.push({
-        timesheet,
-        startMinutes: lunchEndMinutes,
-        endMinutes,
-        isLunchBreak: false,
-        type: workType
-      });
+      // Gestisci pausa pranzo se presente
+      if (lunchStartMinutes && lunchEndMinutes && 
+          lunchStartMinutes > startMinutes && lunchEndMinutes < endMinutes) {
+        
+        if (lunchStartMinutes < overtimeStartMinutes) {
+          // La pausa pranzo è durante le ore ordinarie
+          // Ore ordinarie prima della pausa
+          blocks.push({
+            timesheet,
+            startMinutes,
+            endMinutes: lunchStartMinutes,
+            isLunchBreak: false,
+            type: 'work'
+          });
+          
+          // Pausa pranzo
+          blocks.push({
+            timesheet,
+            startMinutes: lunchStartMinutes,
+            endMinutes: lunchEndMinutes,
+            isLunchBreak: true,
+            type: 'work'
+          });
+          
+          // Determina se ci sono ancora ore ordinarie dopo la pausa
+          if (lunchEndMinutes < overtimeStartMinutes) {
+            // Ore ordinarie dopo la pausa
+            blocks.push({
+              timesheet,
+              startMinutes: lunchEndMinutes,
+              endMinutes: overtimeStartMinutes,
+              isLunchBreak: false,
+              type: 'work'
+            });
+            
+            // Ore straordinarie
+            blocks.push({
+              timesheet,
+              startMinutes: overtimeStartMinutes,
+              endMinutes,
+              isLunchBreak: false,
+              type: 'overtime'
+            });
+          } else {
+            // Straordinari iniziano subito dopo la pausa
+            blocks.push({
+              timesheet,
+              startMinutes: lunchEndMinutes,
+              endMinutes,
+              isLunchBreak: false,
+              type: 'overtime'
+            });
+          }
+        } else {
+          // La pausa pranzo è durante le ore straordinarie
+          // Ore ordinarie
+          blocks.push({
+            timesheet,
+            startMinutes,
+            endMinutes: overtimeStartMinutes,
+            isLunchBreak: false,
+            type: 'work'
+          });
+          
+          // Straordinari prima della pausa
+          blocks.push({
+            timesheet,
+            startMinutes: overtimeStartMinutes,
+            endMinutes: lunchStartMinutes,
+            isLunchBreak: false,
+            type: 'overtime'
+          });
+          
+          // Pausa pranzo
+          blocks.push({
+            timesheet,
+            startMinutes: lunchStartMinutes,
+            endMinutes: lunchEndMinutes,
+            isLunchBreak: true,
+            type: 'work'
+          });
+          
+          // Straordinari dopo la pausa
+          blocks.push({
+            timesheet,
+            startMinutes: lunchEndMinutes,
+            endMinutes,
+            isLunchBreak: false,
+            type: 'overtime'
+          });
+        }
+      } else {
+        // Nessuna pausa pranzo specifica
+        // Ore ordinarie
+        blocks.push({
+          timesheet,
+          startMinutes,
+          endMinutes: overtimeStartMinutes,
+          isLunchBreak: false,
+          type: 'work'
+        });
+        
+        // Ore straordinarie
+        blocks.push({
+          timesheet,
+          startMinutes: overtimeStartMinutes,
+          endMinutes,
+          isLunchBreak: false,
+          type: 'overtime'
+        });
+      }
     } else {
-      // Blocco continuo senza pausa pranzo
-      blocks.push({
-        timesheet,
-        startMinutes,
-        endMinutes,
-        isLunchBreak: false,
-        type: workType
-      });
+      // Nessun straordinario, tutto è lavoro normale
+      if (lunchStartMinutes && lunchEndMinutes && 
+          lunchStartMinutes > startMinutes && lunchEndMinutes < endMinutes) {
+        
+        // Prima parte: dall'inizio alla pausa pranzo
+        blocks.push({
+          timesheet,
+          startMinutes,
+          endMinutes: lunchStartMinutes,
+          isLunchBreak: false,
+          type: 'work'
+        });
+        
+        // Pausa pranzo
+        blocks.push({
+          timesheet,
+          startMinutes: lunchStartMinutes,
+          endMinutes: lunchEndMinutes,
+          isLunchBreak: true,
+          type: 'work'
+        });
+        
+        // Seconda parte: dalla pausa pranzo alla fine
+        blocks.push({
+          timesheet,
+          startMinutes: lunchEndMinutes,
+          endMinutes,
+          isLunchBreak: false,
+          type: 'work'
+        });
+      } else {
+        // Blocco continuo senza pausa pranzo
+        blocks.push({
+          timesheet,
+          startMinutes,
+          endMinutes,
+          isLunchBreak: false,
+          type: 'work'
+        });
+      }
     }
 
     return blocks;
