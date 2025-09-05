@@ -850,14 +850,19 @@ function WeeklyView({
                       {employee.days.map((day, index) => (
                         <div key={day.date} className="text-center min-w-[60px]">
                           <div className="text-xs text-muted-foreground">{dayNames[index]}</div>
-                          <div className="text-sm font-medium">
-                            {formatHours(day.total_hours)}
+                          <div className="space-y-1">
+                            <div className="text-xs">
+                              <span className="text-muted-foreground">Ord:</span> {formatHours(day.total_hours - day.overtime_hours)}
+                            </div>
+                            {day.overtime_hours > 0 && (
+                              <div className="text-xs text-orange-600">
+                                <span className="text-muted-foreground">Str:</span> {formatHours(day.overtime_hours)}
+                              </div>
+                            )}
+                            <div className="text-sm font-semibold border-t pt-1">
+                              {formatHours(day.total_hours)}
+                            </div>
                           </div>
-                          {day.overtime_hours > 0 && (
-                            <Badge variant="secondary" className="text-xs mt-1">
-                              +{formatHours(day.overtime_hours)}
-                            </Badge>
-                          )}
                         </div>
                       ))}
                       <div className="text-center min-w-[100px] bg-secondary/50 px-2 py-1 rounded">
@@ -1060,20 +1065,23 @@ function MonthlyView({
                                   <div className="text-xs font-medium mb-1">
                                     {format(day, 'dd')}
                                   </div>
-                                  {dayData && dayData.total_hours > 0 ? (
-                                    <div className="space-y-1">
-                                      <div className="text-xs font-medium">
-                                        {formatHours(dayData.total_hours)}
-                                      </div>
-                                      {dayData.overtime_hours > 0 && (
-                                        <div className="text-xs text-orange-600">
-                                          +{formatHours(dayData.overtime_hours)}
-                                        </div>
-                                      )}
-                                      {dayData.meal_vouchers > 0 && (
-                                        <div className="text-xs">🍽️</div>
-                                      )}
-                                    </div>
+                                   {dayData && dayData.total_hours > 0 ? (
+                                     <div className="space-y-1">
+                                       <div className="text-xs">
+                                         <span className="text-muted-foreground">O:</span> {formatHours(dayData.total_hours - dayData.overtime_hours)}
+                                       </div>
+                                       {dayData.overtime_hours > 0 && (
+                                         <div className="text-xs text-orange-600">
+                                           <span className="text-muted-foreground">S:</span> {formatHours(dayData.overtime_hours)}
+                                         </div>
+                                       )}
+                                       <div className="text-xs font-semibold border-t pt-1">
+                                         {formatHours(dayData.total_hours)}
+                                       </div>
+                                       {dayData.meal_vouchers > 0 && (
+                                         <div className="text-xs">🍽️</div>
+                                       )}
+                                     </div>
                                   ) : (
                                     <div className="text-xs text-muted-foreground">-</div>
                                   )}
