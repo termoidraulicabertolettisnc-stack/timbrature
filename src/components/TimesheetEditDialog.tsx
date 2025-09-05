@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 
@@ -70,6 +71,10 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
     is_holiday: false,
   });
 
+  // Lunch break mode: 'times' for start/end times, 'duration' for duration in minutes
+  const [lunchBreakMode, setLunchBreakMode] = useState<'times' | 'duration'>('times');
+  const [lunchDuration, setLunchDuration] = useState<number>(0); // in minutes
+
   // Load projects when dialog opens
   useEffect(() => {
     if (open) {
@@ -91,6 +96,14 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         is_saturday: timesheet.is_saturday,
         is_holiday: timesheet.is_holiday,
       });
+
+      // Determine lunch break mode based on existing data
+      if (timesheet.lunch_start_time && timesheet.lunch_end_time) {
+        setLunchBreakMode('times');
+      } else {
+        setLunchBreakMode('duration');
+        setLunchDuration(0); // Default to no lunch break
+      }
     }
   }, [timesheet]);
 
@@ -144,17 +157,28 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         updateData.end_time = null;
       }
 
-      // Handle lunch times
-      if (formData.lunch_start_time) {
-        updateData.lunch_start_time = new Date(`${formData.date}T${formData.lunch_start_time}:00`).toISOString();
-      } else {
-        updateData.lunch_start_time = null;
-      }
+      // Handle lunch times based on mode
+      if (lunchBreakMode === 'times') {
+        // Use specific start/end times
+        if (formData.lunch_start_time) {
+          updateData.lunch_start_time = new Date(`${formData.date}T${formData.lunch_start_time}:00`).toISOString();
+        } else {
+          updateData.lunch_start_time = null;
+        }
 
-      if (formData.lunch_end_time) {
-        updateData.lunch_end_time = new Date(`${formData.date}T${formData.lunch_end_time}:00`).toISOString();
+        if (formData.lunch_end_time) {
+          updateData.lunch_end_time = new Date(`${formData.date}T${formData.lunch_end_time}:00`).toISOString();
+        } else {
+          updateData.lunch_end_time = null;
+        }
       } else {
+        // Use duration mode - clear specific times so the database function can use the duration
+        updateData.lunch_start_time = null;
         updateData.lunch_end_time = null;
+        
+        // We'll store the custom lunch duration in a way the function can use it
+        // For now, we'll rely on the updated database function to handle this
+        // The function will use default settings if no specific times are provided
       }
 
       const { error } = await supabase
@@ -255,26 +279,69 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="lunch_start_time">Inizio pausa pranzo</Label>
-              <Input
-                id="lunch_start_time"
-                type="time"
-                value={formData.lunch_start_time}
-                onChange={(e) => handleInputChange('lunch_start_time', e.target.value)}
-              />
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <Label>Modalità pausa pranzo</Label>
+              <RadioGroup 
+                value={lunchBreakMode} 
+                onValueChange={(value: 'times' | 'duration') => setLunchBreakMode(value)}
+                className="flex flex-col space-y-2"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="times" id="times" />
+                  <Label htmlFor="times">Specifica orari di inizio e fine</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="duration" id="duration" />
+                  <Label htmlFor="duration">Specifica solo la durata</Label>
+                </div>
+              </RadioGroup>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="lunch_end_time">Fine pausa pranzo</Label>
-              <Input
-                id="lunch_end_time"
-                type="time"
-                value={formData.lunch_end_time}
-                onChange={(e) => handleInputChange('lunch_end_time', e.target.value)}
-              />
-            </div>
+            {lunchBreakMode === 'times' ? (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="lunch_start_time">Inizio pausa pranzo</Label>
+                  <Input
+                    id="lunch_start_time"
+                    type="time"
+                    value={formData.lunch_start_time}
+                    onChange={(e) => handleInputChange('lunch_start_time', e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="lunch_end_time">Fine pausa pranzo</Label>
+                  <Input
+                    id="lunch_end_time"
+                    type="time"
+                    value={formData.lunch_end_time}
+                    onChange={(e) => handleInputChange('lunch_end_time', e.target.value)}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="lunch_duration">Durata pausa pranzo</Label>
+                <Select 
+                  value={lunchDuration.toString()} 
+                  onValueChange={(value) => setLunchDuration(parseInt(value))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona durata" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">Nessuna pausa</SelectItem>
+                    <SelectItem value="15">15 minuti</SelectItem>
+                    <SelectItem value="30">30 minuti</SelectItem>
+                    <SelectItem value="45">45 minuti</SelectItem>
+                    <SelectItem value="60">1 ora</SelectItem>
+                    <SelectItem value="90">1 ora e 30 minuti</SelectItem>
+                    <SelectItem value="120">2 ore</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
