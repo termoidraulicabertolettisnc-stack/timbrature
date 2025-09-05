@@ -242,7 +242,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         // Use duration mode - clear specific times and set custom duration
         updateData.lunch_start_time = null;
         updateData.lunch_end_time = null;
-        updateData.lunch_duration_minutes = lunchDuration > 0 ? lunchDuration : null;
+        updateData.lunch_duration_minutes = lunchDuration;
       }
 
       const { error } = await supabase

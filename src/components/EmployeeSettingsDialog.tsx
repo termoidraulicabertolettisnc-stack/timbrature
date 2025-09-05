@@ -16,7 +16,7 @@ interface EmployeeSettings {
   user_id: string;
   company_id: string;
   standard_daily_hours: number | null;
-  lunch_break_type: 'libera' | '30_minuti' | '60_minuti' | null;
+  lunch_break_type: '0_minuti' | '15_minuti' | '30_minuti' | '45_minuti' | '60_minuti' | '90_minuti' | '120_minuti' | 'libera' | null;
   overtime_calculation: 'dopo_8_ore' | 'sempre' | null;
   saturday_handling: 'trasferta' | 'straordinario' | null;
   meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni' | null;
@@ -27,7 +27,7 @@ interface EmployeeSettings {
 
 interface CompanySettings {
   standard_daily_hours: number;
-  lunch_break_type: 'libera' | '30_minuti' | '60_minuti';
+  lunch_break_type: '0_minuti' | '15_minuti' | '30_minuti' | '45_minuti' | '60_minuti' | '90_minuti' | '120_minuti' | 'libera';
   overtime_calculation: 'dopo_8_ore' | 'sempre';
   saturday_handling: 'trasferta' | 'straordinario';
   meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni';
