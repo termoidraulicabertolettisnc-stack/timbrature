@@ -32,6 +32,8 @@ const MapView = ({
     if (!mapContainer.current) return;
 
     try {
+      console.log('MapView: Initializing map with token:', MAPBOX_TOKEN.substring(0, 10) + '...');
+      
       // Set Mapbox access token
       mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -40,7 +42,12 @@ const MapView = ({
       if (startLat && startLng) positions.push([startLng, startLat]);
       if (endLat && endLng) positions.push([endLng, endLat]);
 
-      if (positions.length === 0) return;
+      console.log('MapView: Positions:', positions);
+
+      if (positions.length === 0) {
+        console.log('MapView: No positions available');
+        return;
+      }
 
       let center: [number, number];
       let zoom = 15;
@@ -57,6 +64,7 @@ const MapView = ({
       }
 
       // Initialize map
+      console.log('MapView: Creating map with center:', center, 'zoom:', zoom);
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
         style: 'mapbox://styles/mapbox/light-v11',
@@ -65,10 +73,16 @@ const MapView = ({
         attributionControl: false
       });
 
+      console.log('MapView: Map created successfully');
+
       // Handle map load errors
       map.current.on('error', (e) => {
         console.error('Mapbox error:', e);
         setMapError(true);
+      });
+
+      map.current.on('load', () => {
+        console.log('MapView: Map loaded successfully');
       });
 
       // Add markers
