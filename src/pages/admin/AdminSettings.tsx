@@ -22,6 +22,7 @@ interface CompanySettings {
   night_shift_end: string;
   business_trip_rate_with_meal: number;
   business_trip_rate_without_meal: number;
+  saturday_hourly_rate: number;
   created_at: string;
   updated_at: string;
 }
@@ -90,6 +91,7 @@ export default function AdminSettings() {
         night_shift_end: '05:00:00',
         business_trip_rate_with_meal: 46.48,
         business_trip_rate_without_meal: 30.98,
+        saturday_hourly_rate: 10.00,
       };
 
       const { data, error } = await supabase
@@ -126,6 +128,9 @@ export default function AdminSettings() {
           meal_voucher_policy: settings.meal_voucher_policy,
           night_shift_start: settings.night_shift_start,
           night_shift_end: settings.night_shift_end,
+          business_trip_rate_with_meal: settings.business_trip_rate_with_meal,
+          business_trip_rate_without_meal: settings.business_trip_rate_without_meal,
+          saturday_hourly_rate: settings.saturday_hourly_rate,
         })
         .eq('id', settings.id);
 
@@ -472,6 +477,49 @@ export default function AdminSettings() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Saturday Hourly Rate - Show when Saturday is handled as business trip */}
+        {settings.saturday_handling === 'trasferta' && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Tariffa Oraria Sabato
+              </CardTitle>
+              <CardDescription>
+                Configura la tariffa oraria predefinita per i sabati pagati in trasferte
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="saturday_hourly_rate">Tariffa Oraria Sabato (€/ora)</Label>
+                  <Input
+                    id="saturday_hourly_rate"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={settings.saturday_hourly_rate}
+                    onChange={(e) => updateSetting('saturday_hourly_rate', parseFloat(e.target.value) || 10.00)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Tariffa oraria predefinita per le ore lavorate nei sabati pagati in trasferte. 
+                    I dipendenti possono avere tariffe personalizzate che sovrascrivono questa impostazione.
+                  </p>
+                </div>
+              </div>
+              <div className="p-3 bg-muted/50 rounded-lg">
+                <p className="text-sm font-medium mb-2">Come funziona:</p>
+                <ul className="text-xs text-muted-foreground space-y-1">
+                  <li>• <strong>Tipologia A:</strong> Sabati pagati in trasferte con tariffa oraria personalizzabile per dipendente</li>
+                  <li>• <strong>Calcolo:</strong> Ore lavorate × Tariffa oraria del sabato</li>
+                  <li>• <strong>Personalizzazione:</strong> Ogni dipendente può avere una tariffa diversa (es. €10/h, €12/h, €15/h)</li>
+                  <li>• <strong>Export separato:</strong> Le ore del sabato vengono esportate separatamente dalle ore ordinarie/straordinarie</li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Footer con pulsante salva */}

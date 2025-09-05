@@ -25,6 +25,7 @@ interface EmployeeSettings {
   overtime_monthly_compensation?: boolean | null;
   business_trip_rate_with_meal: number | null;
   business_trip_rate_without_meal: number | null;
+  saturday_hourly_rate: number | null;
 }
 
 interface CompanySettings {
@@ -37,6 +38,7 @@ interface CompanySettings {
   night_shift_end: string;
   business_trip_rate_with_meal: number;
   business_trip_rate_without_meal: number;
+  saturday_hourly_rate: number;
 }
 
 interface EmployeeSettingsDialogProps {
@@ -66,6 +68,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
     overtime_monthly_compensation: null,
     business_trip_rate_with_meal: null,
     business_trip_rate_without_meal: null,
+    saturday_hourly_rate: null,
   });
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -119,6 +122,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
           overtime_monthly_compensation: null,
           business_trip_rate_with_meal: null,
           business_trip_rate_without_meal: null,
+          saturday_hourly_rate: null,
         });
       }
     } catch (error) {
@@ -188,6 +192,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
       overtime_monthly_compensation: null,
       business_trip_rate_with_meal: null,
       business_trip_rate_without_meal: null,
+      saturday_hourly_rate: null,
     });
     setHasChanges(true);
   };
@@ -540,6 +545,46 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
               </div>
             </CardContent>
           </Card>
+
+          {/* Saturday Hourly Rate - Show only when Saturday is handled as business trip */}
+          {(getEffectiveValue(settings.saturday_handling, companySettings?.saturday_handling)) === 'trasferta' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Tariffa Oraria Sabato</CardTitle>
+                <CardDescription>
+                  Tariffa oraria personalizzata per le ore lavorate nei sabati pagati in trasferte
+                  {companySettings && ` (Aziendale: €${companySettings.saturday_hourly_rate}/ora)`}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="saturday-hourly-rate">Tariffa Oraria Sabato (€/ora)</Label>
+                    <Input
+                      id="saturday-hourly-rate"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={settings.saturday_hourly_rate || ''}
+                      onChange={(e) => updateSetting('saturday_hourly_rate', e.target.value ? parseFloat(e.target.value) : null)}
+                      placeholder={companySettings ? `Default: €${companySettings.saturday_hourly_rate}/ora` : '€10.00/ora'}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Valore effettivo: €{getEffectiveValue(settings.saturday_hourly_rate, companySettings?.saturday_hourly_rate)}/ora
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    <strong>Info:</strong> Questa tariffa viene applicata per tutte le ore lavorate nei sabati quando sono configurati come "trasferte".
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Per i sabati configurati come "straordinari", viene applicata la normale tariffa straordinaria.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <DialogFooter>

@@ -95,6 +95,7 @@ export type Database = {
           night_shift_start: string
           overtime_calculation: Database["public"]["Enums"]["overtime_type"]
           saturday_handling: Database["public"]["Enums"]["saturday_type"]
+          saturday_hourly_rate: number | null
           standard_daily_hours: number
           updated_at: string
         }
@@ -110,6 +111,7 @@ export type Database = {
           night_shift_start?: string
           overtime_calculation?: Database["public"]["Enums"]["overtime_type"]
           saturday_handling?: Database["public"]["Enums"]["saturday_type"]
+          saturday_hourly_rate?: number | null
           standard_daily_hours?: number
           updated_at?: string
         }
@@ -125,6 +127,7 @@ export type Database = {
           night_shift_start?: string
           overtime_calculation?: Database["public"]["Enums"]["overtime_type"]
           saturday_handling?: Database["public"]["Enums"]["saturday_type"]
+          saturday_hourly_rate?: number | null
           standard_daily_hours?: number
           updated_at?: string
         }
@@ -159,6 +162,7 @@ export type Database = {
             | null
           overtime_monthly_compensation: boolean | null
           saturday_handling: Database["public"]["Enums"]["saturday_type"] | null
+          saturday_hourly_rate: number | null
           standard_daily_hours: number | null
           updated_at: string
           updated_by: string | null
@@ -186,6 +190,7 @@ export type Database = {
           saturday_handling?:
             | Database["public"]["Enums"]["saturday_type"]
             | null
+          saturday_hourly_rate?: number | null
           standard_daily_hours?: number | null
           updated_at?: string
           updated_by?: string | null
@@ -213,6 +218,7 @@ export type Database = {
           saturday_handling?:
             | Database["public"]["Enums"]["saturday_type"]
             | null
+          saturday_hourly_rate?: number | null
           standard_daily_hours?: number | null
           updated_at?: string
           updated_by?: string | null
