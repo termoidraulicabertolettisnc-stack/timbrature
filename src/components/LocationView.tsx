@@ -38,14 +38,14 @@ const LocationView = ({
     return value.toFixed(6);
   };
 
-  // Generate Google Maps URL for single location
-  const getGoogleMapsUrl = (lat: number, lng: number): string => {
-    return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  // Generate OpenStreetMap URL for single location
+  const getOpenStreetMapUrl = (lat: number, lng: number): string => {
+    return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=18/${lat}/${lng}`;
   };
 
-  // Generate Google Maps URL for directions
-  const getDirectionsUrl = (startLat: number, startLng: number, endLat: number, endLng: number): string => {
-    return `https://www.google.com/maps/dir/?api=1&origin=${startLat},${startLng}&destination=${endLat},${endLng}`;
+  // Generate OpenStreetMap URL for route planning
+  const getRouteUrl = (startLat: number, startLng: number, endLat: number, endLng: number): string => {
+    return `https://www.openstreetmap.org/directions?from=${startLat}%2C${startLng}&to=${endLat}%2C${endLng}&route=foot`;
   };
 
   if (!hasAnyLocation) {
@@ -79,12 +79,12 @@ const LocationView = ({
               className="h-7 px-2 text-xs"
             >
               <a 
-                href={getGoogleMapsUrl(startLat!, startLng!)} 
+                href={getOpenStreetMapUrl(startLat!, startLng!)} 
                 target="_blank" 
                 rel="noopener noreferrer"
               >
                 <ExternalLink className="h-3 w-3 mr-1" />
-                Maps
+                Mappa
               </a>
             </Button>
           </div>
@@ -120,12 +120,12 @@ const LocationView = ({
               className="h-7 px-2 text-xs"
             >
               <a 
-                href={getGoogleMapsUrl(endLat!, endLng!)} 
+                href={getOpenStreetMapUrl(endLat!, endLng!)} 
                 target="_blank" 
                 rel="noopener noreferrer"
               >
                 <ExternalLink className="h-3 w-3 mr-1" />
-                Maps
+                Mappa
               </a>
             </Button>
           </div>
@@ -156,12 +156,12 @@ const LocationView = ({
             className="w-full text-xs"
           >
             <a 
-              href={getDirectionsUrl(startLat!, startLng!, endLat!, endLng!)} 
+              href={getRouteUrl(startLat!, startLng!, endLat!, endLng!)} 
               target="_blank" 
               rel="noopener noreferrer"
             >
               <ExternalLink className="h-3 w-3 mr-1" />
-              Visualizza percorso in Google Maps
+              Visualizza percorso in OpenStreetMap
             </a>
           </Button>
         </div>
