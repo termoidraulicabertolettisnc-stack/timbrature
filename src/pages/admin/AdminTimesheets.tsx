@@ -24,6 +24,7 @@ interface TimesheetWithProfile {
   end_time: string | null;
   lunch_start_time: string | null;
   lunch_end_time: string | null;
+  lunch_duration_minutes: number | null;
   total_hours: number | null;
   overtime_hours: number | null;
   night_hours: number | null;

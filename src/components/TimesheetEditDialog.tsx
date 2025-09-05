@@ -26,6 +26,7 @@ interface TimesheetWithProfile {
   end_time: string | null;
   lunch_start_time: string | null;
   lunch_end_time: string | null;
+  lunch_duration_minutes: number | null;
   notes: string | null;
   user_id: string;
   project_id: string | null;
@@ -57,6 +58,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [defaultLunchMinutes, setDefaultLunchMinutes] = useState<number>(60); // Default 60 minutes
   
   // Form state
   const [formData, setFormData] = useState({
@@ -72,15 +74,71 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
   });
 
   // Lunch break mode: 'times' for start/end times, 'duration' for duration in minutes
-  const [lunchBreakMode, setLunchBreakMode] = useState<'times' | 'duration'>('times');
-  const [lunchDuration, setLunchDuration] = useState<number>(0); // in minutes
+  const [lunchBreakMode, setLunchBreakMode] = useState<'times' | 'duration'>('duration');
+  const [lunchDuration, setLunchDuration] = useState<number>(60); // in minutes
 
-  // Load projects when dialog opens
+  // Load projects and employee settings when dialog opens
   useEffect(() => {
-    if (open) {
+    if (open && timesheet) {
       loadProjects();
+      loadEmployeeSettings();
     }
-  }, [open]);
+  }, [open, timesheet]);
+
+  // Load employee settings to get default lunch break
+  const loadEmployeeSettings = async () => {
+    if (!timesheet) return;
+    
+    try {
+      // First try to get employee-specific settings
+      const { data: employeeSettings } = await supabase
+        .from('employee_settings')
+        .select('lunch_break_type')
+        .eq('user_id', timesheet.user_id)
+        .single();
+
+      let lunchBreakType = employeeSettings?.lunch_break_type;
+
+      // If no employee-specific settings, get company settings
+      if (!lunchBreakType) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('company_id')
+          .eq('user_id', timesheet.user_id)
+          .single();
+
+        if (profile?.company_id) {
+          const { data: companySettings } = await supabase
+            .from('company_settings')
+            .select('lunch_break_type')
+            .eq('company_id', profile.company_id)
+            .single();
+
+          lunchBreakType = companySettings?.lunch_break_type;
+        }
+      }
+
+      // Convert lunch_break_type to minutes
+      const minutes = convertLunchBreakTypeToMinutes(lunchBreakType || '60_minuti');
+      setDefaultLunchMinutes(minutes);
+    } catch (error) {
+      console.error('Error loading employee settings:', error);
+      // Keep default of 60 minutes
+    }
+  };
+
+  const convertLunchBreakTypeToMinutes = (lunchBreakType: string): number => {
+    switch (lunchBreakType) {
+      case '0_minuti': return 0;
+      case '15_minuti': return 15;
+      case '30_minuti': return 30;
+      case '45_minuti': return 45;
+      case '60_minuti': return 60;
+      case '90_minuti': return 90;
+      case '120_minuti': return 120;
+      default: return 60;
+    }
+  };
 
   // Populate form when timesheet changes
   useEffect(() => {
@@ -97,15 +155,21 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         is_holiday: timesheet.is_holiday,
       });
 
-      // Determine lunch break mode based on existing data
+      // Determine lunch break mode and duration based on existing data
       if (timesheet.lunch_start_time && timesheet.lunch_end_time) {
+        // Timesheet has specific times - use times mode
         setLunchBreakMode('times');
-      } else {
+      } else if (timesheet.lunch_duration_minutes !== null && timesheet.lunch_duration_minutes !== undefined) {
+        // Timesheet has custom duration - use duration mode with that value
         setLunchBreakMode('duration');
-        setLunchDuration(0); // Default to no lunch break
+        setLunchDuration(timesheet.lunch_duration_minutes);
+      } else {
+        // No lunch data in timesheet - use duration mode with employee default
+        setLunchBreakMode('duration');
+        setLunchDuration(defaultLunchMinutes);
       }
     }
-  }, [timesheet]);
+  }, [timesheet, defaultLunchMinutes]);
 
   const loadProjects = async () => {
     try {
@@ -323,6 +387,9 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
             ) : (
               <div className="space-y-2">
                 <Label htmlFor="lunch_duration">Durata pausa pranzo</Label>
+                <div className="text-sm text-muted-foreground mb-2">
+                  Pausa predefinita del dipendente: {defaultLunchMinutes} minuti
+                </div>
                 <Select 
                   value={lunchDuration.toString()} 
                   onValueChange={(value) => setLunchDuration(parseInt(value))}
