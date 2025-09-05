@@ -15,6 +15,7 @@ import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { OvertimeTracker } from '@/components/OvertimeTracker';
 import { TimesheetTimeline } from '@/components/TimesheetTimeline';
+import { TimesheetEditDialog } from '@/components/TimesheetEditDialog';
 
 interface TimesheetWithProfile {
   id: string;
@@ -105,6 +106,10 @@ export default function AdminTimesheets() {
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  
+  // Edit dialog state
+  const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   
   // Filtri
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
@@ -448,6 +453,19 @@ export default function AdminTimesheets() {
     });
   };
 
+  const handleEditTimesheet = (timesheetId: string) => {
+    const timesheet = timesheets.find(t => t.id === timesheetId);
+    if (timesheet) {
+      setEditingTimesheet(timesheet);
+      setEditDialogOpen(true);
+    }
+  };
+
+  const handleEditSuccess = () => {
+    loadTimesheets();
+    setEditingTimesheet(null);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -547,7 +565,7 @@ export default function AdminTimesheets() {
           <EmployeeSummaryTable 
             employeeSummaries={employeeSummaries} 
             loading={loading} 
-            onEdit={(id) => console.log('Edit timesheet:', id)}
+            onEdit={handleEditTimesheet}
             onDelete={deleteTimesheet}
           />
         </TabsContent>
@@ -557,7 +575,7 @@ export default function AdminTimesheets() {
             weeklyData={weeklyData} 
             loading={loading} 
             dateFilter={dateFilter}
-            onEdit={(id) => console.log('Edit timesheet:', id)}
+            onEdit={handleEditTimesheet}
             onDelete={deleteTimesheet}
           />
         </TabsContent>
@@ -567,11 +585,18 @@ export default function AdminTimesheets() {
             monthlyData={monthlyData} 
             loading={loading} 
             dateFilter={dateFilter}
-            onEdit={(id) => console.log('Edit timesheet:', id)}
+            onEdit={handleEditTimesheet}
             onDelete={deleteTimesheet}
           />
         </TabsContent>
       </Tabs>
+
+      <TimesheetEditDialog
+        timesheet={editingTimesheet}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSuccess={handleEditSuccess}
+      />
     </div>
   );
 }
