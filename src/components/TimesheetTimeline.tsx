@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { format, parseISO, eachHourOfInterval, addHours, startOfHour, isSameHour, differenceInMinutes } from 'date-fns';
+import { format, parseISO, eachHourOfInterval, addHours, startOfHour, isSameHour, differenceInMinutes, isValid } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -72,8 +72,33 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
 
   // Converte timestamp in minuti dal midnight
   const timeToMinutes = (timeString: string): number => {
-    const time = parseISO(timeString);
-    return time.getHours() * 60 + time.getMinutes();
+    try {
+      // Prima prova con parseISO per timestamp completi
+      let time = parseISO(timeString);
+      
+      // Se la data è invalida, potrebbe essere solo un orario (HH:mm:ss)
+      if (!isValid(time)) {
+        // Prova a parsare come orario puro aggiungendo una data
+        const timeOnly = timeString.match(/^(\d{2}):(\d{2}):?(\d{2})?$/);
+        if (timeOnly) {
+          const hours = parseInt(timeOnly[1], 10);
+          const minutes = parseInt(timeOnly[2], 10);
+          return hours * 60 + minutes;
+        }
+        // Fallback: prova con una data base
+        time = parseISO(`2024-01-01T${timeString}`);
+      }
+      
+      if (!isValid(time)) {
+        console.warn('Invalid time format:', timeString);
+        return 0;
+      }
+      
+      return time.getHours() * 60 + time.getMinutes();
+    } catch (error) {
+      console.warn('Error parsing time:', timeString, error);
+      return 0;
+    }
   };
 
   // Calcola i blocchi temporali per ogni giorno
@@ -81,20 +106,29 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
     const blocks: TimeBlock[] = [];
 
     dayTimesheets.forEach(timesheet => {
-      if (!timesheet.start_time || !timesheet.end_time) return;
+      if (!timesheet.start_time || !timesheet.end_time) {
+        return;
+      }
 
       const startMinutes = timeToMinutes(timesheet.start_time);
       const endMinutes = timeToMinutes(timesheet.end_time);
       const lunchStartMinutes = timesheet.lunch_start_time ? timeToMinutes(timesheet.lunch_start_time) : null;
       const lunchEndMinutes = timesheet.lunch_end_time ? timeToMinutes(timesheet.lunch_end_time) : null;
 
-      // Determina il tipo di lavoro (normale, straordinario, notturno)
+      // Determina il tipo di lavoro in base agli orari effettivi
       let workType: 'work' | 'overtime' | 'night' = 'work';
       
-      if (timesheet.overtime_hours && timesheet.overtime_hours > 0) {
+      // Se ci sono ore notturne, priorità al notturno
+      if (timesheet.night_hours && timesheet.night_hours > 0) {
+        workType = 'night';
+      } else if (timesheet.overtime_hours && timesheet.overtime_hours > 0) {
         workType = 'overtime';
       }
-      if (timesheet.night_hours && timesheet.night_hours > 0) {
+      
+      // Verifica anche gli orari: prima delle 6 o dopo le 22 = notturno
+      const startHour = Math.floor(startMinutes / 60);
+      const endHour = Math.floor(endMinutes / 60);
+      if (startHour < 6 || endHour >= 22) {
         workType = 'night';
       }
 
@@ -143,7 +177,30 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
   // Formatta orario per tooltip
   const formatTime = (timeString: string | null) => {
     if (!timeString) return '-';
-    return format(parseISO(timeString), 'HH:mm');
+    try {
+      // Prima prova con parseISO per timestamp completi
+      let time = parseISO(timeString);
+      
+      // Se la data è invalida, potrebbe essere solo un orario (HH:mm:ss)
+      if (!isValid(time)) {
+        // Prova a parsare come orario puro aggiungendo una data
+        const timeOnly = timeString.match(/^(\d{2}):(\d{2}):?(\d{2})?$/);
+        if (timeOnly) {
+          return `${timeOnly[1]}:${timeOnly[2]}`;
+        }
+        // Fallback: prova con una data base
+        time = parseISO(`2024-01-01T${timeString}`);
+      }
+      
+      if (!isValid(time)) {
+        return timeString; // Return original string as fallback
+      }
+      
+      return format(time, 'HH:mm');
+    } catch (error) {
+      console.warn('Error formatting time:', timeString, error);
+      return timeString; // Return original string as fallback
+    }
   };
 
   const formatHours = (hours: number | null) => {
@@ -219,23 +276,23 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                             <div
                               className={cn(
                                 "absolute left-1 right-1 rounded cursor-pointer transition-all hover:scale-105 hover:z-10 border",
-                                {
-                                  // Ore ordinarie
-                                  "bg-primary/80 border-primary hover:bg-primary/90 text-primary-foreground": 
-                                    block.type === 'work' && !block.isLunchBreak,
-                                  // Straordinari
-                                  "bg-orange-500/80 border-orange-500 hover:bg-orange-500/90 text-white": 
-                                    block.type === 'overtime' && !block.isLunchBreak,
-                                  // Ore notturne
-                                  "bg-purple-500/80 border-purple-500 hover:bg-purple-500/90 text-white": 
-                                    block.type === 'night' && !block.isLunchBreak,
-                                  // Pausa pranzo
-                                  "bg-muted/60 border-muted-foreground/30 hover:bg-muted/80 text-muted-foreground": 
-                                    block.isLunchBreak,
-                                  // Evidenziato se selezionato
-                                  "ring-2 ring-ring scale-105": 
-                                    selectedTimesheet === block.timesheet.id
-                                }
+                                 {
+                                   // Ore ordinarie - usa colori semantici
+                                   "bg-timeline-work border-timeline-work text-timeline-work-foreground hover:bg-timeline-work/90": 
+                                     block.type === 'work' && !block.isLunchBreak,
+                                   // Straordinari - usa colori semantici
+                                   "bg-timeline-overtime border-timeline-overtime text-timeline-overtime-foreground hover:bg-timeline-overtime/90": 
+                                     block.type === 'overtime' && !block.isLunchBreak,
+                                   // Ore notturne - usa colori semantici
+                                   "bg-timeline-night border-timeline-night text-timeline-night-foreground hover:bg-timeline-night/90": 
+                                     block.type === 'night' && !block.isLunchBreak,
+                                   // Pausa pranzo - usa colori semantici
+                                   "bg-timeline-lunch border-timeline-lunch text-timeline-lunch-foreground hover:bg-timeline-lunch/80": 
+                                     block.isLunchBreak,
+                                   // Evidenziato se selezionato
+                                   "ring-2 ring-ring scale-105": 
+                                     selectedTimesheet === block.timesheet.id
+                                 }
                               )}
                               style={{
                                 top,
@@ -302,19 +359,19 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
         {/* Legenda */}
         <div className="mt-4 flex flex-wrap gap-4 text-sm">
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-primary/80 border border-primary rounded"></div>
+            <div className="w-4 h-4 bg-timeline-work border border-timeline-work rounded"></div>
             <span>Ore ordinarie</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-orange-500/80 border border-orange-500 rounded"></div>
+            <div className="w-4 h-4 bg-timeline-overtime border border-timeline-overtime rounded"></div>
             <span>Straordinari</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-purple-500/80 border border-purple-500 rounded"></div>
+            <div className="w-4 h-4 bg-timeline-night border border-timeline-night rounded"></div>
             <span>Ore notturne</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-muted/60 border border-muted-foreground/30 rounded"></div>
+            <div className="w-4 h-4 bg-timeline-lunch border border-timeline-lunch rounded"></div>
             <span>Pausa pranzo</span>
           </div>
         </div>

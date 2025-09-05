@@ -61,6 +61,16 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				timeline: {
+					work: 'hsl(var(--timeline-work))',
+					'work-foreground': 'hsl(var(--timeline-work-foreground))',
+					overtime: 'hsl(var(--timeline-overtime))',
+					'overtime-foreground': 'hsl(var(--timeline-overtime-foreground))',
+					night: 'hsl(var(--timeline-night))',
+					'night-foreground': 'hsl(var(--timeline-night-foreground))',
+					lunch: 'hsl(var(--timeline-lunch))',
+					'lunch-foreground': 'hsl(var(--timeline-lunch-foreground))'
 				}
 			},
 			borderRadius: {
