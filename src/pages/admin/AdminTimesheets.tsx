@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { OvertimeTracker } from '@/components/OvertimeTracker';
 import { TimesheetTimeline } from '@/components/TimesheetTimeline';
 import { TimesheetEditDialog } from '@/components/TimesheetEditDialog';
+import LocationDisplay from '@/components/LocationDisplay';
 
 interface TimesheetWithProfile {
   id: string;
@@ -1137,6 +1138,7 @@ function TimesheetDetailsTable({
               <TableHead>Ore Totali</TableHead>
               <TableHead>Straordinari</TableHead>
               <TableHead>Notturno</TableHead>
+              <TableHead>Posizioni GPS</TableHead>
               <TableHead>Extra</TableHead>
               <TableHead>Azioni</TableHead>
             </TableRow>
@@ -1159,6 +1161,14 @@ function TimesheetDetailsTable({
                 <TableCell>{formatHours(timesheet.total_hours)}</TableCell>
                 <TableCell>{formatHours(timesheet.overtime_hours)}</TableCell>
                 <TableCell>{formatHours(timesheet.night_hours)}</TableCell>
+                <TableCell>
+                  <LocationDisplay 
+                    startLat={timesheet.start_location_lat}
+                    startLng={timesheet.start_location_lng}
+                    endLat={timesheet.end_location_lat}
+                    endLng={timesheet.end_location_lng}
+                  />
+                </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
                     {timesheet.is_saturday && <Badge variant="secondary">Sab</Badge>}

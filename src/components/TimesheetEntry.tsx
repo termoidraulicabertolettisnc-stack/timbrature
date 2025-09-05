@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Clock, MapPin, Play, Square } from 'lucide-react';
+import LocationModal from './LocationModal';
 
 interface Project {
   id: string;
@@ -31,6 +32,7 @@ const TimesheetEntry = () => {
   const [currentSession, setCurrentSession] = useState<TodayTimesheet | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
   
   const { user } = useAuth();
   const { toast } = useToast();
@@ -320,10 +322,19 @@ const TimesheetEntry = () => {
               Esci
             </Button>
           )}
-          <Button variant="outline" size="lg">
+          <Button 
+            variant="outline" 
+            size="lg"
+            onClick={() => setLocationModalOpen(true)}
+          >
             <MapPin className="h-4 w-4" />
           </Button>
         </div>
+        
+        <LocationModal 
+          open={locationModalOpen} 
+          onOpenChange={setLocationModalOpen} 
+        />
       </CardContent>
     </Card>
   );
