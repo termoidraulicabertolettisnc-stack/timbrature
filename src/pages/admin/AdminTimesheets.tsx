@@ -685,12 +685,16 @@ function EmployeeSummaryTable({
                     
                     <div className="flex items-center gap-6 text-sm">
                       <div className="text-center">
-                        <div className="font-medium text-foreground">{formatHours(employee.total_hours)}</div>
-                        <div className="text-muted-foreground">Totali</div>
+                        <div className="font-medium text-foreground">{formatHours(employee.total_hours - employee.overtime_hours)}</div>
+                        <div className="text-muted-foreground">Ordinarie</div>
                       </div>
                       <div className="text-center">
                         <div className="font-medium text-foreground">{formatHours(employee.overtime_hours)}</div>
                         <div className="text-muted-foreground">Straord.</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-medium text-foreground">{formatHours(employee.total_hours)}</div>
+                        <div className="text-muted-foreground">Totali</div>
                       </div>
                       <div className="text-center">
                         <div className="font-medium text-foreground">{formatHours(employee.night_hours)}</div>
@@ -855,16 +859,19 @@ function WeeklyView({
                           )}
                         </div>
                       ))}
-                      <div className="text-center min-w-[80px] bg-secondary/50 px-2 py-1 rounded">
-                        <div className="text-xs text-muted-foreground">Totale</div>
-                        <div className="font-semibold text-lg">
-                          {formatHours(employee.total_hours)}
-                        </div>
-                        {employee.overtime_hours > 0 && (
-                          <div className="text-xs text-muted-foreground">
-                            Straord: {formatHours(employee.overtime_hours)}
+                      <div className="text-center min-w-[100px] bg-secondary/50 px-2 py-1 rounded">
+                        <div className="text-xs text-muted-foreground mb-1">Totale Settimana</div>
+                        <div className="space-y-1">
+                          <div className="text-xs">
+                            <span className="text-muted-foreground">Ord:</span> {formatHours(employee.total_hours - employee.overtime_hours)}
                           </div>
-                        )}
+                          <div className="text-xs">
+                            <span className="text-muted-foreground">Str:</span> {formatHours(employee.overtime_hours)}
+                          </div>
+                          <div className="font-semibold text-sm border-t pt-1">
+                            <span className="text-muted-foreground">Tot:</span> {formatHours(employee.total_hours)}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1003,25 +1010,30 @@ function MonthlyView({
                           <CardDescription>{employee.email}</CardDescription>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-2xl font-bold">{formatHours(employee.total_hours)}</div>
-                        <div className="text-sm text-muted-foreground">Totale mese</div>
-                      </div>
+                       <div className="text-right">
+                        <div className="grid grid-cols-3 gap-3 text-center">
+                          <div>
+                            <div className="text-lg font-semibold">{formatHours(employee.total_hours - employee.overtime_hours)}</div>
+                            <div className="text-xs text-muted-foreground">Ordinarie</div>
+                          </div>
+                          <div>
+                            <div className="text-lg font-semibold">{formatHours(employee.overtime_hours)}</div>
+                            <div className="text-xs text-muted-foreground">Straord.</div>
+                          </div>
+                          <div>
+                            <div className="text-xl font-bold">{formatHours(employee.total_hours)}</div>
+                            <div className="text-xs text-muted-foreground">Totali</div>
+                          </div>
+                        </div>
+                       </div>
                     </div>
-                    {(employee.overtime_hours > 0 || employee.meal_vouchers > 0) && (
-                      <div className="flex gap-4 text-sm ml-7">
-                        {employee.overtime_hours > 0 && (
-                          <span className="text-muted-foreground">
-                            Straordinari: {formatHours(employee.overtime_hours)}
-                          </span>
-                        )}
-                        {employee.meal_vouchers > 0 && (
-                          <span className="text-muted-foreground">
-                            Buoni pasto: {employee.meal_vouchers}
-                          </span>
-                        )}
-                      </div>
-                    )}
+                     {employee.meal_vouchers > 0 && (
+                       <div className="flex gap-4 text-sm ml-7">
+                         <span className="text-muted-foreground">
+                           Buoni pasto: {employee.meal_vouchers}
+                         </span>
+                       </div>
+                     )}
                   </CardHeader>
                   <CardContent className="pt-0">
                     <div className="space-y-3 ml-7">
