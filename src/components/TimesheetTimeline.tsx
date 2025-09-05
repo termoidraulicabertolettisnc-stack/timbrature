@@ -474,8 +474,17 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                               )}
                             >
                               {(() => {
-                                const blockDurationMinutes = block.endMinutes - block.startMinutes;
-                                const blockDurationHours = (blockDurationMinutes / 60).toFixed(1);
+                                // Usa le ore effettive dal timesheet invece del calcolo visivo
+                                const totalHours = block.timesheet.total_hours || 0;
+                                const overtimeHours = block.timesheet.overtime_hours || 0;
+                                const nightHours = block.timesheet.night_hours || 0;
+                                const regularHours = totalHours - overtimeHours - nightHours;
+                                
+                                const blockDurationHours = block.type === 'work' ? 
+                                  regularHours.toFixed(1) :
+                                  block.type === 'overtime' ? 
+                                  overtimeHours.toFixed(1) :
+                                  nightHours.toFixed(1);
                                 
                                 // Pausa pranzo
                                 if (block.isLunchBreak) {
