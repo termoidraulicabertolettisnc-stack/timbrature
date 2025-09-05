@@ -512,14 +512,11 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                                   );
                                 }
                                 
-                                // Blocchi grandi: icona + durata + progetto
+                                // Blocchi grandi: icona + durata (senza progetto)
                                 return (
-                                  <div className="flex flex-col items-center justify-center h-full p-1 text-xs font-medium">
+                                  <div className="flex flex-col items-center justify-center h-full text-xs font-medium">
                                     <IconComponent className="h-4 w-4 mb-1" />
-                                    <span className="mb-1">{blockDurationHours}h</span>
-                                    <span className="text-[10px] truncate w-full text-center opacity-80">
-                                      {block.timesheet.projects?.name || 'Progetto'}
-                                    </span>
+                                    <span>{blockDurationHours}h</span>
                                   </div>
                                 );
                               })()}
