@@ -84,6 +84,8 @@ export type Database = {
       }
       company_settings: {
         Row: {
+          business_trip_rate_with_meal: number | null
+          business_trip_rate_without_meal: number | null
           company_id: string
           created_at: string
           id: string
@@ -97,6 +99,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          business_trip_rate_with_meal?: number | null
+          business_trip_rate_without_meal?: number | null
           company_id: string
           created_at?: string
           id?: string
@@ -110,6 +114,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          business_trip_rate_with_meal?: number | null
+          business_trip_rate_without_meal?: number | null
           company_id?: string
           created_at?: string
           id?: string
@@ -134,6 +140,8 @@ export type Database = {
       }
       employee_settings: {
         Row: {
+          business_trip_rate_with_meal: number | null
+          business_trip_rate_without_meal: number | null
           company_id: string
           created_at: string
           created_by: string
@@ -157,6 +165,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          business_trip_rate_with_meal?: number | null
+          business_trip_rate_without_meal?: number | null
           company_id: string
           created_at?: string
           created_by: string
@@ -182,6 +192,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          business_trip_rate_with_meal?: number | null
+          business_trip_rate_without_meal?: number | null
           company_id?: string
           created_at?: string
           created_by?: string

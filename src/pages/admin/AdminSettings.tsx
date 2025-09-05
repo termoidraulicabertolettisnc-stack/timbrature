@@ -20,6 +20,8 @@ interface CompanySettings {
   meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni';
   night_shift_start: string;
   night_shift_end: string;
+  business_trip_rate_with_meal: number;
+  business_trip_rate_without_meal: number;
   created_at: string;
   updated_at: string;
 }
@@ -86,6 +88,8 @@ export default function AdminSettings() {
         meal_voucher_policy: 'oltre_6_ore' as const,
         night_shift_start: '20:00:00',
         night_shift_end: '05:00:00',
+        business_trip_rate_with_meal: 46.48,
+        business_trip_rate_without_meal: 30.98,
       };
 
       const { data, error } = await supabase
@@ -412,6 +416,60 @@ export default function AdminSettings() {
             <p className="text-xs text-muted-foreground">
               Le ore lavorate tra {settings.night_shift_start} e {settings.night_shift_end} vengono considerate notturne
             </p>
+          </CardContent>
+        </Card>
+
+        {/* Importi Trasferte */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Gift className="h-5 w-5" />
+              Importi Trasferte
+            </CardTitle>
+            <CardDescription>
+              Configura gli importi giornalieri delle trasferte in base al diritto al buono pasto
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="trip_with_meal">Trasferta con Buono Pasto (€)</Label>
+                <Input
+                  id="trip_with_meal"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={settings.business_trip_rate_with_meal}
+                  onChange={(e) => updateSetting('business_trip_rate_with_meal', parseFloat(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Importo giornaliero quando il dipendente ha diritto al buono pasto
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="trip_without_meal">Trasferta senza Buono Pasto (€)</Label>
+                <Input
+                  id="trip_without_meal"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={settings.business_trip_rate_without_meal}
+                  onChange={(e) => updateSetting('business_trip_rate_without_meal', parseFloat(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Importo giornaliero quando il dipendente NON ha diritto al buono pasto
+                </p>
+              </div>
+            </div>
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <p className="text-sm font-medium mb-2">Come funziona:</p>
+              <ul className="text-xs text-muted-foreground space-y-1">
+                <li>• <strong>Sabato in trasferta:</strong> L'importo dipende dal diritto al buono pasto del sabato</li>
+                <li>• <strong>Indennità giornaliera:</strong> Quando configurata "in trasferte al posto del buono pasto"</li>
+                <li>• <strong>Con buono pasto:</strong> €{settings.business_trip_rate_with_meal} giornalieri</li>
+                <li>• <strong>Senza buono pasto:</strong> €{settings.business_trip_rate_without_meal} giornalieri</li>
+              </ul>
+            </div>
           </CardContent>
         </Card>
       </div>

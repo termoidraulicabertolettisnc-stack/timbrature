@@ -23,6 +23,8 @@ interface EmployeeSettings {
   night_shift_start: string | null;
   night_shift_end: string | null;
   overtime_monthly_compensation?: boolean | null;
+  business_trip_rate_with_meal: number | null;
+  business_trip_rate_without_meal: number | null;
 }
 
 interface CompanySettings {
@@ -33,6 +35,8 @@ interface CompanySettings {
   meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni';
   night_shift_start: string;
   night_shift_end: string;
+  business_trip_rate_with_meal: number;
+  business_trip_rate_without_meal: number;
 }
 
 interface EmployeeSettingsDialogProps {
@@ -60,6 +64,8 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
     night_shift_start: null,
     night_shift_end: null,
     overtime_monthly_compensation: null,
+    business_trip_rate_with_meal: null,
+    business_trip_rate_without_meal: null,
   });
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -111,6 +117,8 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
           night_shift_start: null,
           night_shift_end: null,
           overtime_monthly_compensation: null,
+          business_trip_rate_with_meal: null,
+          business_trip_rate_without_meal: null,
         });
       }
     } catch (error) {
@@ -178,6 +186,8 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
       night_shift_start: null,
       night_shift_end: null,
       overtime_monthly_compensation: null,
+      business_trip_rate_with_meal: null,
+      business_trip_rate_without_meal: null,
     });
     setHasChanges(true);
   };
@@ -473,6 +483,60 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
                     Valore effettivo: {getEffectiveValue(settings.night_shift_end, companySettings?.night_shift_end)}
                   </p>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Business Trip Rates */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Importi Trasferte</CardTitle>
+              <CardDescription>
+                Configurazione degli importi giornalieri delle trasferte in base al diritto al buono pasto
+                {companySettings && ` (Aziendale: con buono ${companySettings.business_trip_rate_with_meal}€, senza buono ${companySettings.business_trip_rate_without_meal}€)`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="trip-with-meal">Trasferta con Buono Pasto (€)</Label>
+                  <Input
+                    id="trip-with-meal"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={settings.business_trip_rate_with_meal || ''}
+                    onChange={(e) => updateSetting('business_trip_rate_with_meal', e.target.value ? parseFloat(e.target.value) : null)}
+                    placeholder={companySettings ? `Default: ${companySettings.business_trip_rate_with_meal}€` : '46.48'}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Valore effettivo: €{getEffectiveValue(settings.business_trip_rate_with_meal, companySettings?.business_trip_rate_with_meal)}
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="trip-without-meal">Trasferta senza Buono Pasto (€)</Label>
+                  <Input
+                    id="trip-without-meal"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={settings.business_trip_rate_without_meal || ''}
+                    onChange={(e) => updateSetting('business_trip_rate_without_meal', e.target.value ? parseFloat(e.target.value) : null)}
+                    placeholder={companySettings ? `Default: ${companySettings.business_trip_rate_without_meal}€` : '30.98'}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Valore effettivo: €{getEffectiveValue(settings.business_trip_rate_without_meal, companySettings?.business_trip_rate_without_meal)}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  <strong>Info:</strong> L'importo della trasferta viene determinato automaticamente in base al diritto al buono pasto del giorno:
+                </p>
+                <ul className="text-xs text-muted-foreground mt-1 ml-4 list-disc">
+                  <li>Se il dipendente ha diritto al buono pasto quel giorno → Importo "con buono pasto"</li>
+                  <li>Se il dipendente NON ha diritto al buono pasto → Importo "senza buono pasto"</li>
+                </ul>
               </div>
             </CardContent>
           </Card>
