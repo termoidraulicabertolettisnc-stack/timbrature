@@ -1,6 +1,7 @@
 import { MapPin, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useReverseGeocoding } from '@/hooks/use-geocoding';
+import { useToast } from '@/components/ui/use-toast';
 
 interface LocationViewProps {
   startLat?: number | null;
@@ -19,20 +20,58 @@ const LocationView = ({
   height = "200px",
   className = "" 
 }: LocationViewProps) => {
+  const { toast } = useToast();
   const startAddress = useReverseGeocoding(startLat, startLng);
   const endAddress = useReverseGeocoding(endLat, endLng);
 
-  const hasStartLocation = startLat && startLng;
-  const hasEndLocation = endLat && endLng;
+  // Robust coordinate validation
+  const isValidCoordinate = (lat: number | null | undefined, lng: number | null | undefined): boolean => {
+    return typeof lat === 'number' && typeof lng === 'number' && 
+           !isNaN(lat) && !isNaN(lng) && 
+           lat >= -90 && lat <= 90 && 
+           lng >= -180 && lng <= 180;
+  };
+
+  const hasStartLocation = isValidCoordinate(startLat, startLng);
+  const hasEndLocation = isValidCoordinate(endLat, endLng);
   const hasAnyLocation = hasStartLocation || hasEndLocation;
 
   const formatCoordinate = (value: number) => {
     return value.toFixed(6);
   };
 
-  const openInGoogleMaps = (lat: number, lng: number, label: string) => {
-    const url = `https://www.google.com/maps?q=${lat},${lng}&t=m&z=15`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+  const openInGoogleMaps = (lat: number | null, lng: number | null, label: string) => {
+    // Debug logging
+    console.log('Aprendo Google Maps:', { lat, lng, label });
+    
+    // Validate coordinates before opening
+    if (!isValidCoordinate(lat, lng)) {
+      console.error('Coordinate non valide per Google Maps:', { lat, lng });
+      toast({
+        title: "Errore",
+        description: "Coordinate GPS non valide per aprire Google Maps",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Use more robust Google Maps URL format
+      const url = `https://maps.google.com/?q=${lat},${lng}&ll=${lat},${lng}&z=16`;
+      console.log('URL Google Maps:', url);
+      
+      const success = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!success) {
+        throw new Error('Popup bloccato dal browser');
+      }
+    } catch (error) {
+      console.error('Errore nell\'aprire Google Maps:', error);
+      toast({
+        title: "Errore",
+        description: "Impossibile aprire Google Maps. Verifica le impostazioni del browser.",
+        variant: "destructive"
+      });
+    }
   };
 
   if (!hasAnyLocation) {
@@ -128,8 +167,33 @@ const LocationView = ({
             variant="outline"
             size="sm"
             onClick={() => {
-              const url = `https://www.google.com/maps/dir/${startLat},${startLng}/${endLat},${endLng}`;
-              window.open(url, '_blank', 'noopener,noreferrer');
+              console.log('Aprendo percorso Google Maps:', { startLat, startLng, endLat, endLng });
+              
+              if (!isValidCoordinate(startLat, startLng) || !isValidCoordinate(endLat, endLng)) {
+                toast({
+                  title: "Errore",
+                  description: "Coordinate GPS non valide per visualizzare il percorso",
+                  variant: "destructive"
+                });
+                return;
+              }
+              
+              try {
+                const url = `https://maps.google.com/maps/dir/${startLat},${startLng}/${endLat},${endLng}`;
+                console.log('URL percorso Google Maps:', url);
+                
+                const success = window.open(url, '_blank', 'noopener,noreferrer');
+                if (!success) {
+                  throw new Error('Popup bloccato dal browser');
+                }
+              } catch (error) {
+                console.error('Errore nell\'aprire il percorso:', error);
+                toast({
+                  title: "Errore",
+                  description: "Impossibile aprire il percorso in Google Maps",
+                  variant: "destructive"
+                });
+              }
             }}
             className="w-full text-xs"
           >
