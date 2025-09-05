@@ -4,7 +4,7 @@ import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Clock } from 'lucide-react';
+import { Clock, Zap, Moon, Utensils } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface TimesheetWithProfile {
@@ -473,47 +473,139 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                                 selectedTimesheet === block.timesheet.id ? null : block.timesheet.id
                               )}
                             >
-                              {height >= 20 && !block.isLunchBreak && (
-                                <div className="p-1 text-xs font-medium truncate">
-                                  {block.timesheet.projects?.name || 'Lavoro'}
-                                </div>
-                              )}
-                              {block.isLunchBreak && height >= 16 && (
-                                <div className="p-1 text-xs text-center">
-                                  🍽️
-                                </div>
-                              )}
+                              {(() => {
+                                const blockDurationMinutes = block.endMinutes - block.startMinutes;
+                                const blockDurationHours = (blockDurationMinutes / 60).toFixed(1);
+                                
+                                // Pausa pranzo
+                                if (block.isLunchBreak) {
+                                  if (height >= 20) {
+                                    return (
+                                      <div className="flex items-center justify-center h-full text-xs font-medium">
+                                        <Utensils className="h-3 w-3" />
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                }
+                                
+                                // Icona e durata per altri tipi
+                                const IconComponent = block.type === 'work' ? Clock : 
+                                                    block.type === 'overtime' ? Zap : Moon;
+                                
+                                // Blocchi molto piccoli: solo icona
+                                if (height < 30) {
+                                  return (
+                                    <div className="flex items-center justify-center h-full">
+                                      <IconComponent className="h-3 w-3" />
+                                    </div>
+                                  );
+                                }
+                                
+                                // Blocchi medi: icona + durata
+                                if (height < 50) {
+                                  return (
+                                    <div className="flex flex-col items-center justify-center h-full text-xs font-medium">
+                                      <IconComponent className="h-3 w-3 mb-1" />
+                                      <span>{blockDurationHours}h</span>
+                                    </div>
+                                  );
+                                }
+                                
+                                // Blocchi grandi: icona + durata + progetto
+                                return (
+                                  <div className="flex flex-col items-center justify-center h-full p-1 text-xs font-medium">
+                                    <IconComponent className="h-4 w-4 mb-1" />
+                                    <span className="mb-1">{blockDurationHours}h</span>
+                                    <span className="text-[10px] truncate w-full text-center opacity-80">
+                                      {block.timesheet.projects?.name || 'Progetto'}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </TooltipTrigger>
                           <TooltipContent side="right" className="max-w-xs">
-                            <div className="space-y-1">
-                              <div className="font-semibold">
-                                {block.isLunchBreak ? 'Pausa Pranzo' : (block.timesheet.projects?.name || 'Lavoro')}
+                            <div className="space-y-2">
+                              <div className="font-medium">
+                                {block.timesheet.profiles?.first_name} {block.timesheet.profiles?.last_name}
                               </div>
+                              
+                              {/* Tipo di blocco */}
+                              <div className="flex items-center gap-2 text-sm">
+                                {block.isLunchBreak ? (
+                                  <>
+                                    <Utensils className="h-3 w-3" />
+                                    <span className="font-medium">Pausa pranzo</span>
+                                  </>
+                                ) : block.type === 'work' ? (
+                                  <>
+                                    <Clock className="h-3 w-3" />
+                                    <span className="font-medium">Ore ordinarie</span>
+                                  </>
+                                ) : block.type === 'overtime' ? (
+                                  <>
+                                    <Zap className="h-3 w-3" />
+                                    <span className="font-medium">Straordinario</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Moon className="h-3 w-3" />
+                                    <span className="font-medium">Ore notturne</span>
+                                  </>
+                                )}
+                              </div>
+                              
+                              {/* Durata specifica del blocco */}
                               <div className="text-sm">
-                                {formatTime(block.timesheet.start_time)} - {formatTime(block.timesheet.end_time)}
+                                <span className="font-medium">Durata blocco:</span> {((block.endMinutes - block.startMinutes) / 60).toFixed(1)}h
                               </div>
-                              {!block.isLunchBreak && (
-                                <div className="text-sm space-y-1">
-                                  <div>Ore totali: {formatHours(block.timesheet.total_hours)}</div>
-                                  {block.timesheet.overtime_hours && block.timesheet.overtime_hours > 0 && (
-                                    <div>Straordinari: {formatHours(block.timesheet.overtime_hours)}</div>
-                                  )}
-                                  {block.timesheet.night_hours && block.timesheet.night_hours > 0 && (
-                                    <div>Notturno: {formatHours(block.timesheet.night_hours)}</div>
-                                  )}
-                                  <div className="flex gap-1 flex-wrap">
-                                    {block.timesheet.is_saturday && <Badge variant="secondary" className="text-xs">Sab</Badge>}
-                                    {block.timesheet.is_holiday && <Badge variant="secondary" className="text-xs">Fest</Badge>}
-                                    {block.timesheet.meal_voucher_earned && <Badge variant="default" className="text-xs">Buono</Badge>}
+                              
+                              {/* Orario del blocco */}
+                              <div className="text-sm">
+                                <span className="font-medium">Orario blocco:</span> {Math.floor(block.startMinutes / 60).toString().padStart(2, '0')}:{(block.startMinutes % 60).toString().padStart(2, '0')} - {Math.floor(block.endMinutes / 60).toString().padStart(2, '0')}:{(block.endMinutes % 60).toString().padStart(2, '0')}
+                              </div>
+                              
+                              {block.timesheet.projects && (
+                                <div className="text-sm">
+                                  <span className="font-medium">Progetto:</span> {block.timesheet.projects.name}
+                                </div>
+                              )}
+                              
+                              {/* Informazioni generali timesheet */}
+                              <div className="border-t pt-2 mt-2">
+                                <div className="text-sm">
+                                  <span className="font-medium">Giornata completa:</span> {formatTime(block.timesheet.start_time)} - {formatTime(block.timesheet.end_time)}
+                                </div>
+                                <div className="text-sm">
+                                  <span className="font-medium">Ore totali:</span> {formatHours(block.timesheet.total_hours)}
+                                </div>
+                                {block.timesheet.overtime_hours && block.timesheet.overtime_hours > 0 && (
+                                  <div className="text-sm">
+                                    <span className="font-medium">Straordinario totale:</span> {formatHours(block.timesheet.overtime_hours)}
                                   </div>
+                                )}
+                                {block.timesheet.night_hours && block.timesheet.night_hours > 0 && (
+                                  <div className="text-sm">
+                                    <span className="font-medium">Ore notturne totali:</span> {formatHours(block.timesheet.night_hours)}
+                                  </div>
+                                )}
+                                {block.timesheet.lunch_start_time && block.timesheet.lunch_end_time && (
+                                  <div className="text-sm">
+                                    <span className="font-medium">Pausa pranzo:</span> {formatTime(block.timesheet.lunch_start_time)} - {formatTime(block.timesheet.lunch_end_time)}
+                                  </div>
+                                )}
+                                <div className="flex gap-1 flex-wrap mt-1">
+                                  {block.timesheet.is_saturday && <Badge variant="secondary" className="text-xs">Sab</Badge>}
+                                  {block.timesheet.is_holiday && <Badge variant="secondary" className="text-xs">Fest</Badge>}
+                                  {block.timesheet.meal_voucher_earned && <Badge variant="default" className="text-xs">Buono</Badge>}
                                 </div>
-                              )}
-                              {block.timesheet.notes && (
-                                <div className="text-sm text-muted-foreground">
-                                  Note: {block.timesheet.notes}
-                                </div>
-                              )}
+                                {block.timesheet.notes && (
+                                  <div className="text-sm mt-1">
+                                    <span className="font-medium">Note:</span> {block.timesheet.notes}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </TooltipContent>
                         </Tooltip>
@@ -529,19 +621,27 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
         {/* Legenda */}
         <div className="mt-4 flex flex-wrap gap-4 text-sm">
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-timeline-work border border-timeline-work rounded"></div>
+            <div className="w-4 h-4 bg-timeline-work border border-timeline-work rounded flex items-center justify-center">
+              <Clock className="h-2.5 w-2.5 text-timeline-work-foreground" />
+            </div>
             <span>Ore ordinarie</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-timeline-overtime border border-timeline-overtime rounded"></div>
+            <div className="w-4 h-4 bg-timeline-overtime border border-timeline-overtime rounded flex items-center justify-center">
+              <Zap className="h-2.5 w-2.5 text-timeline-overtime-foreground" />
+            </div>
             <span>Straordinari</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-timeline-night border border-timeline-night rounded"></div>
+            <div className="w-4 h-4 bg-timeline-night border border-timeline-night rounded flex items-center justify-center">
+              <Moon className="h-2.5 w-2.5 text-timeline-night-foreground" />
+            </div>
             <span>Ore notturne</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-timeline-lunch border border-timeline-lunch rounded"></div>
+            <div className="w-4 h-4 bg-timeline-lunch border border-timeline-lunch rounded flex items-center justify-center">
+              <Utensils className="h-2.5 w-2.5 text-timeline-lunch-foreground" />
+            </div>
             <span>Pausa pranzo</span>
           </div>
         </div>
