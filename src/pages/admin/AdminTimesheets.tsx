@@ -1114,6 +1114,53 @@ function TimesheetDetailsTable({
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const [employeeSettings, setEmployeeSettings] = useState<Map<string, any>>(new Map());
+  const [companySettings, setCompanySettings] = useState<any>(null);
+
+  useEffect(() => {
+    loadEmployeeSettings();
+  }, [timesheets]);
+
+  const loadEmployeeSettings = async () => {
+    if (timesheets.length === 0) return;
+
+    try {
+      // Carica le impostazioni aziendali
+      const { data: companyData, error: companyError } = await supabase
+        .from('company_settings')
+        .select('*')
+        .limit(1)
+        .single();
+
+      if (companyError && companyError.code !== 'PGRST116') {
+        console.error('Error loading company settings:', companyError);
+      } else {
+        setCompanySettings(companyData);
+      }
+
+      // Ottieni tutti gli user_id unici
+      const userIds = [...new Set(timesheets.map(t => t.user_id))];
+
+      // Carica le impostazioni specifiche dei dipendenti
+      const { data: employeeData, error: employeeError } = await supabase
+        .from('employee_settings')
+        .select('*')
+        .in('user_id', userIds);
+
+      if (employeeError) {
+        console.error('Error loading employee settings:', employeeError);
+      } else {
+        const settingsMap = new Map();
+        employeeData?.forEach(setting => {
+          settingsMap.set(setting.user_id, setting);
+        });
+        setEmployeeSettings(settingsMap);
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  };
+
   const formatTime = (timeString: string | null) => {
     if (!timeString) return '-';
     return format(parseISO(timeString), 'HH:mm');
@@ -1122,6 +1169,52 @@ function TimesheetDetailsTable({
   const formatHours = (hours: number | null) => {
     if (!hours) return '0h';
     return `${hours.toFixed(1)}h`;
+  };
+
+  const getOrdinaryHours = (timesheet: TimesheetWithProfile) => {
+    const totalHours = timesheet.total_hours || 0;
+    const overtimeHours = timesheet.overtime_hours || 0;
+    return totalHours - overtimeHours;
+  };
+
+  const getLunchBreakDisplay = (timesheet: TimesheetWithProfile) => {
+    // Se ha orari specifici di pausa pranzo, mostrali
+    if (timesheet.lunch_start_time && timesheet.lunch_end_time) {
+      return `${formatTime(timesheet.lunch_start_time)} - ${formatTime(timesheet.lunch_end_time)}`;
+    }
+
+    // Se ha una durata personalizzata, mostrala
+    if (timesheet.lunch_duration_minutes !== null) {
+      if (timesheet.lunch_duration_minutes === 0) {
+        return 'Nessuna pausa';
+      }
+      return `${timesheet.lunch_duration_minutes} min`;
+    }
+
+    // Altrimenti mostra la pausa configurata dalle impostazioni
+    const employeeSetting = employeeSettings.get(timesheet.user_id);
+    let lunchBreakType = null;
+
+    if (employeeSetting?.lunch_break_type) {
+      lunchBreakType = employeeSetting.lunch_break_type;
+    } else if (companySettings?.lunch_break_type) {
+      lunchBreakType = companySettings.lunch_break_type;
+    }
+
+    if (lunchBreakType) {
+      switch (lunchBreakType) {
+        case '0_minuti': return 'Nessuna pausa';
+        case '15_minuti': return '15 min';
+        case '30_minuti': return '30 min';
+        case '45_minuti': return '45 min';
+        case '60_minuti': return '1 ora';
+        case '90_minuti': return '1h 30min';
+        case '120_minuti': return '2 ore';
+        default: return '1 ora'; // Default
+      }
+    }
+
+    return '1 ora'; // Fallback
   };
 
   return (
@@ -1135,6 +1228,7 @@ function TimesheetDetailsTable({
               <TableHead>Entrata</TableHead>
               <TableHead>Uscita</TableHead>
               <TableHead>Pausa Pranzo</TableHead>
+              <TableHead>Ore Ordinarie</TableHead>
               <TableHead>Ore Totali</TableHead>
               <TableHead>Straordinari</TableHead>
               <TableHead>Notturno</TableHead>
@@ -1153,10 +1247,10 @@ function TimesheetDetailsTable({
                 <TableCell>{formatTime(timesheet.start_time)}</TableCell>
                 <TableCell>{formatTime(timesheet.end_time)}</TableCell>
                 <TableCell>
-                  {timesheet.lunch_start_time && timesheet.lunch_end_time ? 
-                    `${formatTime(timesheet.lunch_start_time)} - ${formatTime(timesheet.lunch_end_time)}` : 
-                    '-'
-                  }
+                  {getLunchBreakDisplay(timesheet)}
+                </TableCell>
+                <TableCell className="font-medium">
+                  {formatHours(getOrdinaryHours(timesheet))}
                 </TableCell>
                 <TableCell>{formatHours(timesheet.total_hours)}</TableCell>
                 <TableCell>{formatHours(timesheet.overtime_hours)}</TableCell>
