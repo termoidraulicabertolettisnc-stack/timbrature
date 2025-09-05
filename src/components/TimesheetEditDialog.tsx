@@ -160,7 +160,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         // Timesheet has specific times - use times mode
         setLunchBreakMode('times');
       } else if (timesheet.lunch_duration_minutes !== null && timesheet.lunch_duration_minutes !== undefined) {
-        // Timesheet has custom duration - use duration mode with that value
+        // Timesheet has explicit duration set (including 0 for no break) - use that value
         setLunchBreakMode('duration');
         setLunchDuration(timesheet.lunch_duration_minutes);
       } else {
