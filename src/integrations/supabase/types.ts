@@ -472,7 +472,11 @@ export type Database = {
         | "45_minuti"
         | "90_minuti"
         | "120_minuti"
-      meal_voucher_type: "oltre_6_ore" | "sempre_parttime" | "conteggio_giorni"
+      meal_voucher_type:
+        | "oltre_6_ore"
+        | "sempre_parttime"
+        | "conteggio_giorni"
+        | "disabilitato"
       overtime_type: "dopo_8_ore" | "sempre"
       saturday_type: "trasferta" | "straordinario"
       user_role: "dipendente" | "amministratore"
@@ -613,7 +617,12 @@ export const Constants = {
         "90_minuti",
         "120_minuti",
       ],
-      meal_voucher_type: ["oltre_6_ore", "sempre_parttime", "conteggio_giorni"],
+      meal_voucher_type: [
+        "oltre_6_ore",
+        "sempre_parttime",
+        "conteggio_giorni",
+        "disabilitato",
+      ],
       overtime_type: ["dopo_8_ore", "sempre"],
       saturday_type: ["trasferta", "straordinario"],
       user_role: ["dipendente", "amministratore"],

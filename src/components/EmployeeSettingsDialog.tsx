@@ -37,7 +37,7 @@ interface CompanySettings {
   lunch_break_type: '0_minuti' | '15_minuti' | '30_minuti' | '45_minuti' | '60_minuti' | '90_minuti' | '120_minuti' | 'libera';
   overtime_calculation: 'dopo_8_ore' | 'sempre';
   saturday_handling: 'trasferta' | 'straordinario';
-  meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni';
+  meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni' | 'disabilitato';
   night_shift_start: string;
   night_shift_end: string;
   business_trip_rate_with_meal: number;
@@ -425,6 +425,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
                       <SelectItem value="oltre_6_ore">Oltre 6 ore</SelectItem>
                       <SelectItem value="sempre_parttime">Sempre per part-time</SelectItem>
                       <SelectItem value="conteggio_giorni">Conteggio giorni</SelectItem>
+                      <SelectItem value="disabilitato">Disabilitato</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">

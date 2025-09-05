@@ -17,7 +17,7 @@ interface CompanySettings {
   lunch_break_type: 'libera' | '30_minuti' | '60_minuti';
   overtime_calculation: 'dopo_8_ore' | 'sempre';
   saturday_handling: 'trasferta' | 'straordinario';
-  meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni';
+  meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni' | 'disabilitato';
   night_shift_start: string;
   night_shift_end: string;
   business_trip_rate_with_meal: number;
@@ -387,12 +387,14 @@ export default function AdminSettings() {
                   <SelectItem value="oltre_6_ore">Se oltre 6 Ore Effettive</SelectItem>
                   <SelectItem value="sempre_parttime">Sempre per Part-time</SelectItem>
                   <SelectItem value="conteggio_giorni">Conta Giorni oltre 6 Ore</SelectItem>
+                  <SelectItem value="disabilitato">Disabilitato</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
                 {settings.meal_voucher_policy === 'oltre_6_ore' && 'Buono pasto assegnato se si lavora più di 6 ore effettive'}
                 {settings.meal_voucher_policy === 'sempre_parttime' && 'Buono pasto sempre assegnato ai dipendenti part-time'}
                 {settings.meal_voucher_policy === 'conteggio_giorni' && 'Non viene assegnato buono ma si contano i giorni oltre 6 ore per indennità'}
+                {settings.meal_voucher_policy === 'disabilitato' && 'I buoni pasto sono completamente disabilitati'}
               </p>
             </div>
           </CardContent>
