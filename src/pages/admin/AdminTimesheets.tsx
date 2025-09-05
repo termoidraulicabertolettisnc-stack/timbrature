@@ -1228,12 +1228,12 @@ function TimesheetDetailsTable({
               <TableHead>Entrata</TableHead>
               <TableHead>Uscita</TableHead>
               <TableHead>Pausa Pranzo</TableHead>
-              <TableHead>Ore Ordinarie</TableHead>
               <TableHead>Ore Totali</TableHead>
+              <TableHead>Ore Ordinarie</TableHead>
               <TableHead>Straordinari</TableHead>
               <TableHead>Notturno</TableHead>
               <TableHead>Posizioni GPS</TableHead>
-              <TableHead>Extra</TableHead>
+              <TableHead>Buono Pasto</TableHead>
               <TableHead>Azioni</TableHead>
             </TableRow>
           </TableHeader>
@@ -1249,10 +1249,10 @@ function TimesheetDetailsTable({
                 <TableCell>
                   {getLunchBreakDisplay(timesheet)}
                 </TableCell>
+                <TableCell>{formatHours(timesheet.total_hours)}</TableCell>
                 <TableCell className="font-medium">
                   {formatHours(getOrdinaryHours(timesheet))}
                 </TableCell>
-                <TableCell>{formatHours(timesheet.total_hours)}</TableCell>
                 <TableCell>{formatHours(timesheet.overtime_hours)}</TableCell>
                 <TableCell>{formatHours(timesheet.night_hours)}</TableCell>
                 <TableCell>
@@ -1265,11 +1265,7 @@ function TimesheetDetailsTable({
                 />
                 </TableCell>
                 <TableCell>
-                  <div className="flex gap-1">
-                    {timesheet.is_saturday && <Badge variant="secondary">Sab</Badge>}
-                    {timesheet.is_holiday && <Badge variant="secondary">Fest</Badge>}
-                    {timesheet.meal_voucher_earned && <Badge variant="default">Buono</Badge>}
-                  </div>
+                  {timesheet.meal_voucher_earned ? 'Sì' : 'No'}
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
