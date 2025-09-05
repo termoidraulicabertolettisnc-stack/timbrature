@@ -421,7 +421,7 @@ export type Database = {
       }
     }
     Enums: {
-      lunch_break_type: "30_minuti" | "60_minuti" | "libera"
+      lunch_break_type: "30_minuti" | "60_minuti" | "libera" | "0_minuti"
       meal_voucher_type: "oltre_6_ore" | "sempre_parttime" | "conteggio_giorni"
       overtime_type: "dopo_8_ore" | "sempre"
       saturday_type: "trasferta" | "straordinario"
@@ -553,7 +553,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      lunch_break_type: ["30_minuti", "60_minuti", "libera"],
+      lunch_break_type: ["30_minuti", "60_minuti", "libera", "0_minuti"],
       meal_voucher_type: ["oltre_6_ore", "sempre_parttime", "conteggio_giorni"],
       overtime_type: ["dopo_8_ore", "sempre"],
       saturday_type: ["trasferta", "straordinario"],
