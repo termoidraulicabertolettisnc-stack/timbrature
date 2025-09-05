@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { CalendarIcon, Clock, Edit, Filter, Download, Users, ChevronDown, ChevronRight } from 'lucide-react';
+import { CalendarIcon, Clock, Edit, Filter, Download, Users, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, addDays, isSameDay } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -147,6 +147,36 @@ export default function AdminTimesheets() {
       toast({
         title: "Errore",
         description: "Errore nel caricamento dei dati iniziali",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deleteTimesheet = async (id: string) => {
+    if (!confirm('Sei sicuro di voler eliminare questo timesheet? Questa azione non può essere annullata.')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('timesheets')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Successo",
+        description: "Timesheet eliminato con successo",
+      });
+
+      // Ricarica i dati
+      loadTimesheets();
+    } catch (error) {
+      console.error('Error deleting timesheet:', error);
+      toast({
+        title: "Errore",
+        description: "Errore nell'eliminazione del timesheet",
         variant: "destructive",
       });
     }
@@ -518,6 +548,7 @@ export default function AdminTimesheets() {
             employeeSummaries={employeeSummaries} 
             loading={loading} 
             onEdit={(id) => console.log('Edit timesheet:', id)}
+            onDelete={deleteTimesheet}
           />
         </TabsContent>
         
@@ -527,6 +558,7 @@ export default function AdminTimesheets() {
             loading={loading} 
             dateFilter={dateFilter}
             onEdit={(id) => console.log('Edit timesheet:', id)}
+            onDelete={deleteTimesheet}
           />
         </TabsContent>
         
@@ -536,6 +568,7 @@ export default function AdminTimesheets() {
             loading={loading} 
             dateFilter={dateFilter}
             onEdit={(id) => console.log('Edit timesheet:', id)}
+            onDelete={deleteTimesheet}
           />
         </TabsContent>
       </Tabs>
@@ -547,11 +580,13 @@ export default function AdminTimesheets() {
 function EmployeeSummaryTable({ 
   employeeSummaries, 
   loading, 
-  onEdit 
+  onEdit,
+  onDelete
 }: { 
   employeeSummaries: EmployeeSummary[]; 
   loading: boolean; 
   onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
 
@@ -654,14 +689,15 @@ function EmployeeSummaryTable({
                     </div>
                   </div>
                 </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="mt-2 ml-6">
-                    <TimesheetDetailsTable 
-                      timesheets={employee.timesheets} 
-                      onEdit={onEdit} 
-                    />
-                  </div>
-                </CollapsibleContent>
+              <CollapsibleContent>
+                <div className="mt-2 ml-6">
+                  <TimesheetDetailsTable 
+                    timesheets={employee.timesheets} 
+                    onEdit={onEdit}
+                    onDelete={onDelete} 
+                  />
+                </div>
+              </CollapsibleContent>
               </Collapsible>
             ))
           )}
@@ -676,12 +712,14 @@ function WeeklyView({
   weeklyData, 
   loading, 
   dateFilter,
-  onEdit 
+  onEdit,
+  onDelete
 }: { 
   weeklyData: EmployeeWeeklyData[]; 
   loading: boolean; 
   dateFilter: string;
   onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
 
@@ -821,12 +859,14 @@ function MonthlyView({
   monthlyData, 
   loading, 
   dateFilter,
-  onEdit 
+  onEdit,
+  onDelete
 }: { 
   monthlyData: EmployeeMonthlyData[]; 
   loading: boolean; 
   dateFilter: string;
   onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
 
@@ -1006,7 +1046,8 @@ function MonthlyView({
                 <div className="mt-2 ml-6">
                   <TimesheetDetailsTable 
                     timesheets={getAllTimesheetsForEmployee(employee)} 
-                    onEdit={onEdit} 
+                    onEdit={onEdit}
+                    onDelete={onDelete} 
                   />
                 </div>
               </CollapsibleContent>
@@ -1021,10 +1062,12 @@ function MonthlyView({
 // Componente tabella dettagli timesheet
 function TimesheetDetailsTable({ 
   timesheets, 
-  onEdit 
+  onEdit,
+  onDelete
 }: { 
   timesheets: TimesheetWithProfile[]; 
   onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const formatTime = (timeString: string | null) => {
     if (!timeString) return '-';
@@ -1080,13 +1123,22 @@ function TimesheetDetailsTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onEdit(timesheet.id)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onEdit(timesheet.id)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onDelete(timesheet.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
