@@ -46,8 +46,6 @@ interface TimeBlock {
   endMinutes: number;
   isLunchBreak: boolean;
   type: 'work' | 'overtime' | 'night';
-  laneIndex: number;
-  totalLanes: number;
 }
 
 export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelineProps) {
@@ -105,115 +103,87 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
 
   // Calcola i blocchi temporali per ogni giorno
   const calculateTimeBlocks = (dayTimesheets: TimesheetWithProfile[]): TimeBlock[] => {
-    // Debug: log input data
-    console.log('Day timesheets:', dayTimesheets.length, dayTimesheets.map(ts => ({ id: ts.id, start: ts.start_time, end: ts.end_time })));
-    
     // Remove duplicates based on ID 
     const uniqueTimesheets = dayTimesheets.filter((ts, index, arr) => 
       index === arr.findIndex(t => t.id === ts.id)
     );
+
+    if (uniqueTimesheets.length === 0) return [];
+
+    // Per ora gestiamo solo il primo timesheet del giorno
+    // In un caso reale, dovremmo consolidare più timesheets dello stesso dipendente
+    const timesheet = uniqueTimesheets[0];
     
-    const rawBlocks: Omit<TimeBlock, 'laneIndex' | 'totalLanes'>[] = [];
+    if (!timesheet.start_time || !timesheet.end_time) {
+      return [];
+    }
 
-    uniqueTimesheets.forEach(timesheet => {
-      if (!timesheet.start_time || !timesheet.end_time) {
-        return;
-      }
+    const startMinutes = timeToMinutes(timesheet.start_time);
+    const endMinutes = timeToMinutes(timesheet.end_time);
+    const lunchStartMinutes = timesheet.lunch_start_time ? timeToMinutes(timesheet.lunch_start_time) : null;
+    const lunchEndMinutes = timesheet.lunch_end_time ? timeToMinutes(timesheet.lunch_end_time) : null;
 
-      const startMinutes = timeToMinutes(timesheet.start_time);
-      const endMinutes = timeToMinutes(timesheet.end_time);
-      const lunchStartMinutes = timesheet.lunch_start_time ? timeToMinutes(timesheet.lunch_start_time) : null;
-      const lunchEndMinutes = timesheet.lunch_end_time ? timeToMinutes(timesheet.lunch_end_time) : null;
+    // Determina il tipo di lavoro in base agli orari e ai dati
+    let workType: 'work' | 'overtime' | 'night' = 'work';
+    
+    // Se ci sono ore notturne, priorità al notturno
+    if (timesheet.night_hours && timesheet.night_hours > 0) {
+      workType = 'night';
+    } else if (timesheet.overtime_hours && timesheet.overtime_hours > 0) {
+      workType = 'overtime';
+    }
+    
+    // Verifica anche gli orari: prima delle 6 o dopo le 22 = notturno
+    const startHour = Math.floor(startMinutes / 60);
+    const endHour = Math.floor(endMinutes / 60);
+    if (startHour < 6 || endHour >= 22) {
+      workType = 'night';
+    }
 
-      // Determina il tipo di lavoro in base agli orari effettivi
-      let workType: 'work' | 'overtime' | 'night' = 'work';
+    const blocks: TimeBlock[] = [];
+
+    // Se c'è pausa pranzo, dividi il blocco
+    if (lunchStartMinutes && lunchEndMinutes && 
+        lunchStartMinutes > startMinutes && lunchEndMinutes < endMinutes) {
       
-      // Se ci sono ore notturne, priorità al notturno
-      if (timesheet.night_hours && timesheet.night_hours > 0) {
-        workType = 'night';
-      } else if (timesheet.overtime_hours && timesheet.overtime_hours > 0) {
-        workType = 'overtime';
-      }
-      
-      // Verifica anche gli orari: prima delle 6 o dopo le 22 = notturno
-      const startHour = Math.floor(startMinutes / 60);
-      const endHour = Math.floor(endMinutes / 60);
-      if (startHour < 6 || endHour >= 22) {
-        workType = 'night';
-      }
-
-      // Blocco principale di lavoro
-      if (lunchStartMinutes && lunchEndMinutes) {
-        // Diviso dalla pausa pranzo
-        rawBlocks.push({
-          timesheet,
-          startMinutes,
-          endMinutes: lunchStartMinutes,
-          isLunchBreak: false,
-          type: workType
-        });
-        
-        // Pausa pranzo
-        rawBlocks.push({
-          timesheet,
-          startMinutes: lunchStartMinutes,
-          endMinutes: lunchEndMinutes,
-          isLunchBreak: true,
-          type: 'work'
-        });
-        
-        rawBlocks.push({
-          timesheet,
-          startMinutes: lunchEndMinutes,
-          endMinutes,
-          isLunchBreak: false,
-          type: workType
-        });
-      } else {
-        // Blocco continuo
-        rawBlocks.push({
-          timesheet,
-          startMinutes,
-          endMinutes,
-          isLunchBreak: false,
-          type: workType
-        });
-      }
-    });
-
-    // Assign lanes to prevent overlaps
-    const assignLanes = (blocks: typeof rawBlocks): TimeBlock[] => {
-      // Group by timesheet to keep related blocks together
-      const timesheetGroups = new Map<string, typeof rawBlocks>();
-      blocks.forEach(block => {
-        if (!timesheetGroups.has(block.timesheet.id)) {
-          timesheetGroups.set(block.timesheet.id, []);
-        }
-        timesheetGroups.get(block.timesheet.id)!.push(block);
+      // Prima parte: dall'inizio alla pausa pranzo
+      blocks.push({
+        timesheet,
+        startMinutes,
+        endMinutes: lunchStartMinutes,
+        isLunchBreak: false,
+        type: workType
       });
-
-      const uniqueTimesheetIds = Array.from(timesheetGroups.keys());
-      const totalLanes = uniqueTimesheetIds.length;
-
-      const finalBlocks: TimeBlock[] = [];
       
-      uniqueTimesheetIds.forEach((timesheetId, laneIndex) => {
-        const timesheetBlocks = timesheetGroups.get(timesheetId)!;
-        timesheetBlocks.forEach(block => {
-          finalBlocks.push({
-            ...block,
-            laneIndex,
-            totalLanes
-          });
-        });
+      // Pausa pranzo
+      blocks.push({
+        timesheet,
+        startMinutes: lunchStartMinutes,
+        endMinutes: lunchEndMinutes,
+        isLunchBreak: true,
+        type: 'work' // Il tipo non importa per la pausa pranzo
       });
+      
+      // Seconda parte: dalla pausa pranzo alla fine
+      blocks.push({
+        timesheet,
+        startMinutes: lunchEndMinutes,
+        endMinutes,
+        isLunchBreak: false,
+        type: workType
+      });
+    } else {
+      // Blocco continuo senza pausa pranzo
+      blocks.push({
+        timesheet,
+        startMinutes,
+        endMinutes,
+        isLunchBreak: false,
+        type: workType
+      });
+    }
 
-      return finalBlocks;
-    };
-
-    const finalBlocks = assignLanes(rawBlocks);
-    console.log('Final blocks with lanes:', finalBlocks.length, finalBlocks.map(b => ({ id: b.timesheet.id, lane: b.laneIndex, total: b.totalLanes })));
-    return finalBlocks;
+    return blocks;
   };
 
   // Formatta orario per tooltip
@@ -307,14 +277,10 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                   {/* Blocchi temporali */}
                   <TooltipProvider>
                     {timeBlocks.map((block, blockIndex) => {
-                       const top = minutesToPosition(block.startMinutes);
+                      const top = minutesToPosition(block.startMinutes);
                       const height = minutesToPosition(block.endMinutes) - top;
                       
                       if (height <= 0) return null;
-
-                      // Calculate lane-based positioning
-                      const laneWidth = block.totalLanes > 1 ? Math.floor(92 / block.totalLanes) : 92; // 92% to leave margins
-                      const laneLeft = block.totalLanes > 1 ? 4 + (laneWidth * block.laneIndex) : 4; // 4% margin
 
                       return (
                         <Tooltip key={blockIndex}>
@@ -322,30 +288,29 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                             <div
                               className={cn(
                                 "absolute rounded cursor-pointer transition-all hover:scale-105 hover:z-10 border",
-                                 {
-                                   // Ore ordinarie - usa colori semantici
-                                   "bg-timeline-work border-timeline-work text-timeline-work-foreground hover:bg-timeline-work/90": 
-                                     block.type === 'work' && !block.isLunchBreak,
-                                   // Straordinari - usa colori semantici
-                                   "bg-timeline-overtime border-timeline-overtime text-timeline-overtime-foreground hover:bg-timeline-overtime/90": 
-                                     block.type === 'overtime' && !block.isLunchBreak,
-                                   // Ore notturne - usa colori semantici
-                                   "bg-timeline-night border-timeline-night text-timeline-night-foreground hover:bg-timeline-night/90": 
-                                     block.type === 'night' && !block.isLunchBreak,
-                                   // Pausa pranzo - usa colori semantici
-                                   "bg-timeline-lunch border-timeline-lunch text-timeline-lunch-foreground hover:bg-timeline-lunch/80": 
-                                     block.isLunchBreak,
-                                   // Evidenziato se selezionato
-                                   "ring-2 ring-ring scale-105": 
-                                     selectedTimesheet === block.timesheet.id
-                                 }
+                                "left-2 right-2", // Full width with small margins
+                                {
+                                  // Ore ordinarie - usa colori semantici
+                                  "bg-timeline-work border-timeline-work text-timeline-work-foreground hover:bg-timeline-work/90": 
+                                    block.type === 'work' && !block.isLunchBreak,
+                                  // Straordinari - usa colori semantici
+                                  "bg-timeline-overtime border-timeline-overtime text-timeline-overtime-foreground hover:bg-timeline-overtime/90": 
+                                    block.type === 'overtime' && !block.isLunchBreak,
+                                  // Ore notturne - usa colori semantici
+                                  "bg-timeline-night border-timeline-night text-timeline-night-foreground hover:bg-timeline-night/90": 
+                                    block.type === 'night' && !block.isLunchBreak,
+                                  // Pausa pranzo - usa colori semantici
+                                  "bg-timeline-lunch border-timeline-lunch text-timeline-lunch-foreground hover:bg-timeline-lunch/80": 
+                                    block.isLunchBreak,
+                                  // Evidenziato se selezionato
+                                  "ring-2 ring-ring scale-105": 
+                                    selectedTimesheet === block.timesheet.id
+                                }
                               )}
                               style={{
                                 top,
                                 height: Math.max(height, 4),
-                                minHeight: '4px',
-                                left: `${laneLeft}%`,
-                                width: `${laneWidth}%`
+                                minHeight: '4px'
                               }}
                               onClick={() => setSelectedTimesheet(
                                 selectedTimesheet === block.timesheet.id ? null : block.timesheet.id
