@@ -88,8 +88,12 @@ export type Database = {
           business_trip_rate_without_meal: number | null
           company_id: string
           created_at: string
+          daily_allowance_amount: number | null
+          daily_allowance_min_hours: number | null
+          daily_allowance_policy: string | null
           id: string
           lunch_break_type: Database["public"]["Enums"]["lunch_break_type"]
+          meal_voucher_amount: number | null
           meal_voucher_policy: Database["public"]["Enums"]["meal_voucher_type"]
           night_shift_end: string
           night_shift_start: string
@@ -104,8 +108,12 @@ export type Database = {
           business_trip_rate_without_meal?: number | null
           company_id: string
           created_at?: string
+          daily_allowance_amount?: number | null
+          daily_allowance_min_hours?: number | null
+          daily_allowance_policy?: string | null
           id?: string
           lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
+          meal_voucher_amount?: number | null
           meal_voucher_policy?: Database["public"]["Enums"]["meal_voucher_type"]
           night_shift_end?: string
           night_shift_start?: string
@@ -120,8 +128,12 @@ export type Database = {
           business_trip_rate_without_meal?: number | null
           company_id?: string
           created_at?: string
+          daily_allowance_amount?: number | null
+          daily_allowance_min_hours?: number | null
+          daily_allowance_policy?: string | null
           id?: string
           lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
+          meal_voucher_amount?: number | null
           meal_voucher_policy?: Database["public"]["Enums"]["meal_voucher_type"]
           night_shift_end?: string
           night_shift_start?: string
@@ -148,10 +160,14 @@ export type Database = {
           company_id: string
           created_at: string
           created_by: string
+          daily_allowance_amount: number | null
+          daily_allowance_min_hours: number | null
+          daily_allowance_policy: string | null
           id: string
           lunch_break_type:
             | Database["public"]["Enums"]["lunch_break_type"]
             | null
+          meal_voucher_amount: number | null
           meal_voucher_policy:
             | Database["public"]["Enums"]["meal_voucher_type"]
             | null
@@ -174,10 +190,14 @@ export type Database = {
           company_id: string
           created_at?: string
           created_by: string
+          daily_allowance_amount?: number | null
+          daily_allowance_min_hours?: number | null
+          daily_allowance_policy?: string | null
           id?: string
           lunch_break_type?:
             | Database["public"]["Enums"]["lunch_break_type"]
             | null
+          meal_voucher_amount?: number | null
           meal_voucher_policy?:
             | Database["public"]["Enums"]["meal_voucher_type"]
             | null
@@ -202,10 +222,14 @@ export type Database = {
           company_id?: string
           created_at?: string
           created_by?: string
+          daily_allowance_amount?: number | null
+          daily_allowance_min_hours?: number | null
+          daily_allowance_policy?: string | null
           id?: string
           lunch_break_type?:
             | Database["public"]["Enums"]["lunch_break_type"]
             | null
+          meal_voucher_amount?: number | null
           meal_voucher_policy?:
             | Database["public"]["Enums"]["meal_voucher_type"]
             | null

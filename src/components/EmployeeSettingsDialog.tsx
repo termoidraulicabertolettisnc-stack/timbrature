@@ -16,16 +16,20 @@ interface EmployeeSettings {
   user_id: string;
   company_id: string;
   standard_daily_hours: number | null;
-  lunch_break_type: '0_minuti' | '15_minuti' | '30_minuti' | '45_minuti' | '60_minuti' | '90_minuti' | '120_minuti' | 'libera' | null;
-  overtime_calculation: 'dopo_8_ore' | 'sempre' | null;
-  saturday_handling: 'trasferta' | 'straordinario' | null;
-  meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni' | null;
+  lunch_break_type: string | null;
+  overtime_calculation: string | null;
+  saturday_handling: string | null;
+  meal_voucher_policy: string | null;
   night_shift_start: string | null;
   night_shift_end: string | null;
   overtime_monthly_compensation?: boolean | null;
   business_trip_rate_with_meal: number | null;
   business_trip_rate_without_meal: number | null;
   saturday_hourly_rate: number | null;
+  meal_voucher_amount: number | null;
+  daily_allowance_amount: number | null;
+  daily_allowance_policy: string | null;
+  daily_allowance_min_hours: number | null;
 }
 
 interface CompanySettings {
@@ -39,6 +43,10 @@ interface CompanySettings {
   business_trip_rate_with_meal: number;
   business_trip_rate_without_meal: number;
   saturday_hourly_rate: number;
+  meal_voucher_amount: number;
+  daily_allowance_amount: number;
+  daily_allowance_policy: string;
+  daily_allowance_min_hours: number;
 }
 
 interface EmployeeSettingsDialogProps {
@@ -69,6 +77,10 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
     business_trip_rate_with_meal: null,
     business_trip_rate_without_meal: null,
     saturday_hourly_rate: null,
+    meal_voucher_amount: null,
+    daily_allowance_amount: null,
+    daily_allowance_policy: null,
+    daily_allowance_min_hours: null,
   });
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -123,6 +135,10 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
           business_trip_rate_with_meal: null,
           business_trip_rate_without_meal: null,
           saturday_hourly_rate: null,
+          meal_voucher_amount: null,
+          daily_allowance_amount: null,
+          daily_allowance_policy: null,
+          daily_allowance_min_hours: null,
         });
       }
     } catch (error) {
@@ -143,7 +159,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
         ...settings,
         created_by: user.id,
         updated_by: user.id,
-      };
+      } as any; // Cast to any to handle Supabase type compatibility
 
       if (settings.id) {
         // Update existing settings
@@ -193,6 +209,10 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
       business_trip_rate_with_meal: null,
       business_trip_rate_without_meal: null,
       saturday_hourly_rate: null,
+      meal_voucher_amount: null,
+      daily_allowance_amount: null,
+      daily_allowance_policy: null,
+      daily_allowance_min_hours: null,
     });
     setHasChanges(true);
   };
@@ -492,56 +512,147 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
             </CardContent>
           </Card>
 
+          {/* Meal Vouchers and Daily Allowances */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Buoni Pasto e Indennità</CardTitle>
+              <CardDescription>
+                Personalizza buoni pasto e indennità giornaliera
+                {companySettings && ` (Aziendale: buono €${companySettings.meal_voucher_amount}, indennità ${companySettings.daily_allowance_policy})`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="meal_voucher_amount">
+                  Importo buono pasto (€)
+                  <span className="text-muted-foreground ml-2">
+                    (Default: €{companySettings?.meal_voucher_amount || 8.00})
+                  </span>
+                </Label>
+                <Input
+                  id="meal_voucher_amount"
+                  type="number"
+                  step="0.01"
+                  value={settings.meal_voucher_amount || ''}
+                  onChange={(e) => updateSetting('meal_voucher_amount', e.target.value ? parseFloat(e.target.value) : null)}
+                  placeholder={`Default: €${companySettings?.meal_voucher_amount || 8.00}`}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="daily_allowance_policy">
+                  Politica indennità giornaliera
+                  <span className="text-muted-foreground ml-2">
+                    (Default: {companySettings?.daily_allowance_policy === 'alternative_to_voucher' ? 'Alternativa al buono pasto' : 'Disabilitata'})
+                  </span>
+                </Label>
+                <Select 
+                  value={settings.daily_allowance_policy || ''} 
+                  onValueChange={(value) => updateSetting('daily_allowance_policy', value || null)}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={`Default: ${companySettings?.daily_allowance_policy === 'alternative_to_voucher' ? 'Alternativa al buono pasto' : 'Disabilitata'}`} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="disabled">Disabilitata</SelectItem>
+                    <SelectItem value="alternative_to_voucher">Alternativa al buono pasto</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {(settings.daily_allowance_policy === 'alternative_to_voucher' || 
+                (!settings.daily_allowance_policy && companySettings?.daily_allowance_policy === 'alternative_to_voucher')) && (
+                <>
+                  <div>
+                    <Label htmlFor="daily_allowance_amount">
+                      Importo indennità giornaliera (€)
+                      <span className="text-muted-foreground ml-2">
+                        (Default: €{companySettings?.daily_allowance_amount || 10.00})
+                      </span>
+                    </Label>
+                    <Input
+                      id="daily_allowance_amount"
+                      type="number"
+                      step="0.01"
+                      value={settings.daily_allowance_amount || ''}
+                      onChange={(e) => updateSetting('daily_allowance_amount', e.target.value ? parseFloat(e.target.value) : null)}
+                      placeholder={`Default: €${companySettings?.daily_allowance_amount || 10.00}`}
+                      className="mt-1"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="daily_allowance_min_hours">
+                      Ore minime per indennità
+                      <span className="text-muted-foreground ml-2">
+                        (Default: {companySettings?.daily_allowance_min_hours || 6} ore)
+                      </span>
+                    </Label>
+                    <Input
+                      id="daily_allowance_min_hours"
+                      type="number"
+                      value={settings.daily_allowance_min_hours || ''}
+                      onChange={(e) => updateSetting('daily_allowance_min_hours', e.target.value ? parseInt(e.target.value) : null)}
+                      placeholder={`Default: ${companySettings?.daily_allowance_min_hours || 6} ore`}
+                      className="mt-1"
+                    />
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Business Trip Rates */}
           <Card>
             <CardHeader>
-              <CardTitle>Importi Trasferte</CardTitle>
+              <CardTitle>Indennità Trasferte</CardTitle>
               <CardDescription>
-                Configurazione degli importi giornalieri delle trasferte in base al diritto al buono pasto
-                {companySettings && ` (Aziendale: con buono ${companySettings.business_trip_rate_with_meal}€, senza buono ${companySettings.business_trip_rate_without_meal}€)`}
+                Personalizza gli importi per le trasferte
+                {companySettings && ` (Aziendale: con buono €${companySettings.business_trip_rate_with_meal}, senza buono €${companySettings.business_trip_rate_without_meal})`}
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="trip-with-meal">Trasferta con Buono Pasto (€)</Label>
-                  <Input
-                    id="trip-with-meal"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={settings.business_trip_rate_with_meal || ''}
-                    onChange={(e) => updateSetting('business_trip_rate_with_meal', e.target.value ? parseFloat(e.target.value) : null)}
-                    placeholder={companySettings ? `Default: ${companySettings.business_trip_rate_with_meal}€` : '46.48'}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Valore effettivo: €{getEffectiveValue(settings.business_trip_rate_with_meal, companySettings?.business_trip_rate_with_meal)}
-                  </p>
-                </div>
-                <div>
-                  <Label htmlFor="trip-without-meal">Trasferta senza Buono Pasto (€)</Label>
-                  <Input
-                    id="trip-without-meal"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={settings.business_trip_rate_without_meal || ''}
-                    onChange={(e) => updateSetting('business_trip_rate_without_meal', e.target.value ? parseFloat(e.target.value) : null)}
-                    placeholder={companySettings ? `Default: ${companySettings.business_trip_rate_without_meal}€` : '30.98'}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Valore effettivo: €{getEffectiveValue(settings.business_trip_rate_without_meal, companySettings?.business_trip_rate_without_meal)}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-                <p className="text-sm text-muted-foreground">
-                  <strong>Info:</strong> L'importo della trasferta viene determinato automaticamente in base al diritto al buono pasto del giorno:
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="business_trip_rate_with_meal">
+                  Trasferta con buono pasto (€)
+                  <span className="text-muted-foreground ml-2">
+                    (Default: €{companySettings?.business_trip_rate_with_meal || 30.98})
+                  </span>
+                </Label>
+                <Input
+                  id="business_trip_rate_with_meal"
+                  type="number"
+                  step="0.01"
+                  value={settings.business_trip_rate_with_meal || ''}
+                  onChange={(e) => updateSetting('business_trip_rate_with_meal', e.target.value ? parseFloat(e.target.value) : null)}
+                  placeholder={`Default: €${companySettings?.business_trip_rate_with_meal || 30.98}`}
+                  className="mt-1"
+                />
+                <p className="text-sm text-muted-foreground mt-1">
+                  Importo quando è fornito il buono pasto (importo minore)
                 </p>
-                <ul className="text-xs text-muted-foreground mt-1 ml-4 list-disc">
-                  <li>Se il dipendente ha diritto al buono pasto quel giorno → Importo "con buono pasto"</li>
-                  <li>Se il dipendente NON ha diritto al buono pasto → Importo "senza buono pasto"</li>
-                </ul>
+              </div>
+              
+              <div>
+                <Label htmlFor="business_trip_rate_without_meal">
+                  Trasferta senza buono pasto (€)
+                  <span className="text-muted-foreground ml-2">
+                    (Default: €{companySettings?.business_trip_rate_without_meal || 46.48})
+                  </span>
+                </Label>
+                <Input
+                  id="business_trip_rate_without_meal"
+                  type="number"
+                  step="0.01"
+                  value={settings.business_trip_rate_without_meal || ''}
+                  onChange={(e) => updateSetting('business_trip_rate_without_meal', e.target.value ? parseFloat(e.target.value) : null)}
+                  placeholder={`Default: €${companySettings?.business_trip_rate_without_meal || 46.48}`}
+                  className="mt-1"
+                />
+                <p className="text-sm text-muted-foreground mt-1">
+                  Importo quando NON è fornito il buono pasto (importo maggiore)
+                </p>
               </div>
             </CardContent>
           </Card>

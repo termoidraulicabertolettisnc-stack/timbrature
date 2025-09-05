@@ -23,6 +23,10 @@ interface CompanySettings {
   business_trip_rate_with_meal: number;
   business_trip_rate_without_meal: number;
   saturday_hourly_rate: number;
+  meal_voucher_amount: number;
+  daily_allowance_amount: number;
+  daily_allowance_policy: 'disabled' | 'alternative_to_voucher';
+  daily_allowance_min_hours: number;
   created_at: string;
   updated_at: string;
 }
@@ -89,9 +93,13 @@ export default function AdminSettings() {
         meal_voucher_policy: 'oltre_6_ore' as const,
         night_shift_start: '20:00:00',
         night_shift_end: '05:00:00',
-        business_trip_rate_with_meal: 46.48,
-        business_trip_rate_without_meal: 30.98,
+        business_trip_rate_with_meal: 30.98,
+        business_trip_rate_without_meal: 46.48,
         saturday_hourly_rate: 10.00,
+        meal_voucher_amount: 8.00,
+        daily_allowance_amount: 10.00,
+        daily_allowance_policy: 'disabled' as const,
+        daily_allowance_min_hours: 6,
       };
 
       const { data, error } = await supabase
@@ -131,6 +139,10 @@ export default function AdminSettings() {
           business_trip_rate_with_meal: settings.business_trip_rate_with_meal,
           business_trip_rate_without_meal: settings.business_trip_rate_without_meal,
           saturday_hourly_rate: settings.saturday_hourly_rate,
+          meal_voucher_amount: settings.meal_voucher_amount,
+          daily_allowance_amount: settings.daily_allowance_amount,
+          daily_allowance_policy: settings.daily_allowance_policy,
+          daily_allowance_min_hours: settings.daily_allowance_min_hours,
         })
         .eq('id', settings.id);
 
@@ -424,21 +436,115 @@ export default function AdminSettings() {
           </CardContent>
         </Card>
 
-        {/* Importi Trasferte */}
+        {/* Meal Vouchers and Daily Allowances */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Gift className="h-5 w-5" />
-              Importi Trasferte
+              Buoni Pasto e Indennità
             </CardTitle>
             <CardDescription>
-              Configura gli importi giornalieri delle trasferte in base al diritto al buono pasto
+              Configura buoni pasto e indennità giornaliera per i dipendenti
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="trip_with_meal">Trasferta con Buono Pasto (€)</Label>
+                <Label htmlFor="meal_voucher_amount">Importo buono pasto (€)</Label>
+                <Input
+                  id="meal_voucher_amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={settings.meal_voucher_amount}
+                  onChange={(e) => updateSetting('meal_voucher_amount', parseFloat(e.target.value) || 8.00)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Valore del buono pasto giornaliero
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="daily_allowance_policy">Politica indennità giornaliera</Label>
+                <Select 
+                  value={settings.daily_allowance_policy} 
+                  onValueChange={(value) => updateSetting('daily_allowance_policy', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="disabled">Disabilitata</SelectItem>
+                    <SelectItem value="alternative_to_voucher">Alternativa al buono pasto</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  L'indennità può sostituire il buono pasto
+                </p>
+              </div>
+            </div>
+
+            {settings.daily_allowance_policy === 'alternative_to_voucher' && (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="daily_allowance_amount">Importo indennità giornaliera (€)</Label>
+                  <Input
+                    id="daily_allowance_amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={settings.daily_allowance_amount}
+                    onChange={(e) => updateSetting('daily_allowance_amount', parseFloat(e.target.value) || 10.00)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Importo dell'indennità giornaliera
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="daily_allowance_min_hours">Ore minime per indennità</Label>
+                  <Input
+                    id="daily_allowance_min_hours"
+                    type="number"
+                    min="0"
+                    value={settings.daily_allowance_min_hours}
+                    onChange={(e) => updateSetting('daily_allowance_min_hours', parseInt(e.target.value) || 6)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Ore minime lavorate per avere diritto all'indennità
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <p className="text-sm font-medium mb-2">Come funziona:</p>
+              <ul className="text-xs text-muted-foreground space-y-1">
+                <li>• <strong>Buono pasto:</strong> €{settings.meal_voucher_amount} per giorni con più di 6 ore</li>
+                {settings.daily_allowance_policy === 'alternative_to_voucher' && (
+                  <>
+                    <li>• <strong>Indennità giornaliera:</strong> €{settings.daily_allowance_amount} per giorni con almeno {settings.daily_allowance_min_hours} ore</li>
+                    <li>• <strong>Alternativa:</strong> I dipendenti ricevono l'indennità INVECE del buono pasto</li>
+                  </>
+                )}
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Business Trip Rates */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Gift className="h-5 w-5" />
+              Indennità Trasferte
+            </CardTitle>
+            <CardDescription>
+              Configura gli importi per le trasferte di lavoro
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="trip_with_meal">Trasferta con buono pasto (€)</Label>
                 <Input
                   id="trip_with_meal"
                   type="number"
@@ -448,11 +554,11 @@ export default function AdminSettings() {
                   onChange={(e) => updateSetting('business_trip_rate_with_meal', parseFloat(e.target.value))}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Importo giornaliero quando il dipendente ha diritto al buono pasto
+                  Importo giornaliero quando è fornito il buono pasto (importo minore)
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="trip_without_meal">Trasferta senza Buono Pasto (€)</Label>
+                <Label htmlFor="trip_without_meal">Trasferta senza buono pasto (€)</Label>
                 <Input
                   id="trip_without_meal"
                   type="number"
@@ -462,7 +568,7 @@ export default function AdminSettings() {
                   onChange={(e) => updateSetting('business_trip_rate_without_meal', parseFloat(e.target.value))}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Importo giornaliero quando il dipendente NON ha diritto al buono pasto
+                  Importo giornaliero quando NON è fornito il buono pasto (importo maggiore)
                 </p>
               </div>
             </div>
