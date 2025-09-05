@@ -97,7 +97,7 @@ export default function AdminConsolidation() {
           is_saturday,
           meal_voucher_earned,
           date,
-          profiles (
+          profiles!timesheets_user_id_fkey (
             first_name,
             last_name
           )
