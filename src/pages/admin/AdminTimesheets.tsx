@@ -690,13 +690,19 @@ function EmployeeSummaryTable({
                   </div>
                 </CollapsibleTrigger>
               <CollapsibleContent>
-                <div className="mt-2 ml-6">
-                  <TimesheetDetailsTable 
-                    timesheets={employee.timesheets} 
-                    onEdit={onEdit}
-                    onDelete={onDelete} 
-                  />
-                </div>
+                 <div className="mt-2 ml-6">
+                   <TimesheetDetailsTable 
+                     timesheets={employee.timesheets} 
+                     onEdit={(id) => {
+                       console.log('EmployeeSummaryTable - Edit timesheet:', id);
+                       onEdit(id);
+                     }}
+                     onDelete={(id) => {
+                       console.log('EmployeeSummaryTable - Delete timesheet:', id);
+                       onDelete(id);
+                     }} 
+                   />
+                 </div>
               </CollapsibleContent>
               </Collapsible>
             ))
