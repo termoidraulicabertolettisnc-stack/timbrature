@@ -1,5 +1,4 @@
-import { MapPin, ExternalLink } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { MapPin } from 'lucide-react';
 import { useReverseGeocoding } from '@/hooks/use-geocoding';
 
 interface LocationViewProps {
@@ -38,16 +37,6 @@ const LocationView = ({
     return value.toFixed(6);
   };
 
-  // Generate OpenStreetMap URL for single location
-  const getOpenStreetMapUrl = (lat: number, lng: number): string => {
-    return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=18/${lat}/${lng}`;
-  };
-
-  // Generate OpenStreetMap URL for route planning
-  const getRouteUrl = (startLat: number, startLng: number, endLat: number, endLng: number): string => {
-    return `https://www.openstreetmap.org/directions?from=${startLat}%2C${startLng}&to=${endLat}%2C${endLng}&route=foot`;
-  };
-
   if (!hasAnyLocation) {
     return (
       <div 
@@ -67,26 +56,9 @@ const LocationView = ({
       {/* Start Location */}
       {hasStartLocation && (
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-green-600" />
-              <span className="font-medium text-green-600">Entrata</span>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              asChild
-              className="h-7 px-2 text-xs"
-            >
-              <a 
-                href={getOpenStreetMapUrl(startLat!, startLng!)} 
-                target="_blank" 
-                rel="noopener noreferrer"
-              >
-                <ExternalLink className="h-3 w-3 mr-1" />
-                Mappa
-              </a>
-            </Button>
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-green-600" />
+            <span className="font-medium text-green-600">Entrata</span>
           </div>
           
           {startAddress.loading ? (
@@ -108,26 +80,9 @@ const LocationView = ({
       {/* End Location */}
       {hasEndLocation && (
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-red-600" />
-              <span className="font-medium text-red-600">Uscita</span>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              asChild
-              className="h-7 px-2 text-xs"
-            >
-              <a 
-                href={getOpenStreetMapUrl(endLat!, endLng!)} 
-                target="_blank" 
-                rel="noopener noreferrer"
-              >
-                <ExternalLink className="h-3 w-3 mr-1" />
-                Mappa
-              </a>
-            </Button>
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-red-600" />
+            <span className="font-medium text-red-600">Uscita</span>
           </div>
           
           {endAddress.loading ? (
@@ -143,27 +98,6 @@ const LocationView = ({
           <div className="font-mono text-xs text-muted-foreground">
             {formatCoordinate(endLat)}, {formatCoordinate(endLng)}
           </div>
-        </div>
-      )}
-
-      {/* Both locations - show route link */}
-      {hasStartLocation && hasEndLocation && (
-        <div className="pt-2 border-t">
-          <Button
-            variant="outline"
-            size="sm"
-            asChild
-            className="w-full text-xs"
-          >
-            <a 
-              href={getRouteUrl(startLat!, startLng!, endLat!, endLng!)} 
-              target="_blank" 
-              rel="noopener noreferrer"
-            >
-              <ExternalLink className="h-3 w-3 mr-1" />
-              Visualizza percorso in OpenStreetMap
-            </a>
-          </Button>
         </div>
       )}
 
