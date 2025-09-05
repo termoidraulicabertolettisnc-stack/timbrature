@@ -14,6 +14,7 @@ import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO, eac
 import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { OvertimeTracker } from '@/components/OvertimeTracker';
+import { TimesheetTimeline } from '@/components/TimesheetTimeline';
 
 interface TimesheetWithProfile {
   id: string;
@@ -800,9 +801,9 @@ function WeeklyView({
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="mt-2 ml-6">
-                    <TimesheetDetailsTable 
+                    <TimesheetTimeline 
                       timesheets={getAllTimesheetsForEmployee(employee)} 
-                      onEdit={onEdit} 
+                      weekDays={weekDays}
                     />
                   </div>
                 </CollapsibleContent>

@@ -53,6 +53,16 @@ All colors MUST be HSL.
     --sidebar-border: 220 13% 91%;
 
     --sidebar-ring: 217.2 91.2% 59.8%;
+    
+    /* Timeline colors */
+    --timeline-work: 222.2 47.4% 11.2%;
+    --timeline-work-foreground: 210 40% 98%;
+    --timeline-overtime: 24.6 95% 53.1%;
+    --timeline-overtime-foreground: 0 0% 98%;
+    --timeline-night: 262.1 83.3% 57.8%;
+    --timeline-night-foreground: 0 0% 98%;
+    --timeline-lunch: 210 40% 96.1%;
+    --timeline-lunch-foreground: 215.4 16.3% 46.9%;
   }
 
   .dark {
@@ -91,6 +101,16 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    
+    /* Timeline colors for dark mode */
+    --timeline-work: 210 40% 98%;
+    --timeline-work-foreground: 222.2 47.4% 11.2%;
+    --timeline-overtime: 24.6 95% 53.1%;
+    --timeline-overtime-foreground: 0 0% 98%;
+    --timeline-night: 262.1 83.3% 57.8%;
+    --timeline-night-foreground: 0 0% 98%;
+    --timeline-lunch: 217.2 32.6% 17.5%;
+    --timeline-lunch-foreground: 215 20.2% 65.1%;
   }
 }
 
