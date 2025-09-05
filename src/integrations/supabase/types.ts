@@ -304,6 +304,7 @@ export type Database = {
           id: string
           is_holiday: boolean
           is_saturday: boolean
+          lunch_duration_minutes: number | null
           lunch_end_time: string | null
           lunch_start_time: string | null
           meal_voucher_earned: boolean
@@ -329,6 +330,7 @@ export type Database = {
           id?: string
           is_holiday?: boolean
           is_saturday?: boolean
+          lunch_duration_minutes?: number | null
           lunch_end_time?: string | null
           lunch_start_time?: string | null
           meal_voucher_earned?: boolean
@@ -354,6 +356,7 @@ export type Database = {
           id?: string
           is_holiday?: boolean
           is_saturday?: boolean
+          lunch_duration_minutes?: number | null
           lunch_end_time?: string | null
           lunch_start_time?: string | null
           meal_voucher_earned?: boolean

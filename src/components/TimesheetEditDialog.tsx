@@ -171,14 +171,14 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         } else {
           updateData.lunch_end_time = null;
         }
+        
+        // Clear custom duration when using times
+        updateData.lunch_duration_minutes = null;
       } else {
-        // Use duration mode - clear specific times so the database function can use the duration
+        // Use duration mode - clear specific times and set custom duration
         updateData.lunch_start_time = null;
         updateData.lunch_end_time = null;
-        
-        // We'll store the custom lunch duration in a way the function can use it
-        // For now, we'll rely on the updated database function to handle this
-        // The function will use default settings if no specific times are provided
+        updateData.lunch_duration_minutes = lunchDuration > 0 ? lunchDuration : null;
       }
 
       const { error } = await supabase
