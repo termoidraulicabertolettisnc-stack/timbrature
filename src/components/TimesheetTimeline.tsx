@@ -46,6 +46,8 @@ interface TimeBlock {
   endMinutes: number;
   isLunchBreak: boolean;
   type: 'work' | 'overtime' | 'night';
+  laneIndex: number;
+  totalLanes: number;
 }
 
 export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelineProps) {
@@ -103,9 +105,17 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
 
   // Calcola i blocchi temporali per ogni giorno
   const calculateTimeBlocks = (dayTimesheets: TimesheetWithProfile[]): TimeBlock[] => {
-    const blocks: TimeBlock[] = [];
+    // Debug: log input data
+    console.log('Day timesheets:', dayTimesheets.length, dayTimesheets.map(ts => ({ id: ts.id, start: ts.start_time, end: ts.end_time })));
+    
+    // Remove duplicates based on ID 
+    const uniqueTimesheets = dayTimesheets.filter((ts, index, arr) => 
+      index === arr.findIndex(t => t.id === ts.id)
+    );
+    
+    const rawBlocks: Omit<TimeBlock, 'laneIndex' | 'totalLanes'>[] = [];
 
-    dayTimesheets.forEach(timesheet => {
+    uniqueTimesheets.forEach(timesheet => {
       if (!timesheet.start_time || !timesheet.end_time) {
         return;
       }
@@ -135,7 +145,7 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
       // Blocco principale di lavoro
       if (lunchStartMinutes && lunchEndMinutes) {
         // Diviso dalla pausa pranzo
-        blocks.push({
+        rawBlocks.push({
           timesheet,
           startMinutes,
           endMinutes: lunchStartMinutes,
@@ -144,7 +154,7 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
         });
         
         // Pausa pranzo
-        blocks.push({
+        rawBlocks.push({
           timesheet,
           startMinutes: lunchStartMinutes,
           endMinutes: lunchEndMinutes,
@@ -152,7 +162,7 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
           type: 'work'
         });
         
-        blocks.push({
+        rawBlocks.push({
           timesheet,
           startMinutes: lunchEndMinutes,
           endMinutes,
@@ -161,7 +171,7 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
         });
       } else {
         // Blocco continuo
-        blocks.push({
+        rawBlocks.push({
           timesheet,
           startMinutes,
           endMinutes,
@@ -171,7 +181,39 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
       }
     });
 
-    return blocks;
+    // Assign lanes to prevent overlaps
+    const assignLanes = (blocks: typeof rawBlocks): TimeBlock[] => {
+      // Group by timesheet to keep related blocks together
+      const timesheetGroups = new Map<string, typeof rawBlocks>();
+      blocks.forEach(block => {
+        if (!timesheetGroups.has(block.timesheet.id)) {
+          timesheetGroups.set(block.timesheet.id, []);
+        }
+        timesheetGroups.get(block.timesheet.id)!.push(block);
+      });
+
+      const uniqueTimesheetIds = Array.from(timesheetGroups.keys());
+      const totalLanes = uniqueTimesheetIds.length;
+
+      const finalBlocks: TimeBlock[] = [];
+      
+      uniqueTimesheetIds.forEach((timesheetId, laneIndex) => {
+        const timesheetBlocks = timesheetGroups.get(timesheetId)!;
+        timesheetBlocks.forEach(block => {
+          finalBlocks.push({
+            ...block,
+            laneIndex,
+            totalLanes
+          });
+        });
+      });
+
+      return finalBlocks;
+    };
+
+    const finalBlocks = assignLanes(rawBlocks);
+    console.log('Final blocks with lanes:', finalBlocks.length, finalBlocks.map(b => ({ id: b.timesheet.id, lane: b.laneIndex, total: b.totalLanes })));
+    return finalBlocks;
   };
 
   // Formatta orario per tooltip
@@ -265,17 +307,21 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                   {/* Blocchi temporali */}
                   <TooltipProvider>
                     {timeBlocks.map((block, blockIndex) => {
-                      const top = minutesToPosition(block.startMinutes);
+                       const top = minutesToPosition(block.startMinutes);
                       const height = minutesToPosition(block.endMinutes) - top;
                       
                       if (height <= 0) return null;
+
+                      // Calculate lane-based positioning
+                      const laneWidth = block.totalLanes > 1 ? Math.floor(92 / block.totalLanes) : 92; // 92% to leave margins
+                      const laneLeft = block.totalLanes > 1 ? 4 + (laneWidth * block.laneIndex) : 4; // 4% margin
 
                       return (
                         <Tooltip key={blockIndex}>
                           <TooltipTrigger asChild>
                             <div
                               className={cn(
-                                "absolute left-1 right-1 rounded cursor-pointer transition-all hover:scale-105 hover:z-10 border",
+                                "absolute rounded cursor-pointer transition-all hover:scale-105 hover:z-10 border",
                                  {
                                    // Ore ordinarie - usa colori semantici
                                    "bg-timeline-work border-timeline-work text-timeline-work-foreground hover:bg-timeline-work/90": 
@@ -297,7 +343,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                               style={{
                                 top,
                                 height: Math.max(height, 4),
-                                minHeight: '4px'
+                                minHeight: '4px',
+                                left: `${laneLeft}%`,
+                                width: `${laneWidth}%`
                               }}
                               onClick={() => setSelectedTimesheet(
                                 selectedTimesheet === block.timesheet.id ? null : block.timesheet.id
