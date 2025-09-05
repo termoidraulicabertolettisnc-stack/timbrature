@@ -1162,12 +1162,13 @@ function TimesheetDetailsTable({
                 <TableCell>{formatHours(timesheet.overtime_hours)}</TableCell>
                 <TableCell>{formatHours(timesheet.night_hours)}</TableCell>
                 <TableCell>
-                  <LocationDisplay 
-                    startLat={timesheet.start_location_lat}
-                    startLng={timesheet.start_location_lng}
-                    endLat={timesheet.end_location_lat}
-                    endLng={timesheet.end_location_lng}
-                  />
+                <LocationDisplay
+                  startLat={timesheet.start_location_lat}
+                  startLng={timesheet.start_location_lng}
+                  endLat={timesheet.end_location_lat}
+                  endLng={timesheet.end_location_lng}
+                  compact
+                />
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
