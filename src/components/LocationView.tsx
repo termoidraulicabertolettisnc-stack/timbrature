@@ -1,7 +1,6 @@
 import { MapPin, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useReverseGeocoding } from '@/hooks/use-geocoding';
-import { useToast } from '@/components/ui/use-toast';
 
 interface LocationViewProps {
   startLat?: number | null;
@@ -20,7 +19,6 @@ const LocationView = ({
   height = "200px",
   className = "" 
 }: LocationViewProps) => {
-  const { toast } = useToast();
   const startAddress = useReverseGeocoding(startLat, startLng);
   const endAddress = useReverseGeocoding(endLat, endLng);
 
@@ -40,38 +38,14 @@ const LocationView = ({
     return value.toFixed(6);
   };
 
-  const openInGoogleMaps = (lat: number | null, lng: number | null, label: string) => {
-    // Debug logging
-    console.log('Aprendo Google Maps:', { lat, lng, label });
-    
-    // Validate coordinates before opening
-    if (!isValidCoordinate(lat, lng)) {
-      console.error('Coordinate non valide per Google Maps:', { lat, lng });
-      toast({
-        title: "Errore",
-        description: "Coordinate GPS non valide per aprire Google Maps",
-        variant: "destructive"
-      });
-      return;
-    }
+  // Generate Google Maps URL for single location
+  const getGoogleMapsUrl = (lat: number, lng: number): string => {
+    return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  };
 
-    try {
-      // Use more robust Google Maps URL format
-      const url = `https://maps.google.com/?q=${lat},${lng}&ll=${lat},${lng}&z=16`;
-      console.log('URL Google Maps:', url);
-      
-      const success = window.open(url, '_blank', 'noopener,noreferrer');
-      if (!success) {
-        throw new Error('Popup bloccato dal browser');
-      }
-    } catch (error) {
-      console.error('Errore nell\'aprire Google Maps:', error);
-      toast({
-        title: "Errore",
-        description: "Impossibile aprire Google Maps. Verifica le impostazioni del browser.",
-        variant: "destructive"
-      });
-    }
+  // Generate Google Maps URL for directions
+  const getDirectionsUrl = (startLat: number, startLng: number, endLat: number, endLng: number): string => {
+    return `https://www.google.com/maps/dir/?api=1&origin=${startLat},${startLng}&destination=${endLat},${endLng}`;
   };
 
   if (!hasAnyLocation) {
@@ -101,11 +75,17 @@ const LocationView = ({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => openInGoogleMaps(startLat, startLng, 'Entrata')}
+              asChild
               className="h-7 px-2 text-xs"
             >
-              <ExternalLink className="h-3 w-3 mr-1" />
-              Maps
+              <a 
+                href={getGoogleMapsUrl(startLat!, startLng!)} 
+                target="_blank" 
+                rel="noopener noreferrer"
+              >
+                <ExternalLink className="h-3 w-3 mr-1" />
+                Maps
+              </a>
             </Button>
           </div>
           
@@ -136,11 +116,17 @@ const LocationView = ({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => openInGoogleMaps(endLat, endLng, 'Uscita')}
+              asChild
               className="h-7 px-2 text-xs"
             >
-              <ExternalLink className="h-3 w-3 mr-1" />
-              Maps
+              <a 
+                href={getGoogleMapsUrl(endLat!, endLng!)} 
+                target="_blank" 
+                rel="noopener noreferrer"
+              >
+                <ExternalLink className="h-3 w-3 mr-1" />
+                Maps
+              </a>
             </Button>
           </div>
           
@@ -166,39 +152,17 @@ const LocationView = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              console.log('Aprendo percorso Google Maps:', { startLat, startLng, endLat, endLng });
-              
-              if (!isValidCoordinate(startLat, startLng) || !isValidCoordinate(endLat, endLng)) {
-                toast({
-                  title: "Errore",
-                  description: "Coordinate GPS non valide per visualizzare il percorso",
-                  variant: "destructive"
-                });
-                return;
-              }
-              
-              try {
-                const url = `https://maps.google.com/maps/dir/${startLat},${startLng}/${endLat},${endLng}`;
-                console.log('URL percorso Google Maps:', url);
-                
-                const success = window.open(url, '_blank', 'noopener,noreferrer');
-                if (!success) {
-                  throw new Error('Popup bloccato dal browser');
-                }
-              } catch (error) {
-                console.error('Errore nell\'aprire il percorso:', error);
-                toast({
-                  title: "Errore",
-                  description: "Impossibile aprire il percorso in Google Maps",
-                  variant: "destructive"
-                });
-              }
-            }}
+            asChild
             className="w-full text-xs"
           >
-            <ExternalLink className="h-3 w-3 mr-1" />
-            Visualizza percorso in Google Maps
+            <a 
+              href={getDirectionsUrl(startLat!, startLng!, endLat!, endLng!)} 
+              target="_blank" 
+              rel="noopener noreferrer"
+            >
+              <ExternalLink className="h-3 w-3 mr-1" />
+              Visualizza percorso in Google Maps
+            </a>
           </Button>
         </div>
       )}
