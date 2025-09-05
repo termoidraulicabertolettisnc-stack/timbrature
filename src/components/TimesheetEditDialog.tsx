@@ -86,7 +86,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         end_time: timesheet.end_time ? format(parseISO(timesheet.end_time), 'HH:mm') : '',
         lunch_start_time: timesheet.lunch_start_time ? format(parseISO(timesheet.lunch_start_time), 'HH:mm') : '',
         lunch_end_time: timesheet.lunch_end_time ? format(parseISO(timesheet.lunch_end_time), 'HH:mm') : '',
-        project_id: timesheet.project_id || '',
+        project_id: timesheet.project_id || 'none',
         notes: timesheet.notes || '',
         is_saturday: timesheet.is_saturday,
         is_holiday: timesheet.is_holiday,
@@ -123,7 +123,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
       // Prepare the update data
       const updateData: any = {
         date: formData.date,
-        project_id: formData.project_id || null,
+        project_id: formData.project_id === 'none' ? null : formData.project_id,
         notes: formData.notes || null,
         is_saturday: formData.is_saturday,
         is_holiday: formData.is_holiday,
@@ -222,7 +222,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
                   <SelectValue placeholder="Seleziona progetto" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nessun progetto</SelectItem>
+                  <SelectItem value="none">Nessun progetto</SelectItem>
                   {projects.map((project) => (
                     <SelectItem key={project.id} value={project.id}>
                       {project.name}
