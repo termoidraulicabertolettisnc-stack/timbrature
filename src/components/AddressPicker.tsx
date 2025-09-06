@@ -57,7 +57,7 @@ const AddressPicker = ({
       } else {
         setShowSuggestions(false);
       }
-    }, 300);
+    }, 500); // Aumentato debounce per stabilità
 
     return () => clearTimeout(timeoutId);
   }, [query, selectedAddress, searchAddresses]);
