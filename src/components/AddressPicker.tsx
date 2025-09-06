@@ -55,9 +55,11 @@ const AddressPicker = ({
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       if (query && query.length >= 3 && query !== selectedAddress) {
+        console.log('🔍 AddressPicker: Starting search for:', query, 'selectedAddress:', selectedAddress);
         searchAddresses(query);
         setShowSuggestions(true);
       } else {
+        console.log('🔍 AddressPicker: Hiding suggestions. query:', query, 'selectedAddress:', selectedAddress);
         setShowSuggestions(false);
       }
     }, 500); // Aumentato debounce per stabilità
@@ -137,22 +139,29 @@ const AddressPicker = ({
       {showSuggestions && suggestions.length > 0 && (
         <Card className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto">
           <CardContent className="p-0">
-            {suggestions.map((result, index) => (
-              <Button
-                key={index}
-                variant="ghost"
-                className="w-full justify-start h-auto p-3 rounded-none"
-                onClick={() => handleSelectAddress(result)}
-              >
-                <MapPin className="h-4 w-4 mr-2 flex-shrink-0" />
-                <div className="text-left">
-                  <div className="font-medium">{result.display_name}</div>
-                </div>
-              </Button>
-            ))}
+            {suggestions.map((result, index) => {
+              console.log('🔍 Rendering suggestion:', result);
+              return (
+                <Button
+                  key={index}
+                  variant="ghost"
+                  className="w-full justify-start h-auto p-3 rounded-none"
+                  onClick={() => handleSelectAddress(result)}
+                >
+                  <MapPin className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <div className="text-left">
+                    <div className="font-medium">{result.display_name}</div>
+                  </div>
+                </Button>
+              );
+            })}
           </CardContent>
         </Card>
       )}
+      {/* Debug info */}
+      <div className="text-xs text-gray-500 mt-1">
+        Debug: showSuggestions={showSuggestions.toString()}, suggestions={suggestions.length}, loading={loading.toString()}
+      </div>
     </div>
   );
 };

@@ -42,6 +42,7 @@ export const useAddressSearch = () => {
       const cacheKey = query.toLowerCase().trim();
       if (cache.current[cacheKey]) {
         const cachedResults = cache.current[cacheKey];
+        console.log('🔍 Using cached results:', cachedResults.length, 'suggestions');
         setSuggestions(cachedResults);
         return cachedResults;
       }
@@ -60,12 +61,16 @@ export const useAddressSearch = () => {
         throw new Error(`Google Maps API error: ${error.message}`);
       }
 
+      console.log('🔍 Raw API response:', data);
+
       const results: AddressSearchResult[] = data?.suggestions?.map((suggestion: any) => ({
-        display_name: suggestion.description,
+        display_name: suggestion.display_name,
         place_id: suggestion.place_id,
-        main_text: suggestion.structured_formatting?.main_text,
-        secondary_text: suggestion.structured_formatting?.secondary_text
+        main_text: suggestion.main_text,
+        secondary_text: suggestion.secondary_text
       })) || [];
+      
+      console.log('🔍 Processed results:', results.length, 'suggestions', results);
       
       // Cache the results
       cache.current[cacheKey] = results;
