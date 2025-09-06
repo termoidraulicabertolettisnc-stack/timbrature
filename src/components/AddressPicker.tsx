@@ -68,7 +68,7 @@ const AddressPicker = ({
   const handleSelectAddress = async (result: AddressSearchResult) => {
     try {
       // Use the geocoding function to get precise coordinates
-      const geocodeResult = await geocodeAddress(result.display_name);
+      const geocodeResult = await geocodeAddress(result.display_name, result.place_id);
       
       if (geocodeResult) {
         setQuery(geocodeResult.formatted_address);
