@@ -78,6 +78,19 @@ const AddressPicker = ({
       // Fallback se non c'è una strada definita
       inputAddress = addr?.city || addr?.town || addr?.village || result.display_name.split(',')[0];
     }
+
+    // IMPORTANTE: Se il numero civico non è presente nel risultato ma era nella query originale,
+    // preserviamo il numero civico dalla query dell'utente
+    if (!addr?.house_number && query) {
+      const queryNumbers = query.match(/\d+/g);
+      if (queryNumbers && queryNumbers.length > 0) {
+        // Se la strada corrisponde ma manca il numero, aggiungiamo il numero dalla query
+        const roadInQuery = addr?.road && query.toLowerCase().includes(addr.road.toLowerCase());
+        if (roadInQuery) {
+          inputAddress += ` ${queryNumbers[0]}`;
+        }
+      }
+    }
     
     setQuery(inputAddress);
     setSelectedAddress(inputAddress);
