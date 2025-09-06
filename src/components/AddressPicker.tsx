@@ -20,8 +20,11 @@ interface AddressPickerProps {
 
 interface AddressSearchResult {
   display_name: string;
-  lat: string;
-  lon: string;
+  place_id?: string;
+  main_text?: string;
+  secondary_text?: string;
+  lat?: string;
+  lon?: string;
   address?: {
     road?: string;
     house_number?: string;
@@ -42,7 +45,7 @@ const AddressPicker = ({
   const [query, setQuery] = useState(value);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<string>('');
-  const { searchAddresses, suggestions, loading } = useAddressSearch();
+  const { searchAddresses, geocodeAddress, suggestions, loading } = useAddressSearch();
 
   useEffect(() => {
     setQuery(value);
@@ -62,59 +65,47 @@ const AddressPicker = ({
     return () => clearTimeout(timeoutId);
   }, [query, selectedAddress, searchAddresses]);
 
-  const handleSelectAddress = (result: AddressSearchResult) => {
-    const addr = result.address;
-    
-    // Costruiamo un indirizzo completo e ben formattato
-    let fullAddress = '';
-    const addressParts: string[] = [];
-    
-    // Parte strada + numero civico
-    if (addr?.road) {
-      let roadPart = addr.road;
-      if (addr.house_number) {
-        roadPart += ` ${addr.house_number}`;
+  const handleSelectAddress = async (result: AddressSearchResult) => {
+    // Use Google Maps to get precise coordinates and formatted address
+    try {
+      const geocodeResult = await geocodeAddress(result.display_name, result.place_id);
+      
+      if (geocodeResult) {
+        setQuery(geocodeResult.formatted_address);
+        setSelectedAddress(geocodeResult.formatted_address);
+        setShowSuggestions(false);
+
+        onAddressSelect({
+          address: geocodeResult.formatted_address,
+          formatted_address: geocodeResult.formatted_address,
+          latitude: geocodeResult.latitude,
+          longitude: geocodeResult.longitude
+        });
       } else {
-        // Se il numero civico non è presente nel risultato ma era nella query originale,
-        // preserviamo il numero civico dalla query dell'utente
-        const queryNumbers = query.match(/\d+/g);
-        if (queryNumbers && queryNumbers.length > 0) {
-          const roadInQuery = query.toLowerCase().includes(addr.road.toLowerCase());
-          if (roadInQuery) {
-            roadPart += ` ${queryNumbers[0]}`;
-          }
+        // Fallback to basic address handling
+        const displayAddress = result.display_name;
+        setQuery(displayAddress);
+        setSelectedAddress(displayAddress);
+        setShowSuggestions(false);
+
+        // Use coordinates if available from the autocomplete result
+        if (result.lat && result.lon) {
+          onAddressSelect({
+            address: displayAddress,
+            formatted_address: displayAddress,
+            latitude: parseFloat(result.lat),
+            longitude: parseFloat(result.lon)
+          });
         }
       }
-      addressParts.push(roadPart);
-    } else {
-      // Fallback se non c'è una strada definita
-      const fallback = addr?.city || addr?.town || addr?.village || result.display_name.split(',')[0];
-      addressParts.push(fallback);
+    } catch (error) {
+      console.error('Error selecting address:', error);
+      // Fallback to basic handling
+      const displayAddress = result.display_name;
+      setQuery(displayAddress);
+      setSelectedAddress(displayAddress);
+      setShowSuggestions(false);
     }
-    
-    // Aggiungiamo città e CAP
-    const city = addr?.city || addr?.town || addr?.village;
-    if (city) {
-      let cityPart = city;
-      if (addr?.postcode) {
-        cityPart = `${addr.postcode} ${city}`;
-      }
-      addressParts.push(cityPart);
-    }
-    
-    // Creiamo l'indirizzo completo
-    fullAddress = addressParts.join(', ');
-    
-    setQuery(fullAddress);
-    setSelectedAddress(fullAddress);
-    setShowSuggestions(false);
-
-    onAddressSelect({
-      address: fullAddress,
-      formatted_address: fullAddress,
-      latitude: parseFloat(result.lat),
-      longitude: parseFloat(result.lon)
-    });
   };
 
   return (
