@@ -122,12 +122,27 @@ export default function AdminCompanies() {
 
   const handleDelete = async (company: Company) => {
     try {
-      const { error } = await supabase
+      console.log('Attempting to delete company:', company);
+      
+      const { data, error } = await supabase
         .from('companies')
         .delete()
-        .eq('id', company.id);
+        .eq('id', company.id)
+        .select(); // Aggiunge select per vedere se qualcosa viene eliminato
+
+      console.log('Delete result:', { data, error });
 
       if (error) throw error;
+
+      if (!data || data.length === 0) {
+        console.log('No rows were deleted - likely RLS policy issue');
+        toast({
+          title: "Errore",
+          description: "Non hai i permessi per eliminare questa azienda",
+          variant: "destructive",
+        });
+        return;
+      }
 
       toast({
         title: "Successo",
