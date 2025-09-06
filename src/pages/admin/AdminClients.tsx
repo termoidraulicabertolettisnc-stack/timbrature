@@ -55,16 +55,34 @@ export default function AdminClients() {
   }, []);
 
   const loadClients = async () => {
+    setLoading(true);
     try {
       // Get user's company_id first
-      const { data: profile } = await supabase
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('Utente non autenticato');
+      }
+
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('company_id')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+        .eq('user_id', user.id)
         .single();
 
+      if (profileError) {
+        console.error('Profile error:', profileError);
+        throw new Error('Errore nel recupero del profilo utente');
+      }
+
       if (!profile?.company_id) {
-        throw new Error('Company not found');
+        toast({
+          title: "Configurazione mancante",
+          description: "Il tuo account non è associato a nessuna azienda. Contatta l'amministratore di sistema.",
+          variant: "destructive",
+        });
+        setClients([]);
+        return;
       }
 
       const { data, error } = await supabase
@@ -73,15 +91,22 @@ export default function AdminClients() {
         .eq('company_id', profile.company_id)
         .order('name');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Clients fetch error:', error);
+        throw new Error('Errore nel caricamento dei clienti');
+      }
+      
       setClients(data || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading clients:', error);
-      toast({
-        title: "Errore",
-        description: "Errore nel caricamento dei clienti",
-        variant: "destructive",
-      });
+      if (!error.message.includes('Configurazione mancante')) {
+        toast({
+          title: "Errore nel caricamento",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+      setClients([]);
     } finally {
       setLoading(false);
     }
@@ -135,14 +160,30 @@ export default function AdminClients() {
 
     try {
       // Get user's company_id
-      const { data: profile } = await supabase
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('Utente non autenticato');
+      }
+
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('company_id')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+        .eq('user_id', user.id)
         .single();
 
+      if (profileError) {
+        console.error('Profile error:', profileError);
+        throw new Error('Errore nel recupero del profilo utente');
+      }
+
       if (!profile?.company_id) {
-        throw new Error('Company not found');
+        toast({
+          title: "Configurazione mancante",
+          description: "Il tuo account non è associato a nessuna azienda. Impossibile salvare il cliente.",
+          variant: "destructive",
+        });
+        return;
       }
 
       const clientData = {
@@ -160,7 +201,10 @@ export default function AdminClients() {
           .update(clientData)
           .eq('id', editingClient.id);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Update error:', error);
+          throw new Error('Errore durante l\'aggiornamento del cliente');
+        }
 
         toast({
           title: "Successo",
@@ -171,7 +215,10 @@ export default function AdminClients() {
           .from('clients')
           .insert([clientData]);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Insert error:', error);
+          throw new Error('Errore durante la creazione del cliente');
+        }
 
         toast({
           title: "Successo",
@@ -184,13 +231,15 @@ export default function AdminClients() {
       setAddressData(null);
       reset();
       loadClients();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving client:', error);
-      toast({
-        title: "Errore",
-        description: "Errore nel salvataggio del cliente",
-        variant: "destructive",
-      });
+      if (!error.message.includes('Configurazione mancante')) {
+        toast({
+          title: "Errore nel salvataggio",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     }
   };
 
