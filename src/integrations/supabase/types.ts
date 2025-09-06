@@ -55,12 +55,57 @@ export type Database = {
           },
         ]
       }
+      clients: {
+        Row: {
+          address: string
+          company_id: string
+          created_at: string
+          description: string | null
+          formatted_address: string | null
+          id: string
+          is_active: boolean
+          latitude: number | null
+          longitude: number | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          company_id: string
+          created_at?: string
+          description?: string | null
+          formatted_address?: string | null
+          id?: string
+          is_active?: boolean
+          latitude?: number | null
+          longitude?: number | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          company_id?: string
+          created_at?: string
+          description?: string | null
+          formatted_address?: string | null
+          id?: string
+          is_active?: boolean
+          latitude?: number | null
+          longitude?: number | null
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       companies: {
         Row: {
           address: string | null
           city: string
           created_at: string
+          formatted_address: string | null
           id: string
+          latitude: number | null
+          longitude: number | null
           name: string
           updated_at: string
         }
@@ -68,7 +113,10 @@ export type Database = {
           address?: string | null
           city?: string
           created_at?: string
+          formatted_address?: string | null
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           name: string
           updated_at?: string
         }
@@ -76,7 +124,10 @@ export type Database = {
           address?: string | null
           city?: string
           created_at?: string
+          formatted_address?: string | null
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           name?: string
           updated_at?: string
         }
@@ -463,6 +514,7 @@ export type Database = {
       timesheets: {
         Row: {
           absence_type: Database["public"]["Enums"]["absence_type"] | null
+          client_id: string | null
           created_at: string
           created_by: string
           date: string
@@ -491,6 +543,7 @@ export type Database = {
         }
         Insert: {
           absence_type?: Database["public"]["Enums"]["absence_type"] | null
+          client_id?: string | null
           created_at?: string
           created_by: string
           date: string
@@ -519,6 +572,7 @@ export type Database = {
         }
         Update: {
           absence_type?: Database["public"]["Enums"]["absence_type"] | null
+          client_id?: string | null
           created_at?: string
           created_by?: string
           date?: string

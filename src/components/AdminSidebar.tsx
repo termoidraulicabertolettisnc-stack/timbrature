@@ -2,7 +2,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import {
   Clock,
   Users,
-  FolderKanban,
+  UserCheck,
   Settings,
   FileDown,
   Calendar,
@@ -29,7 +29,7 @@ const adminMenuItems = [
   { title: "Timesheets", url: "/admin/timesheets", icon: Clock },
   { title: "Dipendenti", url: "/admin/employees", icon: Users },
   { title: "Aziende", url: "/admin/companies", icon: Building },
-  { title: "Commesse", url: "/admin/projects", icon: FolderKanban },
+  { title: "Clienti", url: "/admin/clients", icon: UserCheck },
   { title: "Consolidato", url: "/admin/consolidation", icon: Calendar },
   { title: "Export", url: "/admin/export", icon: FileDown },
   { title: "Audit Log", url: "/admin/audit", icon: FileText },

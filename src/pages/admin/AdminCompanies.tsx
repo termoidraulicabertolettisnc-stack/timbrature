@@ -9,12 +9,16 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Building, Edit, MapPin, Trash2 } from "lucide-react";
 import { useForm } from "react-hook-form";
+import AddressPicker from "@/components/AddressPicker";
 
 interface Company {
   id: string;
   name: string;
   address?: string;
   city: string;
+  formatted_address?: string;
+  latitude?: number;
+  longitude?: number;
   created_at: string;
   updated_at: string;
 }
@@ -23,6 +27,9 @@ interface CompanyFormData {
   name: string;
   address?: string;
   city: string;
+  formatted_address?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export default function AdminCompanies() {
@@ -30,6 +37,12 @@ export default function AdminCompanies() {
   const [loading, setLoading] = useState(true);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [addressData, setAddressData] = useState<{
+    address: string;
+    formatted_address: string;
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const { toast } = useToast();
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<CompanyFormData>();
@@ -61,10 +74,15 @@ export default function AdminCompanies() {
 
   const onSubmit = async (data: CompanyFormData) => {
     try {
+      const submitData = {
+        ...data,
+        ...addressData
+      };
+
       if (editingCompany) {
         const { error } = await supabase
           .from('companies')
-          .update(data)
+          .update(submitData)
           .eq('id', editingCompany.id);
 
         if (error) throw error;
@@ -76,7 +94,7 @@ export default function AdminCompanies() {
       } else {
         const { error } = await supabase
           .from('companies')
-          .insert([data]);
+          .insert([submitData]);
 
         if (error) throw error;
 
@@ -88,6 +106,7 @@ export default function AdminCompanies() {
 
       setDialogOpen(false);
       setEditingCompany(null);
+      setAddressData(null);
       reset();
       loadCompanies();
     } catch (error) {
@@ -104,17 +123,24 @@ export default function AdminCompanies() {
     setEditingCompany(company);
     reset({
       name: company.name,
-      address: company.address || '',
       city: company.city,
     });
+    if (company.address || company.formatted_address) {
+      setAddressData({
+        address: company.address || '',
+        formatted_address: company.formatted_address || '',
+        latitude: company.latitude || 0,
+        longitude: company.longitude || 0
+      });
+    }
     setDialogOpen(true);
   };
 
   const handleNew = () => {
     setEditingCompany(null);
+    setAddressData(null);
     reset({
       name: '',
-      address: '',
       city: 'Cremona',
     });
     setDialogOpen(true);
@@ -202,11 +228,16 @@ export default function AdminCompanies() {
 
               <div>
                 <Label htmlFor="address">Indirizzo</Label>
-                <Input
-                  id="address"
-                  {...register('address')}
-                  placeholder="Indirizzo (opzionale)"
+                <AddressPicker
+                  value={addressData?.address || ''}
+                  onAddressSelect={setAddressData}
+                  placeholder="Cerca l'indirizzo dell'azienda..."
                 />
+                {addressData?.formatted_address && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {addressData.formatted_address}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -283,10 +314,10 @@ export default function AdminCompanies() {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {company.address && (
+                {(company.formatted_address || company.address) && (
                   <div className="flex items-center text-sm text-muted-foreground">
                     <MapPin className="h-4 w-4 mr-2" />
-                    {company.address}
+                    {company.formatted_address || company.address}
                   </div>
                 )}
                 <div className="flex items-center text-sm text-muted-foreground">

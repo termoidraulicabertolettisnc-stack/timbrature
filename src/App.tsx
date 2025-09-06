@@ -14,7 +14,7 @@ import AdminTimesheets from "./pages/admin/AdminTimesheets";
 import AdminEmployees from "./pages/admin/AdminEmployees";
 import AdminCompanies from "./pages/admin/AdminCompanies";
 import AdminSettings from "./pages/admin/AdminSettings";
-import AdminProjects from "./pages/admin/AdminProjects";
+import AdminClients from "./pages/admin/AdminClients";
 import AdminConsolidation from "./pages/admin/AdminConsolidation";
 import AdminExport from "./pages/admin/AdminExport";
 import AdminAudit from "./pages/admin/AdminAudit";
@@ -42,7 +42,7 @@ const App = () => (
               <Route path="timesheets" element={<AdminTimesheets />} />
               <Route path="employees" element={<AdminEmployees />} />
               <Route path="companies" element={<AdminCompanies />} />
-              <Route path="projects" element={<AdminProjects />} />
+              <Route path="clients" element={<AdminClients />} />
               <Route path="consolidation" element={<AdminConsolidation />} />
               <Route path="export" element={<AdminExport />} />
               <Route path="audit" element={<AdminAudit />} />
