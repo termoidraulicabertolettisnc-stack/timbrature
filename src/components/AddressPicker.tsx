@@ -66,9 +66,9 @@ const AddressPicker = ({
   }, [query, selectedAddress, searchAddresses]);
 
   const handleSelectAddress = async (result: AddressSearchResult) => {
-    // Use Google Maps to get precise coordinates and formatted address
     try {
-      const geocodeResult = await geocodeAddress(result.display_name, result.place_id);
+      // Use the geocoding function to get precise coordinates
+      const geocodeResult = await geocodeAddress(result.display_name);
       
       if (geocodeResult) {
         setQuery(geocodeResult.formatted_address);
@@ -82,13 +82,12 @@ const AddressPicker = ({
           longitude: geocodeResult.longitude
         });
       } else {
-        // Fallback to basic address handling
+        // Fallback to using the suggestion data directly
         const displayAddress = result.display_name;
         setQuery(displayAddress);
         setSelectedAddress(displayAddress);
         setShowSuggestions(false);
 
-        // Use coordinates if available from the autocomplete result
         if (result.lat && result.lon) {
           onAddressSelect({
             address: displayAddress,
@@ -100,11 +99,20 @@ const AddressPicker = ({
       }
     } catch (error) {
       console.error('Error selecting address:', error);
-      // Fallback to basic handling
+      // Final fallback
       const displayAddress = result.display_name;
       setQuery(displayAddress);
       setSelectedAddress(displayAddress);
       setShowSuggestions(false);
+
+      if (result.lat && result.lon) {
+        onAddressSelect({
+          address: displayAddress,
+          formatted_address: displayAddress,
+          latitude: parseFloat(result.lat),
+          longitude: parseFloat(result.lon)
+        });
+      }
     }
   };
 
