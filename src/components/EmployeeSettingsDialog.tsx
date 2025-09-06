@@ -15,7 +15,7 @@ interface EmployeeSettings {
   id?: string;
   user_id: string;
   company_id: string;
-  standard_daily_hours: number | null;
+  standard_weekly_hours: any;
   lunch_break_type: string | null;
   overtime_calculation: string | null;
   saturday_handling: string | null;
@@ -33,7 +33,7 @@ interface EmployeeSettings {
 }
 
 interface CompanySettings {
-  standard_daily_hours: number;
+  standard_weekly_hours: any;
   lunch_break_type: '0_minuti' | '15_minuti' | '30_minuti' | '45_minuti' | '60_minuti' | '90_minuti' | '120_minuti' | 'libera';
   overtime_calculation: 'dopo_8_ore' | 'sempre';
   saturday_handling: 'trasferta' | 'straordinario';
@@ -66,7 +66,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
   const [settings, setSettings] = useState<EmployeeSettings>({
     user_id: employee.id,
     company_id: employee.company_id,
-    standard_daily_hours: null,
+    standard_weekly_hours: null,
     lunch_break_type: null,
     overtime_calculation: null,
     saturday_handling: null,
@@ -124,7 +124,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
         setSettings({
           user_id: employee.id,
           company_id: employee.company_id,
-          standard_daily_hours: null,
+          standard_weekly_hours: null,
           lunch_break_type: null,
           overtime_calculation: null,
           saturday_handling: null,
@@ -198,7 +198,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
     setSettings({
       user_id: employee.id,
       company_id: employee.company_id,
-      standard_daily_hours: null,
+      standard_weekly_hours: null,
       lunch_break_type: null,
       overtime_calculation: null,
       saturday_handling: null,
@@ -268,30 +268,66 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
           {/* Work Hours */}
           <Card>
             <CardHeader>
-              <CardTitle>Orario di Lavoro</CardTitle>
+              <CardTitle>Orario di Lavoro Settimanale</CardTitle>
               <CardDescription>
-                Ore di lavoro standard giornaliere
-                {companySettings && ` (Aziendale: ${companySettings.standard_daily_hours} ore)`}
+                Ore di lavoro standard per ogni giorno della settimana
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="daily-hours">Ore Giornaliere Standard</Label>
-                  <Input
-                    id="daily-hours"
-                    type="number"
-                    min="1"
-                    max="12"
-                    value={settings.standard_daily_hours || ''}
-                    onChange={(e) => updateSetting('standard_daily_hours', e.target.value ? parseInt(e.target.value) : null)}
-                    placeholder={companySettings ? `Default: ${companySettings.standard_daily_hours}` : ''}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Valore effettivo: {getEffectiveValue(settings.standard_daily_hours, companySettings?.standard_daily_hours)} ore
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                {['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom'].map((day) => {
+                  const dayNames: { [key: string]: string } = {
+                    lun: 'Lunedì',
+                    mar: 'Martedì', 
+                    mer: 'Mercoledì',
+                    gio: 'Giovedì',
+                    ven: 'Venerdì',
+                    sab: 'Sabato',
+                    dom: 'Domenica'
+                  };
+                  
+                  const currentValue = settings.standard_weekly_hours?.[day] || '';
+                  const companyValue = companySettings?.standard_weekly_hours?.[day] || 0;
+                  const effectiveValue = currentValue || companyValue;
+                  
+                  return (
+                    <div key={day} className="space-y-2">
+                      <Label htmlFor={`hours-${day}`} className="text-sm font-medium">
+                        {dayNames[day]}
+                      </Label>
+                      <Input
+                        id={`hours-${day}`}
+                        type="number"
+                        min="0"
+                        max="12"
+                        step="0.5"
+                        value={currentValue}
+                        onChange={(e) => {
+                          const newHours = settings.standard_weekly_hours ? { ...settings.standard_weekly_hours } : {};
+                          newHours[day] = e.target.value ? parseFloat(e.target.value) : 0;
+                          updateSetting('standard_weekly_hours', newHours);
+                        }}
+                        placeholder={companyValue.toString()}
+                        className="text-center"
+                      />
+                      <p className="text-xs text-muted-foreground text-center">
+                        Effettivo: {effectiveValue}h
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+              {companySettings && companySettings.standard_weekly_hours && (
+                <div className="mt-4 p-3 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    <strong>Valori aziendali:</strong> {
+                      Object.entries(companySettings.standard_weekly_hours)
+                        .map(([day, hours]) => `${day.charAt(0).toUpperCase() + day.slice(1)}: ${hours}h`)
+                        .join(', ')
+                    }
                   </p>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 
@@ -353,7 +389,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
                     <SelectContent>
                       <SelectItem value="company_default">Usa Default Aziendale</SelectItem>
                       <SelectItem value="dopo_8_ore">
-                        Dopo {getEffectiveValue(settings.standard_daily_hours, companySettings?.standard_daily_hours)} Ore Effettive
+                        Dopo Ore Standard Giornaliere
                       </SelectItem>
                       <SelectItem value="sempre">Sempre</SelectItem>
                     </SelectContent>
