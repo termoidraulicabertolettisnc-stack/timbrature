@@ -117,29 +117,6 @@ const AddressPicker = ({
     });
   };
 
-  const handleUseTypedAddress = () => {
-    // Usa l'indirizzo esatto che l'utente ha digitato
-    // Tenta di estrarre coordinate dal primo risultato dei suggerimenti se disponibile
-    let lat = 0;
-    let lng = 0;
-    
-    if (suggestions.length > 0) {
-      const firstResult = suggestions[0];
-      lat = parseFloat(firstResult.lat);
-      lng = parseFloat(firstResult.lon);
-    }
-    
-    setSelectedAddress(query);
-    setShowSuggestions(false);
-
-    onAddressSelect({
-      address: query,
-      formatted_address: query,
-      latitude: lat,
-      longitude: lng
-    });
-  };
-
   return (
     <div className={cn("relative", className)}>
       <div className="relative">
@@ -174,21 +151,6 @@ const AddressPicker = ({
                 </div>
               </Button>
             ))}
-            {query && query.length >= 3 && (
-              <Button
-                variant="ghost" 
-                className="w-full justify-start h-auto p-3 rounded-none border-t"
-                onClick={handleUseTypedAddress}
-              >
-                <MapPin className="h-4 w-4 mr-2 flex-shrink-0" />
-                <div className="text-left">
-                  <div className="font-medium">Usa indirizzo digitato: {query}</div>
-                  <div className="text-xs text-muted-foreground">
-                    Clicca per usare l'indirizzo esatto che hai digitato
-                  </div>
-                </div>
-              </Button>
-            )}
           </CardContent>
         </Card>
       )}

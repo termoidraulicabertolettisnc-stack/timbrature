@@ -60,84 +60,34 @@ export const useAddressSearch = () => {
     abortControllerRef.current = new AbortController();
 
     try {
-      // Miglioramento della query per risultati italiani più precisi
-      let searchQuery = query.trim();
+      // Strategia di ricerca progressiva per indirizzi italiani
+      let results: AddressSearchResult[] = [];
       
-      // Aggiungi "Italia" se non presente e se sembra un indirizzo completo
-      const hasLocation = /\d/.test(searchQuery) || searchQuery.split(' ').length > 2;
-      if (hasLocation && !searchQuery.toLowerCase().includes('ital')) {
-        searchQuery += ', Italia';
-      }
-
-      const params = new URLSearchParams({
-        q: searchQuery,
-        format: 'json',
-        addressdetails: '1',
-        limit: '10',
-        countrycodes: 'it',
-        'accept-language': 'it',
-        bounded: '1',
-        dedupe: '1',
-        'exclude_place_ids': '', // Evita risultati duplicati
-        viewbox: '6.627,35.493,18.520,47.091' // Bounding box Italia
-      });
-
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?${params}`,
-        {
-          headers: {
-            'User-Agent': 'TimesheetApp/1.0 (contact@example.com)'
-          },
-          signal: abortControllerRef.current.signal
+      // Strategia 1: Ricerca completa con miglioramenti
+      results = await performEnhancedSearch(query, abortControllerRef.current.signal);
+      
+      // Strategia 2: Se pochi risultati e c'è un numero, prova senza numero civico
+      if (results.length < 3) {
+        const queryWithoutNumber = query.replace(/\d+/g, '').trim().replace(/\s+/g, ' ');
+        if (queryWithoutNumber !== query && queryWithoutNumber.length >= 3) {
+          const additionalResults = await performEnhancedSearch(queryWithoutNumber, abortControllerRef.current.signal);
+          results = [...results, ...additionalResults];
         }
-      );
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: Ricerca indirizzo fallita`);
       }
       
-      const data: AddressSearchResult[] = await response.json();
-      
-      // Filtri avanzati per qualità dei risultati
-      const filteredData = data
-        .filter(result => {
-          // Deve essere in Italia
-          if (!result.display_name.toLowerCase().includes('ital')) {
-            return false;
-          }
-          
-          // Deve avere informazioni address valide
-          if (!result.address) return false;
-          
-          const addr = result.address;
-          const hasStreet = addr.road || addr.city || addr.town || addr.village;
-          
-          // Se l'utente ha inserito un numero, preferiamo risultati precisi
-          const userHasNumber = /\d/.test(query);
-          if (userHasNumber) {
-            return hasStreet && (addr.house_number || addr.road);
-          }
-          
-          return hasStreet;
-        })
-        .map(result => ({
-          ...result,
-          // Calcola score di rilevanza
-          relevanceScore: calculateRelevance(result, query)
-        }))
-        .sort((a: any, b: any) => {
-          // Ordina per rilevanza e importanza
-          const scoreA = a.relevanceScore + (parseFloat(a.importance || '0') * 0.1);
-          const scoreB = b.relevanceScore + (parseFloat(b.importance || '0') * 0.1);
-          return scoreB - scoreA;
-        })
-        .slice(0, 5) // Top 5 risultati
-        .map(({ relevanceScore, ...result }: any) => result); // Rimuovi score temporaneo
+      // Strategia 3: Se ancora pochi risultati, prova con approccio regionale
+      if (results.length < 3) {
+        const regionalResults = await performRegionalSearch(query, abortControllerRef.current.signal);
+        results = [...results, ...regionalResults];
+      }
 
+      // Filtra e ordina i risultati per rilevanza
+      const processedResults = processResults(results, query);
+      
       // Salva nel cache
       cacheRef.current.set(normalizedQuery, {
         query: normalizedQuery,
-        results: filteredData,
+        results: processedResults,
         timestamp: Date.now()
       });
       
@@ -147,12 +97,12 @@ export const useAddressSearch = () => {
         cacheRef.current.delete(oldestKey);
       }
 
-      setSuggestions(filteredData);
-      return filteredData;
+      setSuggestions(processedResults);
+      return processedResults;
     } catch (error: any) {
       if (error.name === 'AbortError') {
         console.log('Ricerca indirizzo annullata');
-        return suggestions; // Mantieni risultati precedenti
+        return suggestions;
       }
       
       console.error('Errore ricerca indirizzo:', error);
@@ -162,6 +112,175 @@ export const useAddressSearch = () => {
       setLoading(false);
       abortControllerRef.current = null;
     }
+  };
+
+  const performEnhancedSearch = async (searchQuery: string, signal: AbortSignal): Promise<AddressSearchResult[]> => {
+    // Miglioramento della query per risultati italiani più precisi
+    let enhancedQuery = searchQuery.trim();
+    
+    // Aggiungi contesto geografico se mancante
+    if (!enhancedQuery.toLowerCase().includes('ital') && !enhancedQuery.toLowerCase().includes('cremona')) {
+      // Se sembra un indirizzo completo, aggiungi ", Italia"
+      if (/\d/.test(enhancedQuery) || enhancedQuery.split(' ').length > 2) {
+        enhancedQuery += ', Italia';
+      }
+    }
+
+    const params = new URLSearchParams({
+      q: enhancedQuery,
+      format: 'json',
+      addressdetails: '1',
+      limit: '15',
+      countrycodes: 'it',
+      'accept-language': 'it',
+      bounded: '1',
+      dedupe: '1',
+      'exclude_place_ids': '',
+      viewbox: '6.627,35.493,18.520,47.091'
+    });
+
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?${params}`,
+      {
+        headers: {
+          'User-Agent': 'TimesheetApp/1.0 (contact@example.com)'
+        },
+        signal
+      }
+    );
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: Ricerca indirizzo fallita`);
+    }
+    
+    return await response.json();
+  };
+
+  const performRegionalSearch = async (query: string, signal: AbortSignal): Promise<AddressSearchResult[]> => {
+    // Estrai il nome della strada dalla query
+    const streetMatch = query.match(/^(via|viale|corso|piazza|largo|str\.?|v\.?)\s+([^,\d]+)/i);
+    if (!streetMatch) return [];
+
+    const streetName = streetMatch[0].trim();
+    const regionalQuery = `${streetName}, Lombardia, Italia`;
+
+    const params = new URLSearchParams({
+      q: regionalQuery,
+      format: 'json',
+      addressdetails: '1',
+      limit: '10',
+      countrycodes: 'it',
+      'accept-language': 'it',
+      bounded: '1',
+      dedupe: '1',
+      'exclude_place_ids': '',
+      viewbox: '6.627,35.493,18.520,47.091'
+    });
+
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?${params}`,
+      {
+        headers: {
+          'User-Agent': 'TimesheetApp/1.0 (contact@example.com)'
+        },
+        signal
+      }
+    );
+    
+    if (!response.ok) return [];
+    
+    return await response.json();
+  };
+
+  const processResults = (results: AddressSearchResult[], originalQuery: string): AddressSearchResult[] => {
+    // Rimuovi duplicati basati su coordinate
+    const uniqueResults = results.filter((result, index, arr) => {
+      return index === arr.findIndex(r => 
+        Math.abs(parseFloat(r.lat) - parseFloat(result.lat)) < 0.001 &&
+        Math.abs(parseFloat(r.lon) - parseFloat(result.lon)) < 0.001
+      );
+    });
+
+    // Filtra e valuta risultati
+    const filteredData = uniqueResults
+      .filter(result => {
+        // Deve essere in Italia
+        if (!result.display_name.toLowerCase().includes('ital')) {
+          return false;
+        }
+        
+        // Deve avere informazioni address valide
+        if (!result.address) return false;
+        
+        const addr = result.address;
+        return addr.road || addr.city || addr.town || addr.village;
+      })
+      .map(result => ({
+        ...result,
+        relevanceScore: calculateEnhancedRelevance(result, originalQuery)
+      }))
+      .sort((a: any, b: any) => {
+        // Ordina per rilevanza e importanza
+        const scoreA = a.relevanceScore + (parseFloat(a.importance || '0') * 0.1);
+        const scoreB = b.relevanceScore + (parseFloat(b.importance || '0') * 0.1);
+        return scoreB - scoreA;
+      })
+      .slice(0, 8) // Top 8 risultati
+      .map(({ relevanceScore, ...result }: any) => result);
+
+    return filteredData;
+  };
+
+  const calculateEnhancedRelevance = (result: AddressSearchResult, query: string): number => {
+    let score = 0;
+    const queryLower = query.toLowerCase();
+    const displayLower = result.display_name.toLowerCase();
+    const addr = result.address;
+    
+    // Bonus alta priorità per corrispondenza esatta strada
+    if (addr?.road) {
+      const roadLower = addr.road.toLowerCase();
+      if (queryLower.includes(roadLower)) {
+        score += 20;
+        // Bonus extra se la strada è all'inizio della query
+        if (queryLower.startsWith(roadLower) || queryLower.includes(`via ${roadLower}`) || queryLower.includes(`viale ${roadLower}`)) {
+          score += 10;
+        }
+      }
+    }
+    
+    // Bonus per città/località
+    if (addr?.city && queryLower.includes(addr.city.toLowerCase())) {
+      score += 15;
+    }
+    if (addr?.town && queryLower.includes(addr.town.toLowerCase())) {
+      score += 15;
+    }
+    
+    // Bonus molto alto per numero civico corrispondente
+    const queryNumbers = query.match(/\d+/g);
+    if (queryNumbers && addr?.house_number) {
+      if (queryNumbers.some(num => addr.house_number?.includes(num))) {
+        score += 25;
+      }
+    }
+    
+    // Bonus per località specifica di Cremona
+    if (displayLower.includes('cremona')) {
+      score += 10;
+    }
+    
+    // Penalità per risultati troppo generici
+    if (displayLower.split(',').length > 6) {
+      score -= 3;
+    }
+    
+    // Bonus se ha tutte le informazioni essenziali
+    if (addr?.road && addr?.city && addr?.postcode) {
+      score += 5;
+    }
+    
+    return score;
   };
 
   const calculateRelevance = (result: AddressSearchResult, query: string): number => {
