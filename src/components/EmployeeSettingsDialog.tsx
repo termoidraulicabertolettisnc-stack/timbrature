@@ -59,9 +59,10 @@ interface EmployeeSettingsDialogProps {
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onEmployeeUpdate?: () => void;
 }
 
-export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: EmployeeSettingsDialogProps) => {
+export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmployeeUpdate }: EmployeeSettingsDialogProps) => {
   const { user } = useAuth();
   const [settings, setSettings] = useState<EmployeeSettings>({
     user_id: employee.id,
@@ -83,6 +84,8 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
     daily_allowance_min_hours: null,
   });
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+  const [companies, setCompanies] = useState<Array<{id: string, name: string}>>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>(employee.company_id);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -91,17 +94,26 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
     if (open) {
       loadSettings();
     }
-  }, [open, employee.id]);
+  }, [open, employee.id, selectedCompanyId]);
 
   const loadSettings = async () => {
     try {
       setLoading(true);
       
-      // Load company settings (defaults)
+      // Load all companies for selection
+      const { data: companiesData, error: companiesError } = await supabase
+        .from('companies')
+        .select('id, name')
+        .order('name');
+
+      if (companiesError) throw companiesError;
+      setCompanies(companiesData || []);
+      
+      // Load company settings (defaults) for current company
       const { data: companyData, error: companyError } = await supabase
         .from('company_settings')
         .select('*')
-        .eq('company_id', employee.company_id)
+        .eq('company_id', selectedCompanyId)
         .single();
 
       if (companyError) throw companyError;
@@ -112,7 +124,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
         .from('employee_settings')
         .select('*')
         .eq('user_id', employee.id)
-        .eq('company_id', employee.company_id)
+        .eq('company_id', selectedCompanyId)
         .maybeSingle();
 
       if (employeeError) throw employeeError;
@@ -123,7 +135,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
         // Reset to default (null values will use company defaults)
         setSettings({
           user_id: employee.id,
-          company_id: employee.company_id,
+          company_id: selectedCompanyId,
           standard_weekly_hours: null,
           lunch_break_type: null,
           overtime_calculation: null,
@@ -155,8 +167,17 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
     try {
       setSaving(true);
 
+      // First update the employee's company assignment
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ company_id: selectedCompanyId })
+        .eq('user_id', employee.id);
+
+      if (profileError) throw profileError;
+
       const settingsData = {
         ...settings,
+        company_id: selectedCompanyId,
         created_by: user.id,
         updated_by: user.id,
       } as any; // Cast to any to handle Supabase type compatibility
@@ -180,6 +201,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
 
       toast.success('Impostazioni salvate con successo');
       setHasChanges(false);
+      onEmployeeUpdate?.(); // Refresh the parent component
       onOpenChange(false);
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -197,7 +219,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
   const resetToDefaults = () => {
     setSettings({
       user_id: employee.id,
-      company_id: employee.company_id,
+      company_id: selectedCompanyId,
       standard_weekly_hours: null,
       lunch_break_type: null,
       overtime_calculation: null,
@@ -214,6 +236,11 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
       daily_allowance_policy: null,
       daily_allowance_min_hours: null,
     });
+    setHasChanges(true);
+  };
+
+  const handleCompanyChange = (companyId: string) => {
+    setSelectedCompanyId(companyId);
     setHasChanges(true);
   };
 
@@ -264,6 +291,38 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange }: Employe
               Ripristina Valori Azienda
             </Button>
           </div>
+          
+          {/* Company Selection */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Azienda di Appartenenza</CardTitle>
+              <CardDescription>
+                Seleziona l'azienda per questo dipendente
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <Label>Azienda</Label>
+                  <Select
+                    value={selectedCompanyId}
+                    onValueChange={handleCompanyChange}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleziona azienda" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {companies.map((company) => (
+                        <SelectItem key={company.id} value={company.id}>
+                          {company.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Work Hours */}
           <Card>

@@ -565,6 +565,7 @@ export default function AdminEmployees() {
           }}
           open={isSettingsDialogOpen}
           onOpenChange={setIsSettingsDialogOpen}
+          onEmployeeUpdate={loadEmployees}
         />
       )}
     </div>
