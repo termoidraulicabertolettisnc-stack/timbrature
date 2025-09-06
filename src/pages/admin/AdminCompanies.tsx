@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Building, Edit, MapPin } from "lucide-react";
+import { Plus, Building, Edit, MapPin, Trash2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 
 interface Company {
@@ -119,6 +120,31 @@ export default function AdminCompanies() {
     setDialogOpen(true);
   };
 
+  const handleDelete = async (company: Company) => {
+    try {
+      const { error } = await supabase
+        .from('companies')
+        .delete()
+        .eq('id', company.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Successo",
+        description: "Azienda eliminata con successo",
+      });
+
+      loadCompanies();
+    } catch (error) {
+      console.error('Error deleting company:', error);
+      toast({
+        title: "Errore",
+        description: "Errore nell'eliminazione dell'azienda",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center p-8">Caricamento...</div>;
   }
@@ -205,13 +231,40 @@ export default function AdminCompanies() {
                 <Building className="h-5 w-5 inline mr-2" />
                 {company.name}
               </CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleEdit(company)}
-              >
-                <Edit className="h-4 w-4" />
-              </Button>
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleEdit(company)}
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Conferma eliminazione</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Sei sicuro di voler eliminare l'azienda "{company.name}"? 
+                        Questa azione non può essere annullata.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Annulla</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleDelete(company)}>
+                        Elimina
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
