@@ -82,6 +82,36 @@ export type Database = {
         }
         Relationships: []
       }
+      company_holidays: {
+        Row: {
+          company_id: string
+          created_at: string
+          date: string
+          id: string
+          is_recurring: boolean | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          date: string
+          id?: string
+          is_recurring?: boolean | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          date?: string
+          id?: string
+          is_recurring?: boolean | null
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       company_settings: {
         Row: {
           business_trip_rate_with_meal: number | null
@@ -94,6 +124,7 @@ export type Database = {
           id: string
           lunch_break_type: Database["public"]["Enums"]["lunch_break_type"]
           meal_voucher_amount: number | null
+          meal_voucher_denominations: Json | null
           meal_voucher_policy: Database["public"]["Enums"]["meal_voucher_type"]
           night_shift_end: string
           night_shift_start: string
@@ -114,6 +145,7 @@ export type Database = {
           id?: string
           lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
           meal_voucher_amount?: number | null
+          meal_voucher_denominations?: Json | null
           meal_voucher_policy?: Database["public"]["Enums"]["meal_voucher_type"]
           night_shift_end?: string
           night_shift_start?: string
@@ -134,6 +166,7 @@ export type Database = {
           id?: string
           lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
           meal_voucher_amount?: number | null
+          meal_voucher_denominations?: Json | null
           meal_voucher_policy?: Database["public"]["Enums"]["meal_voucher_type"]
           night_shift_end?: string
           night_shift_start?: string
@@ -153,11 +186,54 @@ export type Database = {
           },
         ]
       }
+      employee_absences: {
+        Row: {
+          absence_type: Database["public"]["Enums"]["absence_type"]
+          company_id: string
+          created_at: string
+          created_by: string
+          date: string
+          hours: number | null
+          id: string
+          notes: string | null
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          absence_type: Database["public"]["Enums"]["absence_type"]
+          company_id: string
+          created_at?: string
+          created_by: string
+          date: string
+          hours?: number | null
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          absence_type?: Database["public"]["Enums"]["absence_type"]
+          company_id?: string
+          created_at?: string
+          created_by?: string
+          date?: string
+          hours?: number | null
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       employee_settings: {
         Row: {
           business_trip_rate_with_meal: number | null
           business_trip_rate_without_meal: number | null
           company_id: string
+          contract_working_days: string | null
           created_at: string
           created_by: string
           daily_allowance_amount: number | null
@@ -188,6 +264,7 @@ export type Database = {
           business_trip_rate_with_meal?: number | null
           business_trip_rate_without_meal?: number | null
           company_id: string
+          contract_working_days?: string | null
           created_at?: string
           created_by: string
           daily_allowance_amount?: number | null
@@ -220,6 +297,7 @@ export type Database = {
           business_trip_rate_with_meal?: number | null
           business_trip_rate_without_meal?: number | null
           company_id?: string
+          contract_working_days?: string | null
           created_at?: string
           created_by?: string
           daily_allowance_amount?: number | null
@@ -510,6 +588,7 @@ export type Database = {
       }
     }
     Enums: {
+      absence_type: "A" | "F" | "FS" | "I" | "M" | "PR" | "PNR"
       lunch_break_type:
         | "30_minuti"
         | "60_minuti"
@@ -654,6 +733,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      absence_type: ["A", "F", "FS", "I", "M", "PR", "PNR"],
       lunch_break_type: [
         "30_minuti",
         "60_minuti",
