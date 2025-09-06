@@ -8,6 +8,7 @@ import {
   Calendar,
   FileText,
   BarChart3,
+  Building,
 } from "lucide-react";
 
 import {
@@ -27,6 +28,7 @@ const adminMenuItems = [
   { title: "Dashboard", url: "/admin", icon: BarChart3 },
   { title: "Timesheets", url: "/admin/timesheets", icon: Clock },
   { title: "Dipendenti", url: "/admin/employees", icon: Users },
+  { title: "Aziende", url: "/admin/companies", icon: Building },
   { title: "Commesse", url: "/admin/projects", icon: FolderKanban },
   { title: "Consolidato", url: "/admin/consolidation", icon: Calendar },
   { title: "Export", url: "/admin/export", icon: FileDown },
