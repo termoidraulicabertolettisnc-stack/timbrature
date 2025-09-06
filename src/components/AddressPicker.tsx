@@ -64,9 +64,20 @@ const AddressPicker = ({
 
   const handleSelectAddress = (result: AddressSearchResult) => {
     const formattedAddress = formatAddress(result);
-    const inputAddress = `${result.address?.road || ''} ${result.address?.house_number || ''}`.trim() || 
-                         result.address?.city || result.address?.town || result.address?.village || 
-                         result.display_name;
+    
+    // Migliora la costruzione dell'indirizzo per l'input
+    let inputAddress = '';
+    const addr = result.address;
+    
+    if (addr?.road) {
+      inputAddress = addr.road;
+      if (addr.house_number) {
+        inputAddress += ` ${addr.house_number}`;
+      }
+    } else {
+      // Fallback se non c'è una strada definita
+      inputAddress = addr?.city || addr?.town || addr?.village || result.display_name.split(',')[0];
+    }
     
     setQuery(inputAddress);
     setSelectedAddress(inputAddress);
@@ -82,26 +93,33 @@ const AddressPicker = ({
 
   const formatAddress = (result: AddressSearchResult): string => {
     const addr = result.address;
-    let formatted = '';
+    const parts: string[] = [];
     
+    // Costruiamo l'indirizzo in formato italiano standard
     if (addr?.road) {
-      formatted += addr.road;
+      let roadPart = addr.road;
       if (addr.house_number) {
-        formatted += ` ${addr.house_number}`;
+        roadPart += ` ${addr.house_number}`;
       }
+      parts.push(roadPart);
     }
     
+    // Aggiungiamo la città
     const city = addr?.city || addr?.town || addr?.village;
-    if (city && formatted) {
-      formatted += `, ${city}`;
-    } else if (city) {
-      formatted = city;
-    }
-
-    if (addr?.postcode) {
-      formatted += `, ${addr.postcode}`;
+    if (city) {
+      let cityPart = city;
+      if (addr?.postcode) {
+        cityPart = `${addr.postcode} ${city}`;
+      }
+      parts.push(cityPart);
     }
     
+    // Aggiungiamo la provincia/regione se disponibile
+    if (addr?.country && parts.length > 0) {
+      parts.push('Italia');
+    }
+    
+    const formatted = parts.join(', ');
     return formatted || result.display_name;
   };
 
