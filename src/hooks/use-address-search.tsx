@@ -94,33 +94,50 @@ export const useAddressSearch = () => {
   }, []);
 
   const performEnhancedNominatimSearch = async (query: string, signal: AbortSignal): Promise<AddressSearchResult[]> => {
-    // Multiple search strategies for better Italian results
-    const searchStrategies = [
-      // Strategy 1: Enhanced query with Italia
-      `${query.trim()}, Italia`,
-      // Strategy 2: Query with Lombardia region
-      `${query.trim()}, Lombardia, Italia`,
-      // Strategy 3: Original query if it contains Italy already
-      query.toLowerCase().includes('italia') || query.toLowerCase().includes('italy') 
-        ? query.trim() 
-        : null
-    ].filter(Boolean);
-
     let allResults: AddressSearchResult[] = [];
 
-    for (const searchQuery of searchStrategies) {
+    // Extract house number for targeted search
+    const houseNumberMatch = query.match(/\d+/);
+    const houseNumber = houseNumberMatch ? houseNumberMatch[0] : null;
+    
+    // Multiple search strategies optimized for Italian addresses with house numbers
+    const searchStrategies = [
+      // Strategy 1: Exact query as-is (most specific)
+      query.trim(),
+      
+      // Strategy 2: With Italia suffix
+      `${query.trim()}, Italia`,
+      
+      // Strategy 3: If house number exists, try with specific formatting
+      houseNumber ? `${query.replace(/\d+/, '').trim()} ${houseNumber}, Cremona, Italia` : null,
+      
+      // Strategy 4: Broader search with region
+      `${query.trim()}, Cremona, Lombardia, Italia`,
+      
+      // Strategy 5: Street only if we have house number (to get the exact street first)
+      houseNumber ? `${query.replace(/\d+/, '').trim()}, Cremona, Italia` : null,
+    ].filter(Boolean);
+
+    console.log('🔍 Search strategies:', searchStrategies);
+
+    for (const [index, searchQuery] of searchStrategies.entries()) {
       if (signal.aborted) break;
       
       try {
+        console.log(`Strategy ${index + 1}: "${searchQuery}"`);
+        
         const params = new URLSearchParams({
           q: searchQuery,
           format: 'json',
           addressdetails: '1',
-          limit: '15',
+          limit: index === 0 ? '20' : '10', // More results for exact query
           countrycodes: 'it',
           'accept-language': 'it',
           bounded: '0',
-          dedupe: '1'
+          dedupe: '1',
+          // Add specific parameters for better address matching
+          extratags: '1',
+          namedetails: '1'
         });
 
         const response = await fetch(
@@ -139,11 +156,25 @@ export const useAddressSearch = () => {
         }
 
         const results = await response.json();
+        console.log(`Strategy ${index + 1} results:`, results.length);
+        
         if (results && results.length > 0) {
-          allResults = [...allResults, ...results];
-          // If we got good results from first strategy, no need to try others
-          if (results.length >= 5) break;
+          // Add strategy info to results for debugging
+          const taggedResults = results.map(r => ({ ...r, searchStrategy: index + 1 }));
+          allResults = [...allResults, ...taggedResults];
+          
+          // If first strategy (exact query) gives good results, prioritize them
+          if (index === 0 && results.length >= 3) {
+            console.log('✅ Good results from exact query, prioritizing');
+            break;
+          }
         }
+        
+        // Small delay between requests to be respectful to the API
+        if (index < searchStrategies.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
           throw error;
@@ -153,6 +184,7 @@ export const useAddressSearch = () => {
       }
     }
 
+    console.log(`📊 Total results collected: ${allResults.length}`);
     return allResults;
   };
 
@@ -219,16 +251,29 @@ export const useAddressSearch = () => {
     
     let score = 0;
     
-    // Base score for containing query terms
+    // Extract key components from query
     const queryWords = queryLower.split(/\s+/).filter(word => word.length > 1);
-    const matchedWords = queryWords.filter(word => displayNameLower.includes(word));
-    score += (matchedWords.length / queryWords.length) * 0.4;
+    const queryNumbers = queryLower.match(/\d+/g) || [];
     
-    // Enhanced scoring for address components
+    // Base score for word matches
+    const matchedWords = queryWords.filter(word => displayNameLower.includes(word));
+    score += (matchedWords.length / queryWords.length) * 0.3;
+    
     if (result.address) {
       const { road, house_number, city, town, village, postcode } = result.address;
       
-      // Road name exact match bonus
+      // CRITICAL: Exact house number match gets highest priority
+      if (house_number && queryNumbers.length > 0) {
+        const hasHouseNumberMatch = queryNumbers.some(num => 
+          house_number === num || house_number.includes(num)
+        );
+        if (hasHouseNumberMatch) {
+          score += 0.5; // Very high score for house number match
+          console.log(`🎯 House number match found: ${house_number}`);
+        }
+      }
+      
+      // Road name exact match
       if (road && queryLower.includes(road.toLowerCase())) {
         score += 0.35;
         
@@ -238,46 +283,57 @@ export const useAddressSearch = () => {
           `via ${road.toLowerCase()}`,
           `viale ${road.toLowerCase()}`,
           `corso ${road.toLowerCase()}`,
+          `piazza ${road.toLowerCase()}`
         ];
         
         if (roadVariants.some(variant => queryLower.startsWith(variant))) {
-          score += 0.2;
+          score += 0.15;
         }
       }
       
-      // House number match
-      const queryNumbers = queryLower.match(/\d+/g);
-      if (house_number && queryNumbers?.some(num => house_number.includes(num))) {
-        score += 0.25;
-      }
-      
-      // City/town match
+      // City/town match with special focus on Cremona
       const cityName = city || town || village;
-      if (cityName && queryLower.includes(cityName.toLowerCase())) {
-        score += 0.2;
+      if (cityName) {
+        const cityLower = cityName.toLowerCase();
+        if (queryLower.includes(cityLower)) {
+          score += cityLower === 'cremona' ? 0.25 : 0.2; // Bonus for Cremona
+        }
       }
       
       // Postcode match
-      if (postcode && queryLower.includes(postcode)) {
+      if (postcode && queryNumbers.some(num => postcode.includes(num))) {
         score += 0.15;
       }
       
-      // Bonus for complete addresses
-      if (road && cityName && postcode) {
+      // Bonus for complete addresses (road + house_number + city)
+      if (road && house_number && cityName) {
         score += 0.1;
+      }
+      
+      // Special bonus for exact query match in display name
+      if (displayNameLower.includes(queryLower)) {
+        score += 0.2;
       }
     }
     
-    // Penalty for very long addresses (less specific)
+    // Penalty for very long addresses (too generic)
     if (displayNameLower.length > 150) {
-      score *= 0.9;
+      score *= 0.85;
     }
     
-    // Bonus for Cremona area (user's region)
-    if (displayNameLower.includes('cremona') || displayNameLower.includes('lombardia')) {
+    // Bonus for addresses in target region
+    if (displayNameLower.includes('cremona')) {
+      score += 0.15;
+    } else if (displayNameLower.includes('lombardia')) {
       score += 0.1;
     }
     
+    // Penalty for addresses that are just streets without numbers when number was requested
+    if (queryNumbers.length > 0 && !result.address?.house_number) {
+      score *= 0.7; // Reduce score if no house number when one was requested
+    }
+    
+    console.log(`Relevance for "${result.display_name}": ${score.toFixed(3)}`);
     return Math.min(score, 1.0);
   };
 
