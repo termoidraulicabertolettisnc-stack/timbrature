@@ -15,7 +15,6 @@ interface Company {
   id: string;
   name: string;
   address?: string;
-  city: string;
   formatted_address?: string;
   latitude?: number;
   longitude?: number;
@@ -25,11 +24,6 @@ interface Company {
 
 interface CompanyFormData {
   name: string;
-  address?: string;
-  city: string;
-  formatted_address?: string;
-  latitude?: number;
-  longitude?: number;
 }
 
 export default function AdminCompanies() {
@@ -123,7 +117,6 @@ export default function AdminCompanies() {
     setEditingCompany(company);
     reset({
       name: company.name,
-      city: company.city,
     });
     if (company.address || company.formatted_address) {
       setAddressData({
@@ -141,7 +134,6 @@ export default function AdminCompanies() {
     setAddressData(null);
     reset({
       name: '',
-      city: 'Cremona',
     });
     setDialogOpen(true);
   };
@@ -233,23 +225,6 @@ export default function AdminCompanies() {
                   onAddressSelect={setAddressData}
                   placeholder="Cerca l'indirizzo dell'azienda..."
                 />
-                {addressData?.formatted_address && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {addressData.formatted_address}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="city">Città</Label>
-                <Input
-                  id="city"
-                  {...register('city', { required: 'La città è obbligatoria' })}
-                  placeholder="Città"
-                />
-                {errors.city && (
-                  <p className="text-sm text-destructive mt-1">{errors.city.message}</p>
-                )}
               </div>
 
               <div className="flex justify-end gap-2">
@@ -320,10 +295,6 @@ export default function AdminCompanies() {
                     {company.formatted_address || company.address}
                   </div>
                 )}
-                <div className="flex items-center text-sm text-muted-foreground">
-                  <MapPin className="h-4 w-4 mr-2" />
-                  {company.city}
-                </div>
                 <div className="text-xs text-muted-foreground">
                   Creata il: {new Date(company.created_at).toLocaleDateString('it-IT')}
                 </div>
