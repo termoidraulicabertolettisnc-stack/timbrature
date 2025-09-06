@@ -18,6 +18,25 @@ import { TimesheetTimeline } from '@/components/TimesheetTimeline';
 import LocationTrackingIndicator from '@/components/LocationTrackingIndicator';
 import { TimesheetEditDialog } from '@/components/TimesheetEditDialog';
 import LocationDisplay from '@/components/LocationDisplay';
+import { useRealtimeHours } from '@/hooks/use-realtime-hours';
+
+// Componente per mostrare ore con calcolo in tempo reale
+function HoursDisplay({ timesheet }: { timesheet: TimesheetWithProfile }) {
+  const realtimeHours = useRealtimeHours(timesheet);
+  
+  const formatHours = (hours: number | null) => {
+    if (!hours) return '0h';
+    return `${hours.toFixed(1)}h`;
+  };
+  
+  if (!timesheet.end_time && timesheet.start_time) {
+    // Timesheet aperto - mostra ore in tempo reale
+    return <span className="text-blue-600">{formatHours(realtimeHours)} (in corso)</span>;
+  }
+  
+  // Timesheet chiuso - mostra ore totali
+  return <span>{formatHours(timesheet.total_hours)}</span>;
+}
 
 interface TimesheetWithProfile {
   id: string;
@@ -1188,6 +1207,11 @@ function TimesheetDetailsTable({
   };
 
   const getLunchBreakDisplay = (timesheet: TimesheetWithProfile) => {
+    // CORREZIONE: Per timesheet aperti (senza end_time) non mostrare pausa pranzo predefinita
+    if (!timesheet.end_time) {
+      return 'In corso...';
+    }
+
     // Se ha orari specifici di pausa pranzo, mostrali
     if (timesheet.lunch_start_time && timesheet.lunch_end_time) {
       return `${formatTime(timesheet.lunch_start_time)} - ${formatTime(timesheet.lunch_end_time)}`;
@@ -1259,7 +1283,7 @@ function TimesheetDetailsTable({
                 <TableCell>
                   {getLunchBreakDisplay(timesheet)}
                 </TableCell>
-                <TableCell>{formatHours(timesheet.total_hours)}</TableCell>
+                <TableCell><HoursDisplay timesheet={timesheet} /></TableCell>
                 <TableCell className="font-medium">
                   {formatHours(getOrdinaryHours(timesheet))}
                 </TableCell>
