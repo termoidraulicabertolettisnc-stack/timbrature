@@ -39,11 +39,13 @@ export default function AdminCompanies() {
 
   const loadCompanies = async () => {
     try {
+      console.log('Loading companies...');
       const { data, error } = await supabase
         .from('companies')
         .select('*')
         .order('name');
 
+      console.log('Companies loaded:', data, 'Error:', error);
       if (error) throw error;
       setCompanies(data || []);
     } catch (error) {
