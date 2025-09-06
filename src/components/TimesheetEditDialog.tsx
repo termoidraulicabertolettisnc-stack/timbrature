@@ -18,6 +18,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import LocationDisplay from './LocationDisplay';
+import LocationTrackingRoute from './LocationTrackingRoute';
 
 interface TimesheetWithProfile {
   id: string;
@@ -32,6 +34,10 @@ interface TimesheetWithProfile {
   project_id: string | null;
   is_saturday: boolean;
   is_holiday: boolean;
+  start_location_lat: number | null;
+  start_location_lng: number | null;
+  end_location_lat: number | null;
+  end_location_lng: number | null;
   profiles: {
     first_name: string;
     last_name: string;
@@ -410,6 +416,26 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
               </div>
             )}
           </div>
+
+          {/* Location tracking section */}
+          {(timesheet.start_location_lat || timesheet.start_location_lng || timesheet.end_location_lat || timesheet.end_location_lng) && (
+            <div className="space-y-4 border-t pt-4">
+              <LocationDisplay
+                startLat={timesheet.start_location_lat}
+                startLng={timesheet.start_location_lng}
+                endLat={timesheet.end_location_lat}
+                endLng={timesheet.end_location_lng}
+              />
+              
+              <LocationTrackingRoute
+                timesheetId={timesheet.id}
+                startLat={timesheet.start_location_lat}
+                startLng={timesheet.start_location_lng}
+                endLat={timesheet.end_location_lat}
+                endLng={timesheet.end_location_lng}
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="notes">Note</Label>

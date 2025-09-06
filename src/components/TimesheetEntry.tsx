@@ -6,8 +6,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { Clock, MapPin, Play, Square } from 'lucide-react';
+import { Clock, MapPin, Play, Square, Navigation } from 'lucide-react';
 import LocationModal from './LocationModal';
+import { useAdaptiveLocationTracking } from '@/hooks/use-adaptive-location-tracking';
+import { Badge } from '@/components/ui/badge';
 
 interface Project {
   id: string;
@@ -36,6 +38,13 @@ const TimesheetEntry = () => {
   
   const { user } = useAuth();
   const { toast } = useToast();
+
+  // Adaptive location tracking
+  const locationTracking = useAdaptiveLocationTracking({
+    timesheetId: currentSession?.id || null,
+    userId: user?.id || '',
+    isActive: !!currentSession && !currentSession.end_time
+  });
 
   // Update current time every second
   useEffect(() => {
@@ -299,36 +308,67 @@ const TimesheetEntry = () => {
           </div>
         )}
 
-        <div className="flex gap-2">
-          {!isWorking ? (
-            <Button
-              onClick={clockIn}
-              disabled={isLoading}
-              className="flex-1"
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            {!isWorking ? (
+              <Button
+                onClick={clockIn}
+                disabled={isLoading}
+                className="flex-1"
+                size="lg"
+              >
+                <Play className="h-4 w-4 mr-2" />
+                Entra
+              </Button>
+            ) : (
+              <Button
+                onClick={clockOut}
+                disabled={isLoading}
+                variant="destructive"
+                className="flex-1"
+                size="lg"
+              >
+                <Square className="h-4 w-4 mr-2" />
+                Esci
+              </Button>
+            )}
+            <Button 
+              variant="outline" 
               size="lg"
+              onClick={() => setLocationModalOpen(true)}
             >
-              <Play className="h-4 w-4 mr-2" />
-              Entra
+              <MapPin className="h-4 w-4" />
             </Button>
-          ) : (
-            <Button
-              onClick={clockOut}
-              disabled={isLoading}
-              variant="destructive"
-              className="flex-1"
-              size="lg"
-            >
-              <Square className="h-4 w-4 mr-2" />
-              Esci
-            </Button>
+          </div>
+
+          {locationTracking.isTracking && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Navigation className="h-4 w-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-800">Tracciamento Attivo</span>
+                </div>
+                <Badge variant="secondary" className="text-xs">
+                  {locationTracking.currentInterval}min
+                </Badge>
+              </div>
+              
+              <div className="text-xs text-green-700 space-y-1">
+                <div>Ping inviati: {locationTracking.pingsCount}</div>
+                {locationTracking.movementDetected && (
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                    <span>Movimento rilevato</span>
+                  </div>
+                )}
+                {locationTracking.error && (
+                  <div className="text-red-600 font-medium">
+                    {locationTracking.error}
+                  </div>
+                )}
+              </div>
+            </div>
           )}
-          <Button 
-            variant="outline" 
-            size="lg"
-            onClick={() => setLocationModalOpen(true)}
-          >
-            <MapPin className="h-4 w-4" />
-          </Button>
         </div>
         
         <LocationModal 

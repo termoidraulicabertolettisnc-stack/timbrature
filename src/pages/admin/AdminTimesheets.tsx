@@ -9,12 +9,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { CalendarIcon, Clock, Edit, Filter, Download, Users, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import { CalendarIcon, Clock, Edit, Filter, Download, Users, ChevronDown, ChevronRight, Trash2, Navigation } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, addDays, isSameDay } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { OvertimeTracker } from '@/components/OvertimeTracker';
 import { TimesheetTimeline } from '@/components/TimesheetTimeline';
+import LocationTrackingIndicator from '@/components/LocationTrackingIndicator';
 import { TimesheetEditDialog } from '@/components/TimesheetEditDialog';
 import LocationDisplay from '@/components/LocationDisplay';
 
@@ -43,6 +44,7 @@ interface TimesheetWithProfile {
   start_location_lng: number | null;
   end_location_lat: number | null;
   end_location_lng: number | null;
+  location_pings?: any[];
   profiles: {
     first_name: string;
     last_name: string;
@@ -1264,13 +1266,17 @@ function TimesheetDetailsTable({
                 <TableCell>{formatHours(timesheet.overtime_hours)}</TableCell>
                 <TableCell>{formatHours(timesheet.night_hours)}</TableCell>
                 <TableCell>
-                <LocationDisplay
-                  startLat={timesheet.start_location_lat}
-                  startLng={timesheet.start_location_lng}
-                  endLat={timesheet.end_location_lat}
-                  endLng={timesheet.end_location_lng}
-                  compact
-                />
+                  <div className="space-y-1">
+                    <LocationDisplay
+                      startLat={timesheet.start_location_lat}
+                      startLng={timesheet.start_location_lng}
+                      endLat={timesheet.end_location_lat}
+                      endLng={timesheet.end_location_lng}
+                      compact
+                    />
+                    {/* Add tracking indicator - this will be populated when data exists */}
+                    <LocationTrackingIndicator timesheetId={timesheet.id} />
+                  </div>
                 </TableCell>
                 <TableCell>
                   {timesheet.meal_voucher_earned ? 'Sì' : 'No'}
