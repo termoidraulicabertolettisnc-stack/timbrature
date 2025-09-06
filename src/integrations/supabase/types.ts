@@ -131,7 +131,7 @@ export type Database = {
           overtime_calculation: Database["public"]["Enums"]["overtime_type"]
           saturday_handling: Database["public"]["Enums"]["saturday_type"]
           saturday_hourly_rate: number | null
-          standard_daily_hours: number
+          standard_weekly_hours: Json | null
           updated_at: string
         }
         Insert: {
@@ -152,7 +152,7 @@ export type Database = {
           overtime_calculation?: Database["public"]["Enums"]["overtime_type"]
           saturday_handling?: Database["public"]["Enums"]["saturday_type"]
           saturday_hourly_rate?: number | null
-          standard_daily_hours?: number
+          standard_weekly_hours?: Json | null
           updated_at?: string
         }
         Update: {
@@ -173,7 +173,7 @@ export type Database = {
           overtime_calculation?: Database["public"]["Enums"]["overtime_type"]
           saturday_handling?: Database["public"]["Enums"]["saturday_type"]
           saturday_hourly_rate?: number | null
-          standard_daily_hours?: number
+          standard_weekly_hours?: Json | null
           updated_at?: string
         }
         Relationships: [
@@ -255,7 +255,7 @@ export type Database = {
           overtime_monthly_compensation: boolean | null
           saturday_handling: Database["public"]["Enums"]["saturday_type"] | null
           saturday_hourly_rate: number | null
-          standard_daily_hours: number | null
+          standard_weekly_hours: Json | null
           updated_at: string
           updated_by: string | null
           user_id: string
@@ -288,7 +288,7 @@ export type Database = {
             | Database["public"]["Enums"]["saturday_type"]
             | null
           saturday_hourly_rate?: number | null
-          standard_daily_hours?: number | null
+          standard_weekly_hours?: Json | null
           updated_at?: string
           updated_by?: string | null
           user_id: string
@@ -321,7 +321,7 @@ export type Database = {
             | Database["public"]["Enums"]["saturday_type"]
             | null
           saturday_hourly_rate?: number | null
-          standard_daily_hours?: number | null
+          standard_weekly_hours?: Json | null
           updated_at?: string
           updated_by?: string | null
           user_id?: string
@@ -462,6 +462,7 @@ export type Database = {
       }
       timesheets: {
         Row: {
+          absence_type: Database["public"]["Enums"]["absence_type"] | null
           created_at: string
           created_by: string
           date: string
@@ -469,6 +470,7 @@ export type Database = {
           end_location_lng: number | null
           end_time: string | null
           id: string
+          is_absence: boolean | null
           is_holiday: boolean
           is_saturday: boolean
           lunch_duration_minutes: number | null
@@ -488,6 +490,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          absence_type?: Database["public"]["Enums"]["absence_type"] | null
           created_at?: string
           created_by: string
           date: string
@@ -495,6 +498,7 @@ export type Database = {
           end_location_lng?: number | null
           end_time?: string | null
           id?: string
+          is_absence?: boolean | null
           is_holiday?: boolean
           is_saturday?: boolean
           lunch_duration_minutes?: number | null
@@ -514,6 +518,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          absence_type?: Database["public"]["Enums"]["absence_type"] | null
           created_at?: string
           created_by?: string
           date?: string
@@ -521,6 +526,7 @@ export type Database = {
           end_location_lng?: number | null
           end_time?: string | null
           id?: string
+          is_absence?: boolean | null
           is_holiday?: boolean
           is_saturday?: boolean
           lunch_duration_minutes?: number | null
