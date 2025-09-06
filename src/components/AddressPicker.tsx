@@ -63,77 +63,58 @@ const AddressPicker = ({
   }, [query, selectedAddress, searchAddresses]);
 
   const handleSelectAddress = (result: AddressSearchResult) => {
-    const formattedAddress = formatAddress(result);
-    
-    // Migliora la costruzione dell'indirizzo per l'input
-    let inputAddress = '';
     const addr = result.address;
     
-    if (addr?.road) {
-      inputAddress = addr.road;
-      if (addr.house_number) {
-        inputAddress += ` ${addr.house_number}`;
-      }
-    } else {
-      // Fallback se non c'è una strada definita
-      inputAddress = addr?.city || addr?.town || addr?.village || result.display_name.split(',')[0];
-    }
-
-    // IMPORTANTE: Se il numero civico non è presente nel risultato ma era nella query originale,
-    // preserviamo il numero civico dalla query dell'utente
-    if (!addr?.house_number && query) {
-      const queryNumbers = query.match(/\d+/g);
-      if (queryNumbers && queryNumbers.length > 0) {
-        // Se la strada corrisponde ma manca il numero, aggiungiamo il numero dalla query
-        const roadInQuery = addr?.road && query.toLowerCase().includes(addr.road.toLowerCase());
-        if (roadInQuery) {
-          inputAddress += ` ${queryNumbers[0]}`;
-        }
-      }
-    }
+    // Costruiamo un indirizzo completo e ben formattato
+    let fullAddress = '';
+    const addressParts: string[] = [];
     
-    setQuery(inputAddress);
-    setSelectedAddress(inputAddress);
-    setShowSuggestions(false);
-
-    onAddressSelect({
-      address: inputAddress,
-      formatted_address: formattedAddress,
-      latitude: parseFloat(result.lat),
-      longitude: parseFloat(result.lon)
-    });
-  };
-
-  const formatAddress = (result: AddressSearchResult): string => {
-    const addr = result.address;
-    const parts: string[] = [];
-    
-    // Costruiamo l'indirizzo in formato italiano standard
+    // Parte strada + numero civico
     if (addr?.road) {
       let roadPart = addr.road;
       if (addr.house_number) {
         roadPart += ` ${addr.house_number}`;
+      } else {
+        // Se il numero civico non è presente nel risultato ma era nella query originale,
+        // preserviamo il numero civico dalla query dell'utente
+        const queryNumbers = query.match(/\d+/g);
+        if (queryNumbers && queryNumbers.length > 0) {
+          const roadInQuery = query.toLowerCase().includes(addr.road.toLowerCase());
+          if (roadInQuery) {
+            roadPart += ` ${queryNumbers[0]}`;
+          }
+        }
       }
-      parts.push(roadPart);
+      addressParts.push(roadPart);
+    } else {
+      // Fallback se non c'è una strada definita
+      const fallback = addr?.city || addr?.town || addr?.village || result.display_name.split(',')[0];
+      addressParts.push(fallback);
     }
     
-    // Aggiungiamo la città
+    // Aggiungiamo città e CAP
     const city = addr?.city || addr?.town || addr?.village;
     if (city) {
       let cityPart = city;
       if (addr?.postcode) {
         cityPart = `${addr.postcode} ${city}`;
       }
-      parts.push(cityPart);
+      addressParts.push(cityPart);
     }
     
-    // Aggiungiamo la provincia/regione se disponibile
-    if (addr?.country && parts.length > 0) {
-      parts.push('Italia');
-    }
+    // Creiamo l'indirizzo completo
+    fullAddress = addressParts.join(', ');
     
-    const formatted = parts.join(', ');
-    return formatted || result.display_name;
+    setQuery(fullAddress);
+    setSelectedAddress(fullAddress);
+    setShowSuggestions(false);
+
+    onAddressSelect({
+      address: fullAddress,
+      formatted_address: fullAddress,
+      latitude: parseFloat(result.lat),
+      longitude: parseFloat(result.lon)
+    });
   };
 
   return (
@@ -166,10 +147,7 @@ const AddressPicker = ({
               >
                 <MapPin className="h-4 w-4 mr-2 flex-shrink-0" />
                 <div className="text-left">
-                  <div className="font-medium">{formatAddress(result)}</div>
-                  <div className="text-xs text-muted-foreground truncate">
-                    {result.display_name}
-                  </div>
+                  <div className="font-medium">{result.display_name}</div>
                 </div>
               </Button>
             ))}

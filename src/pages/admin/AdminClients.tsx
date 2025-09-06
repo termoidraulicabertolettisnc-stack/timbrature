@@ -455,11 +455,6 @@ export default function AdminClients() {
                 onAddressSelect={setAddressData}
                 placeholder="Cerca l'indirizzo del cliente..."
               />
-              {addressData?.formatted_address && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {addressData.formatted_address}
-                </p>
-              )}
               {!addressData && (
                 <p className="text-xs text-destructive mt-1">
                   L'indirizzo è obbligatorio per calcolare le distanze delle trasferte
