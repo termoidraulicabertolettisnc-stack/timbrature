@@ -111,25 +111,30 @@ const TimesheetEntry = () => {
       // Prima controlla se c'è una sessione attiva oggi
       const todayActiveSession = todayData?.find(t => t.start_time && !t.end_time) || null;
       
-      // Se non c'è sessione attiva oggi, ma c'è una sessione aperta in giorni precedenti
-      // mostra un warning ma permetti comunque di timbrare l'entrata
-      if (!todayActiveSession && openSessionData && openSessionData.length > 0) {
+      // Se c'è una sessione attiva oggi, usala
+      if (todayActiveSession) {
+        setCurrentSession(todayActiveSession);
+        setSelectedProject(todayActiveSession.project_id || '');
+        setNotes(todayActiveSession.notes || '');
+      }
+      // Altrimenti, se c'è una sessione aperta nei giorni precedenti, usala per permettere l'uscita
+      else if (openSessionData && openSessionData.length > 0) {
         const oldOpenSession = openSessionData[0];
         const oldDate = new Date(oldOpenSession.date).toLocaleDateString('it-IT');
         
+        setCurrentSession(oldOpenSession);
+        setSelectedProject(oldOpenSession.project_id || '');
+        setNotes(oldOpenSession.notes || '');
+        
         toast({
-          title: "Attenzione",
-          description: `Hai una sessione aperta dal ${oldDate} senza uscita. Segnalalo all'amministratore.`,
+          title: "Sessione precedente aperta",
+          description: `Sessione del ${oldDate} ancora aperta. Puoi timbrare l'uscita.`,
           variant: "destructive",
         });
       }
-      
-      // Imposta la sessione corrente solo se è di oggi
-      setCurrentSession(todayActiveSession);
-      
-      if (todayActiveSession) {
-        setSelectedProject(todayActiveSession.project_id || '');
-        setNotes(todayActiveSession.notes || '');
+      // Nessuna sessione aperta
+      else {
+        setCurrentSession(null);
       }
     }
   };
