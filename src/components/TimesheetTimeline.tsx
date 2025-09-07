@@ -63,9 +63,18 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
 
   // Converte minuti dal midnight in posizione Y
   const minutesToPosition = (minutes: number): number => {
+    // Se i minuti superano le 24 ore (1440 minuti), mappa oltre la timeline
     const hour = Math.floor(minutes / 60);
     const minute = minutes % 60;
+    
     if (hour < START_HOUR) return 0;
+    
+    // Per sessioni che si estendono oltre le 24 ore, continua la mappatura
+    if (hour >= 24) {
+      // Continua la timeline oltre le 22:00 per sessioni lunghe
+      return ((hour - START_HOUR) * 60 + minute) * (HOUR_HEIGHT / 60);
+    }
+    
     if (hour >= END_HOUR) return TIMELINE_HEIGHT;
     return ((hour - START_HOUR) * 60 + minute) * (HOUR_HEIGHT / 60);
   };
@@ -119,7 +128,13 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
     }
 
     const startMinutes = timeToMinutes(timesheet.start_time);
-    const endMinutes = timeToMinutes(timesheet.end_time);
+    let endMinutes = timeToMinutes(timesheet.end_time);
+    
+    // Se l'orario di fine è precedente a quello di inizio, 
+    // significa che si estende al giorno successivo
+    if (endMinutes < startMinutes) {
+      endMinutes += 24 * 60; // Aggiungi 24 ore
+    }
     const lunchStartMinutes = timesheet.lunch_start_time ? timeToMinutes(timesheet.lunch_start_time) : null;
     const lunchEndMinutes = timesheet.lunch_end_time ? timeToMinutes(timesheet.lunch_end_time) : null;
 
@@ -435,7 +450,14 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                   <TooltipProvider>
                     {timeBlocks.map((block, blockIndex) => {
                       const top = minutesToPosition(block.startMinutes);
-                      const height = minutesToPosition(block.endMinutes) - top;
+                      let bottom = minutesToPosition(block.endMinutes);
+                      
+                      // Se il blocco si estende oltre la timeline visibile, limitalo
+                      if (bottom > TIMELINE_HEIGHT) {
+                        bottom = TIMELINE_HEIGHT;
+                      }
+                      
+                      const height = bottom - top;
                       
                       if (height <= 0) return null;
 
