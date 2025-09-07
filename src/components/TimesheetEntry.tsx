@@ -81,28 +81,55 @@ const TimesheetEntry = () => {
   const loadTodayTimesheet = async () => {
     const today = new Date().toISOString().split('T')[0];
     
-    const { data, error } = await supabase
+    // Carica le timbrature di oggi
+    const { data: todayData, error: todayError } = await supabase
       .from('timesheets')
       .select('*')
       .eq('user_id', user?.id)
       .eq('date', today)
       .order('created_at', { ascending: false });
 
-    if (error) {
+    // Controlla anche se c'è una sessione aperta nei giorni precedenti
+    const { data: openSessionData, error: openSessionError } = await supabase
+      .from('timesheets')
+      .select('*')
+      .eq('user_id', user?.id)
+      .is('end_time', null)
+      .not('date', 'eq', today)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (todayError) {
       toast({
         title: "Errore",
         description: "Impossibile caricare il timesheet di oggi",
         variant: "destructive",
       });
     } else {
-      setTodayTimesheets(data || []);
-      // Trova la sessione corrente (quella senza end_time)
-      const activeSession = data?.find(t => t.start_time && !t.end_time) || null;
-      setCurrentSession(activeSession);
+      setTodayTimesheets(todayData || []);
       
-      if (activeSession) {
-        setSelectedProject(activeSession.project_id || '');
-        setNotes(activeSession.notes || '');
+      // Prima controlla se c'è una sessione attiva oggi
+      const todayActiveSession = todayData?.find(t => t.start_time && !t.end_time) || null;
+      
+      // Se non c'è sessione attiva oggi, ma c'è una sessione aperta in giorni precedenti
+      // mostra un warning ma permetti comunque di timbrare l'entrata
+      if (!todayActiveSession && openSessionData && openSessionData.length > 0) {
+        const oldOpenSession = openSessionData[0];
+        const oldDate = new Date(oldOpenSession.date).toLocaleDateString('it-IT');
+        
+        toast({
+          title: "Attenzione",
+          description: `Hai una sessione aperta dal ${oldDate} senza uscita. Segnalalo all'amministratore.`,
+          variant: "destructive",
+        });
+      }
+      
+      // Imposta la sessione corrente solo se è di oggi
+      setCurrentSession(todayActiveSession);
+      
+      if (todayActiveSession) {
+        setSelectedProject(todayActiveSession.project_id || '');
+        setNotes(todayActiveSession.notes || '');
       }
     }
   };
