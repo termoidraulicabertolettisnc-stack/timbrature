@@ -22,6 +22,7 @@ import { useRealtimeHours } from '@/hooks/use-realtime-hours';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 // Componente per mostrare ore con calcolo in tempo reale
@@ -1023,15 +1024,33 @@ function MonthlyView({
   onDelete: (id: string) => void;
 }) {
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
+  const [selectedDays, setSelectedDays] = useState<Map<string, string>>(new Map()); // Map<employeeId, selectedDate>
 
   const toggleEmployee = (userId: string) => {
     const newExpanded = new Set(expandedEmployees);
     if (newExpanded.has(userId)) {
       newExpanded.delete(userId);
+      // Reset selected day when collapsing
+      const newSelectedDays = new Map(selectedDays);
+      newSelectedDays.delete(userId);
+      setSelectedDays(newSelectedDays);
     } else {
       newExpanded.add(userId);
     }
     setExpandedEmployees(newExpanded);
+  };
+
+  const selectDayForEmployee = (employeeId: string, date: string) => {
+    const newSelectedDays = new Map(selectedDays);
+    newSelectedDays.set(employeeId, date);
+    setSelectedDays(newSelectedDays);
+    
+    // Expand the employee if not already expanded
+    if (!expandedEmployees.has(employeeId)) {
+      const newExpanded = new Set(expandedEmployees);
+      newExpanded.add(employeeId);
+      setExpandedEmployees(newExpanded);
+    }
   };
 
   const formatHours = (hours: number) => {
@@ -1060,8 +1079,13 @@ function MonthlyView({
     );
   }
 
-  // Collect all timesheets for each employee
-  const getAllTimesheetsForEmployee = (employee: EmployeeMonthlyData): TimesheetWithProfile[] => {
+  // Collect all timesheets for each employee or for a specific day
+  const getTimesheetsForEmployee = (employee: EmployeeMonthlyData, specificDate?: string): TimesheetWithProfile[] => {
+    if (specificDate) {
+      const dayData = employee.days.find(day => day.date === specificDate);
+      return dayData ? dayData.timesheets : [];
+    }
+    
     const allTimesheets: TimesheetWithProfile[] = [];
     employee.days.forEach(day => {
       allTimesheets.push(...day.timesheets);
@@ -1091,17 +1115,18 @@ function MonthlyView({
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <CalendarIcon className="h-5 w-5" />
-          Vista Mensile - {format(monthStart, 'MMMM yyyy', { locale: it })}
-        </CardTitle>
-        <CardDescription>
-          Ore per giorno del mese ({monthlyData.length} dipendenti)
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <TooltipProvider>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarIcon className="h-5 w-5" />
+            Vista Mensile - {format(monthStart, 'MMMM yyyy', { locale: it })}
+          </CardTitle>
+          <CardDescription>
+            Ore per giorno del mese ({monthlyData.length} dipendenti)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
         {monthlyData.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             Nessun timesheet trovato per il mese selezionato
@@ -1166,29 +1191,60 @@ function MonthlyView({
                                 <div 
                                   key={day.toISOString()}
                                   className={`
-                                    p-2 text-center border rounded-sm min-h-[60px] flex flex-col justify-center
+                                    p-2 text-center border rounded-sm min-h-[60px] flex flex-col justify-center cursor-pointer
+                                    hover:bg-secondary/50 transition-colors
                                     ${isToday ? 'bg-primary/10 border-primary' : 'bg-secondary/30 border-border'}
-                                    ${dayData && dayData.total_hours > 0 ? 'bg-success/10' : ''}
+                                    ${dayData && dayData.total_hours > 0 ? 'bg-success/10 hover:bg-success/20' : ''}
+                                    ${selectedDays.get(employee.user_id) === format(day, 'yyyy-MM-dd') ? 'ring-2 ring-primary bg-primary/20' : ''}
                                   `}
+                                  onClick={() => dayData && dayData.total_hours > 0 && selectDayForEmployee(employee.user_id, format(day, 'yyyy-MM-dd'))}
                                 >
                                   <div className="text-xs font-medium mb-1">
                                     {format(day, 'dd')}
                                   </div>
                                    {dayData && dayData.total_hours > 0 ? (
                                      <div className="space-y-1">
-                                       <div className="text-xs">
-                                         <span className="text-muted-foreground">O:</span> {formatHours(dayData.total_hours - dayData.overtime_hours)}
-                                       </div>
+                                       <Tooltip>
+                                         <TooltipTrigger asChild>
+                                           <div className="text-xs">
+                                             <span className="text-muted-foreground">O:</span> {formatHours(dayData.total_hours - dayData.overtime_hours)}
+                                           </div>
+                                         </TooltipTrigger>
+                                         <TooltipContent>
+                                           <p>Ore Ordinarie</p>
+                                         </TooltipContent>
+                                       </Tooltip>
                                        {dayData.overtime_hours > 0 && (
-                                         <div className="text-xs text-orange-600">
-                                           <span className="text-muted-foreground">S:</span> {formatHours(dayData.overtime_hours)}
-                                         </div>
+                                         <Tooltip>
+                                           <TooltipTrigger asChild>
+                                             <div className="text-xs text-orange-600">
+                                               <span className="text-muted-foreground">S:</span> {formatHours(dayData.overtime_hours)}
+                                             </div>
+                                           </TooltipTrigger>
+                                           <TooltipContent>
+                                             <p>Ore Straordinarie</p>
+                                           </TooltipContent>
+                                         </Tooltip>
                                        )}
-                                       <div className="text-xs font-semibold border-t pt-1">
-                                         {formatHours(dayData.total_hours)}
-                                       </div>
+                                       <Tooltip>
+                                         <TooltipTrigger asChild>
+                                           <div className="text-xs font-semibold border-t pt-1">
+                                             {formatHours(dayData.total_hours)}
+                                           </div>
+                                         </TooltipTrigger>
+                                         <TooltipContent>
+                                           <p>Ore Totali Giornata</p>
+                                         </TooltipContent>
+                                       </Tooltip>
                                        {dayData.meal_vouchers > 0 && (
-                                         <div className="text-xs">🍽️</div>
+                                         <Tooltip>
+                                           <TooltipTrigger asChild>
+                                             <div className="text-xs">🍽️</div>
+                                           </TooltipTrigger>
+                                           <TooltipContent>
+                                             <p>Buono Pasto Maturato</p>
+                                           </TooltipContent>
+                                         </Tooltip>
                                        )}
                                      </div>
                                   ) : (
@@ -1206,8 +1262,27 @@ function MonthlyView({
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <div className="mt-2 ml-6">
+                  {selectedDays.has(employee.user_id) ? (
+                    <div className="mb-4">
+                      <h4 className="text-sm font-medium mb-2">
+                        Dettagli per {format(parseISO(selectedDays.get(employee.user_id)!), 'dd/MM/yyyy', { locale: it })}
+                      </h4>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => {
+                          const newSelectedDays = new Map(selectedDays);
+                          newSelectedDays.delete(employee.user_id);
+                          setSelectedDays(newSelectedDays);
+                        }}
+                        className="mb-2"
+                      >
+                        Mostra tutto il mese
+                      </Button>
+                    </div>
+                  ) : null}
                   <TimesheetDetailsTable 
-                    timesheets={getAllTimesheetsForEmployee(employee)} 
+                    timesheets={getTimesheetsForEmployee(employee, selectedDays.get(employee.user_id))} 
                     onEdit={onEdit}
                     onDelete={onDelete} 
                   />
@@ -1218,6 +1293,7 @@ function MonthlyView({
         )}
       </CardContent>
     </Card>
+    </TooltipProvider>
   );
 }
 
