@@ -73,10 +73,13 @@ export default function PayrollDashboard() {
   const getAbsenceTypeLabel = (type: string | null) => {
     if (!type) return '';
     const labels: { [key: string]: string } = {
+      'assenza_ingiustificata': 'A',
       'ferie': 'F',
-      'malattia': 'M',
+      'festivita': 'FS',
       'infortunio': 'I',
-      'permesso_non_retribuito': 'P'
+      'malattia': 'M',
+      'permesso_retribuito': 'PR',
+      'permesso_non_retribuito': 'PNR'
     };
     return labels[type] || type.charAt(0).toUpperCase();
   };
@@ -243,6 +246,15 @@ export default function PayrollDashboard() {
     }
     headers.push('Tot', 'Buoni Pasto');
     
+    // Add month title
+    const monthTitleRow = worksheet.addRow([`BUSTE PAGA - ${monthName.toUpperCase()} ${year}`]);
+    monthTitleRow.getCell(1).font = { bold: true, size: 14 };
+    monthTitleRow.getCell(1).alignment = { horizontal: 'center' };
+    worksheet.mergeCells(`A1:${String.fromCharCode(65 + headers.length - 1)}1`);
+    
+    // Add empty row
+    worksheet.addRow([]);
+    
     // Add headers row
     const headerRow = worksheet.addRow(headers);
     
@@ -380,6 +392,13 @@ export default function PayrollDashboard() {
         column.width = 15; // Buoni Pasto column
       }
     });
+    
+    // Add legend
+    worksheet.addRow([]);
+    worksheet.addRow(['LEGENDA:']);
+    worksheet.addRow(['O: Ore Ordinarie', '', 'S: Ore Straordinario', '', 'N: Giorni di Assenza']);
+    worksheet.addRow(['A: Assenza Ingiustificata', '', 'F: Ferie', '', 'FS: Festività']);
+    worksheet.addRow(['I: Infortunio', '', 'M: Malattia', '', 'PR: Permesso Retribuito', '', 'PNR: Permesso non retribuito']);
     
     // Generate filename and save
     const fileName = `Buste_Pago_${monthName}_${year}.xlsx`;
@@ -640,8 +659,8 @@ export default function PayrollDashboard() {
 
       {/* Compact Legend */}
       <Card className="p-4">
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex gap-4">
+        <div className="space-y-2">
+          <div className="flex items-center gap-6 text-xs">
             <span className="flex items-center gap-1">
               <div className="w-3 h-3 bg-green-100 border border-green-300 rounded"></div>
               <strong>O:</strong> Ore Ordinarie
@@ -652,14 +671,17 @@ export default function PayrollDashboard() {
             </span>
             <span className="flex items-center gap-1">
               <div className="w-3 h-3 bg-red-100 border border-red-300 rounded"></div>
-              <strong>A:</strong> Giorni di Assenza
+              <strong>N:</strong> Giorni di Assenza
             </span>
           </div>
-          <div className="flex gap-4 text-muted-foreground">
+          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+            <span><strong>A:</strong> Assenza Ingiustificata</span>
             <span><strong>F:</strong> Ferie</span>
-            <span><strong>M:</strong> Malattia</span>
+            <span><strong>FS:</strong> Festività</span>
             <span><strong>I:</strong> Infortunio</span>
-            <span><strong>P:</strong> Permesso</span>
+            <span><strong>M:</strong> Malattia</span>
+            <span><strong>PR:</strong> Permesso Retribuito</span>
+            <span><strong>PNR:</strong> Permesso non retribuito</span>
           </div>
         </div>
       </Card>
