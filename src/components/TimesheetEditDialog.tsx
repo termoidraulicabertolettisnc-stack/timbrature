@@ -24,6 +24,7 @@ import LocationTrackingRoute from './LocationTrackingRoute';
 interface TimesheetWithProfile {
   id: string;
   date: string;
+  end_date: string | null;
   start_time: string | null;
   end_time: string | null;
   lunch_start_time: string | null;

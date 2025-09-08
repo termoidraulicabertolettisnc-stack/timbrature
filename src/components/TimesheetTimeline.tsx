@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { format, parseISO, eachHourOfInterval, addHours, startOfHour, isSameHour, differenceInMinutes, isValid } from 'date-fns';
+import { format, parseISO, eachHourOfInterval, addHours, startOfHour, isSameHour, differenceInMinutes, isValid, isSameDay, addDays } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 interface TimesheetWithProfile {
   id: string;
   date: string;
+  end_date: string | null;
   start_time: string | null;
   end_time: string | null;
   lunch_start_time: string | null;
@@ -46,6 +47,8 @@ interface TimeBlock {
   endMinutes: number;
   isLunchBreak: boolean;
   type: 'work' | 'overtime' | 'night';
+  startDate: string;
+  endDate: string;
 }
 
 export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelineProps) {
@@ -96,8 +99,8 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
       const startMinutes = timeToMinutes(ts.start_time);
       const endMinutes = timeToMinutes(ts.end_time);
       
-      // Per sessioni che attraversano la mezzanotte
-      if (endMinutes < startMinutes) {
+      // Per sessioni multi-giorno usando end_date
+      if (ts.end_date && ts.end_date !== ts.date) {
         // La sessione continua fino al giorno dopo
         const actualEndHour = Math.floor(endMinutes / 60);
         if (actualEndHour > 0) { // Se finisce dopo mezzanotte
@@ -150,17 +153,12 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
 
     if (uniqueTimesheets.length === 0) return [];
 
-    // Cerca anche timesheets del giorno precedente che potrebbero estendersi a questo giorno
-    const prevDayDate = new Date(dayDate);
-    prevDayDate.setDate(prevDayDate.getDate() - 1);
-    const prevDayStr = format(prevDayDate, 'yyyy-MM-dd');
-    
-    // Trova tutti i timesheets che iniziano il giorno prima ma si estendono a oggi
+    // Cerca anche timesheets che si estendono a questo giorno usando il nuovo campo end_date
     const extendedTimesheets = timesheets.filter(ts => {
-      if (ts.date !== prevDayStr || !ts.start_time || !ts.end_time) return false;
-      const startMinutes = timeToMinutes(ts.start_time);
-      const endMinutes = timeToMinutes(ts.end_time);
-      return endMinutes < startMinutes; // Si estende al giorno successivo
+      if (!ts.end_date || !ts.start_time || !ts.end_time) return false;
+      // Se end_date è diversa da date, è una sessione multi-giorno
+      const currentDayStr = format(dayDate, 'yyyy-MM-dd');
+      return ts.end_date === currentDayStr && ts.date !== currentDayStr;
     });
 
     const allRelevantTimesheets = [...uniqueTimesheets, ...extendedTimesheets];
@@ -172,11 +170,14 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
       const startMinutes = timeToMinutes(timesheet.start_time);
       const rawEndMinutes = timeToMinutes(timesheet.end_time);
       
-      // Se l'orario di fine è precedente a quello di inizio, si estende al giorno successivo
-      const extendsToNextDay = rawEndMinutes < startMinutes;
-      
-      const isFromPreviousDay = timesheet.date === prevDayStr;
       const currentDayStr = format(dayDate, 'yyyy-MM-dd');
+      const timesheetStartDate = timesheet.date;
+      const timesheetEndDate = timesheet.end_date || timesheet.date;
+      
+      // Determina se è una sessione multi-giorno
+      const isMultiDaySession = timesheetEndDate !== timesheetStartDate;
+      const isFromPreviousDay = timesheetStartDate !== currentDayStr && timesheetEndDate === currentDayStr;
+      const isToNextDay = timesheetStartDate === currentDayStr && timesheetEndDate !== currentDayStr;
       
       let actualStartMinutes: number;
       let actualEndMinutes: number;
@@ -185,15 +186,19 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
         // Questo timesheet inizia il giorno prima, mostra solo la parte di oggi
         actualStartMinutes = 0; // Inizia a mezzanotte
         actualEndMinutes = rawEndMinutes; // Finisce all'orario originale del giorno successivo
-      } else if (extendsToNextDay) {
+      } else if (isToNextDay) {
         // Questo timesheet inizia oggi ma si estende domani, mostra solo la parte di oggi
         actualStartMinutes = startMinutes;
         actualEndMinutes = 24 * 60; // Finisce a mezzanotte (1440 minuti)
-      } else {
+      } else if (!isMultiDaySession && timesheetStartDate === currentDayStr) {
         // Timesheet normale dello stesso giorno
         actualStartMinutes = startMinutes;
         actualEndMinutes = rawEndMinutes;
+      } else {
+        // Non è il giorno giusto per questo timesheet
+        return;
       }
+
       const lunchStartMinutes = timesheet.lunch_start_time ? timeToMinutes(timesheet.lunch_start_time) : null;
       const lunchEndMinutes = timesheet.lunch_end_time ? timeToMinutes(timesheet.lunch_end_time) : null;
 
@@ -220,7 +225,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
             startMinutes: actualStartMinutes,
             endMinutes: lunchStartMinutes,
             isLunchBreak: false,
-            type: 'night'
+            type: 'night',
+            startDate: timesheetStartDate,
+            endDate: timesheetEndDate
           });
           
           // Pausa pranzo
@@ -229,7 +236,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
             startMinutes: lunchStartMinutes,
             endMinutes: lunchEndMinutes,
             isLunchBreak: true,
-            type: 'work'
+            type: 'work',
+            startDate: timesheetStartDate,
+            endDate: timesheetEndDate
           });
           
           // Seconda parte: dalla pausa pranzo alla fine
@@ -238,7 +247,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
             startMinutes: lunchEndMinutes,
             endMinutes: actualEndMinutes,
             isLunchBreak: false,
-            type: 'night'
+            type: 'night',
+            startDate: timesheetStartDate,
+            endDate: timesheetEndDate
           });
         } else {
           // Blocco continuo notturno
@@ -247,7 +258,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
             startMinutes: actualStartMinutes,
             endMinutes: actualEndMinutes,
             isLunchBreak: false,
-            type: 'night'
+            type: 'night',
+            startDate: timesheetStartDate,
+            endDate: timesheetEndDate
           });
         }
       } else if (overtimeHours > 0 && totalHours > 8) {
@@ -273,7 +286,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
               startMinutes: actualStartMinutes,
               endMinutes: lunchStartMinutes,
               isLunchBreak: false,
-              type: 'work'
+              type: 'work',
+              startDate: timesheetStartDate,
+              endDate: timesheetEndDate
             });
           
           // Pausa pranzo
@@ -282,7 +297,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
             startMinutes: lunchStartMinutes,
             endMinutes: lunchEndMinutes,
             isLunchBreak: true,
-            type: 'work'
+            type: 'work',
+            startDate: timesheetStartDate,
+            endDate: timesheetEndDate
           });
           
           // Determina se ci sono ancora ore ordinarie dopo la pausa
@@ -293,7 +310,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
               startMinutes: lunchEndMinutes,
               endMinutes: overtimeStartMinutes,
               isLunchBreak: false,
-              type: 'work'
+              type: 'work',
+              startDate: timesheetStartDate,
+              endDate: timesheetEndDate
             });
             
               // Ore straordinarie
@@ -302,7 +321,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                 startMinutes: overtimeStartMinutes,
                 endMinutes: actualEndMinutes,
                 isLunchBreak: false,
-                type: 'overtime'
+                type: 'overtime',
+                startDate: timesheetStartDate,
+                endDate: timesheetEndDate
               });
           } else {
               // Straordinari iniziano subito dopo la pausa
@@ -311,7 +332,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                 startMinutes: lunchEndMinutes,
                 endMinutes: actualEndMinutes,
                 isLunchBreak: false,
-                type: 'overtime'
+                type: 'overtime',
+                startDate: timesheetStartDate,
+                endDate: timesheetEndDate
               });
           }
         } else {
@@ -322,7 +345,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
               startMinutes: actualStartMinutes,
               endMinutes: overtimeStartMinutes,
               isLunchBreak: false,
-              type: 'work'
+              type: 'work',
+              startDate: timesheetStartDate,
+              endDate: timesheetEndDate
             });
           
           // Straordinari prima della pausa
@@ -331,7 +356,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
             startMinutes: overtimeStartMinutes,
             endMinutes: lunchStartMinutes,
             isLunchBreak: false,
-            type: 'overtime'
+            type: 'overtime',
+            startDate: timesheetStartDate,
+            endDate: timesheetEndDate
           });
           
           // Pausa pranzo
@@ -340,7 +367,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
             startMinutes: lunchStartMinutes,
             endMinutes: lunchEndMinutes,
             isLunchBreak: true,
-            type: 'work'
+            type: 'work',
+            startDate: timesheetStartDate,
+            endDate: timesheetEndDate
           });
           
             // Straordinari dopo la pausa
@@ -349,7 +378,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
               startMinutes: lunchEndMinutes,
               endMinutes: actualEndMinutes,
               isLunchBreak: false,
-              type: 'overtime'
+              type: 'overtime',
+              startDate: timesheetStartDate,
+              endDate: timesheetEndDate
             });
         }
         } else {
@@ -360,7 +391,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
             startMinutes: actualStartMinutes,
             endMinutes: overtimeStartMinutes,
             isLunchBreak: false,
-            type: 'work'
+            type: 'work',
+            startDate: timesheetStartDate,
+            endDate: timesheetEndDate
           });
           
           // Ore straordinarie
@@ -369,7 +402,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
             startMinutes: overtimeStartMinutes,
             endMinutes: actualEndMinutes,
             isLunchBreak: false,
-            type: 'overtime'
+            type: 'overtime',
+            startDate: timesheetStartDate,
+            endDate: timesheetEndDate
           });
         }
       } else {
@@ -384,7 +419,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
             startMinutes: actualStartMinutes,
             endMinutes: lunchStartMinutes,
             isLunchBreak: false,
-            type: 'work'
+            type: 'work',
+            startDate: timesheetStartDate,
+            endDate: timesheetEndDate
           });
           
           // Pausa pranzo
@@ -393,7 +430,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
             startMinutes: lunchStartMinutes,
             endMinutes: lunchEndMinutes,
             isLunchBreak: true,
-            type: 'work'
+            type: 'work',
+            startDate: timesheetStartDate,
+            endDate: timesheetEndDate
           });
           
           // Seconda parte: dalla pausa pranzo alla fine
@@ -402,7 +441,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
             startMinutes: lunchEndMinutes,
             endMinutes: actualEndMinutes,
             isLunchBreak: false,
-            type: 'work'
+            type: 'work',
+            startDate: timesheetStartDate,
+            endDate: timesheetEndDate
           });
         } else {
           // Blocco continuo senza pausa pranzo
@@ -411,7 +452,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
             startMinutes: actualStartMinutes,
             endMinutes: actualEndMinutes,
             isLunchBreak: false,
-            type: 'work'
+            type: 'work',
+            startDate: timesheetStartDate,
+            endDate: timesheetEndDate
           });
         }
       }
@@ -449,6 +492,19 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
     }
   };
 
+  const formatTimeWithDate = (timeString: string | null, dateString: string): string => {
+    if (!timeString) return '';
+    try {
+      const time = parseISO(timeString);
+      const date = parseISO(dateString);
+      if (!isValid(time) || !isValid(date)) return timeString;
+      
+      return `${format(date, 'dd/MM')} ${format(time, 'HH:mm')}`;
+    } catch {
+      return timeString;
+    }
+  };
+
   const formatHours = (hours: number | null) => {
     if (!hours) return '0h';
     return `${hours.toFixed(1)}h`;
@@ -456,13 +512,11 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
 
   const dayNames = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 
-  // Estendi i giorni per includere domenica se ci sono sessioni che si estendono
+  // Estendi i giorni per includere giorni necessari per sessioni multi-giorno
   const extendedDays = [...weekDays];
   const needsExtraDay = timesheets.some(ts => {
-    if (!ts.start_time || !ts.end_time) return false;
-    const startMinutes = timeToMinutes(ts.start_time);
-    const endMinutes = timeToMinutes(ts.end_time);
-    return endMinutes < startMinutes; // Si estende al giorno successivo
+    if (!ts.end_date) return false;
+    return ts.end_date !== ts.date; // Ha una data di fine diversa
   });
 
   if (needsExtraDay && weekDays.length === 6) {
@@ -697,7 +751,15 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                               {/* Informazioni generali timesheet */}
                               <div className="border-t pt-2 mt-2">
                                 <div className="text-sm">
-                                  <span className="font-medium">Giornata completa:</span> {formatTime(block.timesheet.start_time)} - {formatTime(block.timesheet.end_time)}
+                                  <span className="font-medium">Giornata completa:</span> 
+                                  {block.startDate !== block.endDate ? (
+                                    <>
+                                      {formatTimeWithDate(block.timesheet.start_time, block.startDate)} - {formatTimeWithDate(block.timesheet.end_time, block.endDate)}
+                                      <Badge variant="outline" className="text-xs ml-2">Multi-giorno</Badge>
+                                    </>
+                                  ) : (
+                                    `${formatTime(block.timesheet.start_time)} - ${formatTime(block.timesheet.end_time)}`
+                                  )}
                                 </div>
                                 <div className="text-sm">
                                   <span className="font-medium">Ore totali:</span> {formatHours(block.timesheet.total_hours)}
