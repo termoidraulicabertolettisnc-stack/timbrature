@@ -356,9 +356,14 @@ export default function AdminTimesheets() {
 
       if (startDayIndex !== -1) {
         const dayData = employee.days[startDayIndex];
-        dayData.total_hours += timesheet.total_hours || 0;
-        dayData.overtime_hours += timesheet.overtime_hours || 0;
-        dayData.night_hours += timesheet.night_hours || 0;
+        // Per timesheet in corso, calcola le ore in tempo reale
+        const hoursToAdd = timesheet.total_hours || 0;
+        const overtimeToAdd = timesheet.overtime_hours || 0;
+        const nightToAdd = timesheet.night_hours || 0;
+        
+        dayData.total_hours += hoursToAdd;
+        dayData.overtime_hours += overtimeToAdd;
+        dayData.night_hours += nightToAdd;
         if (timesheet.meal_voucher_earned) dayData.meal_vouchers += 1;
         dayData.timesheets.push(timesheet);
       }
@@ -497,6 +502,23 @@ export default function AdminTimesheets() {
     }
 
     setDateFilter(format(newDate, 'yyyy-MM-dd'));
+  };
+
+  const goToToday = () => {
+    setDateFilter(format(new Date(), 'yyyy-MM-dd'));
+  };
+
+  const getTodayButtonText = () => {
+    switch (activeView) {
+      case 'daily':
+        return 'Oggi';
+      case 'weekly':
+        return 'Questa settimana';
+      case 'monthly':
+        return 'Questo mese';
+      default:
+        return 'Oggi';
+    }
   };
 
   const getDateRangeText = () => {
@@ -659,9 +681,12 @@ export default function AdminTimesheets() {
                 />
               </div>
 
-              <div className="flex items-end">
-                <Button variant="outline" onClick={loadTimesheets} className="w-full">
+              <div className="flex items-end gap-2">
+                <Button variant="outline" onClick={loadTimesheets} className="flex-1">
                   Aggiorna
+                </Button>
+                <Button variant="default" onClick={goToToday} className="flex-1">
+                  {getTodayButtonText()}
                 </Button>
               </div>
             </div>
@@ -959,19 +984,23 @@ function WeeklyView({
                       {employee.days.map((day, index) => (
                         <div key={day.date} className="text-center min-w-[60px]">
                           <div className="text-xs text-muted-foreground">{dayNames[index]}</div>
-                          <div className="space-y-1">
-                            <div className="text-xs">
-                              <span className="text-muted-foreground">Ord:</span> {formatHours(day.total_hours - day.overtime_hours)}
-                            </div>
-                            {day.overtime_hours > 0 && (
-                              <div className="text-xs text-orange-600">
-                                <span className="text-muted-foreground">Str:</span> {formatHours(day.overtime_hours)}
-                              </div>
-                            )}
-                            <div className="text-sm font-semibold border-t pt-1">
-                              {formatHours(day.total_hours)}
-                            </div>
-                          </div>
+                           <div className="space-y-1">
+                             <div className="text-xs">
+                               <span className="text-muted-foreground">Ord:</span> {day.total_hours - day.overtime_hours > 0 ? formatHours(day.total_hours - day.overtime_hours) : (day.timesheets.length > 0 ? '0h' : '-')}
+                             </div>
+                             {day.overtime_hours > 0 && (
+                               <div className="text-xs text-orange-600">
+                                 <span className="text-muted-foreground">Str:</span> {formatHours(day.overtime_hours)}
+                               </div>
+                             )}
+                             <div className="text-sm font-semibold border-t pt-1">
+                               {day.total_hours > 0 ? formatHours(day.total_hours) : (day.timesheets.length > 0 ? (
+                                 day.timesheets.some(t => !t.end_time) ? (
+                                   <span className="text-blue-600">In corso</span>
+                                 ) : '0h'
+                               ) : '-')}
+                             </div>
+                           </div>
                         </div>
                       ))}
                       <div className="text-center min-w-[100px] bg-secondary/50 px-2 py-1 rounded">
