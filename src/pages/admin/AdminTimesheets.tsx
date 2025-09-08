@@ -464,6 +464,11 @@ export default function AdminTimesheets() {
     }
   };
 
+  const handleEditTimesheetFromTimeline = (timesheet: TimesheetWithProfile) => {
+    setEditingTimesheet(timesheet);
+    setEditDialogOpen(true);
+  };
+
   const handleEditSuccess = () => {
     loadTimesheets();
     setEditingTimesheet(null);
@@ -888,6 +893,7 @@ function WeeklyView({
                     <TimesheetTimeline 
                       timesheets={getAllTimesheetsForEmployee(employee)} 
                       weekDays={weekDays}
+                      onTimesheetClick={handleEditTimesheetFromTimeline}
                     />
                   </div>
                 </CollapsibleContent>

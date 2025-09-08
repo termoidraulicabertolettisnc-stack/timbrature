@@ -21,9 +21,10 @@ interface TimeBlock {
 interface TimesheetTimelineProps {
   timesheets: TimesheetWithProfile[];
   weekDays: Date[];
+  onTimesheetClick?: (timesheet: TimesheetWithProfile) => void;
 }
 
-export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelineProps) {
+export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: TimesheetTimelineProps) {
   const [selectedTimesheet, setSelectedTimesheet] = useState<string | null>(null);
 
   // Orari di riferimento dinamici
@@ -634,9 +635,15 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                                 height: Math.max(height, 4),
                                 minHeight: '4px'
                               }}
-                              onClick={() => setSelectedTimesheet(
-                                selectedTimesheet === block.timesheet.id ? null : block.timesheet.id
-                              )}
+                              onClick={() => {
+                                setSelectedTimesheet(
+                                  selectedTimesheet === block.timesheet.id ? null : block.timesheet.id
+                                );
+                                // Apri il dialog di modifica se è fornita la callback
+                                if (onTimesheetClick) {
+                                  onTimesheetClick(block.timesheet);
+                                }
+                              }}
                             >
                               {(() => {
                                 // Usa le ore effettive dal timesheet invece del calcolo visivo
