@@ -90,9 +90,6 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
       if (authError) throw authError;
       if (!currentUser) throw new Error('Utente non autenticato');
 
-      console.log('Current user:', currentUser.id);
-      console.log('Inserting absence for user:', formData.user_id);
-
       // Ottieni il company_id del dipendente selezionato
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
@@ -109,18 +106,60 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
         throw new Error('Company ID non trovato per il dipendente');
       }
 
-      console.log('Company ID:', profileData.company_id);
-
       // Ottieni tutti i giorni nel periodo selezionato
       const days = eachDayOfInterval({
         start: formData.date_from,
         end: formData.date_to
       });
 
-      console.log('Days to insert:', days.length);
+      // Controlla se esistono già assenze dello stesso tipo per le stesse date
+      const dateStrings = days.map(day => format(day, 'yyyy-MM-dd'));
+      
+      const { data: existingAbsences, error: checkError } = await supabase
+        .from('employee_absences')
+        .select('date, absence_type')
+        .eq('user_id', formData.user_id)
+        .eq('absence_type', formData.absence_type)
+        .in('date', dateStrings);
 
-      // Prepara i dati per l'inserimento
-      const absences = days.map(day => ({
+      if (checkError) {
+        console.error('Error checking existing absences:', checkError);
+        throw checkError;
+      }
+
+      // Filtra le date che non hanno già assenze dello stesso tipo
+      const existingDates = new Set(existingAbsences?.map(abs => abs.date) || []);
+      const availableDays = days.filter(day => !existingDates.has(format(day, 'yyyy-MM-dd')));
+      const conflictingDays = days.filter(day => existingDates.has(format(day, 'yyyy-MM-dd')));
+
+      // Se ci sono conflitti, chiedi conferma all'utente
+      if (conflictingDays.length > 0) {
+        const conflictDatesStr = conflictingDays.map(d => format(d, 'dd/MM/yyyy')).join(', ');
+        
+        if (availableDays.length === 0) {
+          // Tutti i giorni sono in conflitto
+          toast({
+            title: "Assenze già esistenti",
+            description: `Esiste già un'assenza di tipo "${getAbsenceTypeLabel(formData.absence_type)}" per tutte le date selezionate (${conflictDatesStr}). Seleziona date diverse.`,
+            variant: "destructive",
+          });
+          return;
+        } else {
+          // Alcuni giorni sono in conflitto
+          const proceed = window.confirm(
+            `Attenzione: Esistono già assenze di tipo "${getAbsenceTypeLabel(formData.absence_type)}" per le seguenti date: ${conflictDatesStr}.\n\n` +
+            `Vuoi procedere inserendo le assenze solo per le date disponibili (${availableDays.length} giorni)?`
+          );
+          
+          if (!proceed) {
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
+      // Prepara i dati per l'inserimento solo per le date disponibili
+      const absences = availableDays.map(day => ({
         user_id: formData.user_id,
         company_id: profileData.company_id,
         date: format(day, 'yyyy-MM-dd'),
@@ -130,9 +169,16 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
         created_by: currentUser.id
       }));
 
-      console.log('Inserting absences:', absences);
+      if (absences.length === 0) {
+        toast({
+          title: "Nessuna assenza da inserire",
+          description: "Tutte le date selezionate hanno già assenze dello stesso tipo.",
+          variant: "destructive",
+        });
+        return;
+      }
 
-      // Inserisci tutte le assenze
+      // Inserisci le assenze disponibili
       const { error } = await supabase
         .from('employee_absences')
         .insert(absences);
@@ -142,11 +188,14 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
         throw error;
       }
 
-      console.log('Absences inserted successfully');
+      let successMessage = `${absences.length} giorni di assenza inseriti con successo`;
+      if (conflictingDays.length > 0) {
+        successMessage += ` (saltati ${conflictingDays.length} giorni già presenti)`;
+      }
 
       toast({
         title: "Successo",
-        description: `${days.length} giorni di assenza inseriti con successo`,
+        description: successMessage,
       });
 
       onSuccess();
