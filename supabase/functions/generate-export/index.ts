@@ -163,10 +163,6 @@ serve(async (req) => {
       return row;
     }) || [];
 
-    let fileContent: string;
-    let contentType: string;
-    let filename: string;
-
     // Generate file based on format
     let responseBody: string;
     let contentType: string;
