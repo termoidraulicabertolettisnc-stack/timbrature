@@ -51,26 +51,63 @@ interface TimeBlock {
 export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelineProps) {
   const [selectedTimesheet, setSelectedTimesheet] = useState<string | null>(null);
 
-  // Orari di riferimento (6:00 - 22:00)
+  // Orari di riferimento dinamici
   const START_HOUR = 6;
-  const END_HOUR = 22;
-  const TOTAL_HOURS = END_HOUR - START_HOUR;
   const HOUR_HEIGHT = 60; // pixels per hour
+  
+  // Calcola l'ora di fine dinamicamente basandosi sui timesheet
+  const calculateDynamicEndHour = (): number => {
+    let maxHour = 22; // Default end hour
+    
+    timesheets.forEach(ts => {
+      if (!ts.start_time || !ts.end_time) return;
+      
+      const startMinutes = timeToMinutes(ts.start_time);
+      const endMinutes = timeToMinutes(ts.end_time);
+      
+      // Per sessioni che attraversano la mezzanotte
+      if (endMinutes < startMinutes) {
+        // La sessione continua fino al giorno dopo
+        const actualEndHour = Math.floor(endMinutes / 60);
+        if (actualEndHour > 0) { // Se finisce dopo mezzanotte
+          maxHour = Math.max(maxHour, 24 + actualEndHour + 1);
+        }
+      } else {
+        // Sessione normale dello stesso giorno
+        const endHour = Math.floor(endMinutes / 60);
+        maxHour = Math.max(maxHour, endHour + 1);
+      }
+    });
+    
+    return maxHour;
+  };
+  
+  const DYNAMIC_END_HOUR = calculateDynamicEndHour();
+  const TOTAL_HOURS = DYNAMIC_END_HOUR - START_HOUR;
   const TIMELINE_HEIGHT = TOTAL_HOURS * HOUR_HEIGHT;
 
-  // Genera le ore di riferimento
-  const timelineHours = Array.from({ length: TOTAL_HOURS + 1 }, (_, i) => START_HOUR + i);
+  // Genera le ore di riferimento dinamicamente
+  const timelineHours = Array.from({ length: TOTAL_HOURS + 1 }, (_, i) => {
+    const hour = START_HOUR + i;
+    return hour > 24 ? hour - 24 : hour; // Gestisce il passaggio dopo mezzanotte
+  });
 
   // Converte minuti dal midnight in posizione Y
   const minutesToPosition = (minutes: number): number => {
     const hour = Math.floor(minutes / 60);
     const minute = minutes % 60;
     
-    // Limita la visualizzazione al range 6:00-22:00
     if (hour < START_HOUR) return 0;
-    if (hour >= END_HOUR) return TIMELINE_HEIGHT;
     
-    return ((hour - START_HOUR) * 60 + minute) * (HOUR_HEIGHT / 60);
+    // Per ore dopo mezzanotte (es. 01:00 = 25 nell'ora estesa)
+    let adjustedHour = hour;
+    if (hour < START_HOUR && DYNAMIC_END_HOUR > 24) {
+      adjustedHour = hour + 24;
+    }
+    
+    if (adjustedHour >= DYNAMIC_END_HOUR) return TIMELINE_HEIGHT;
+    
+    return ((adjustedHour - START_HOUR) * 60 + minute) * (HOUR_HEIGHT / 60);
   };
 
   // Converte timestamp in minuti dal midnight
@@ -450,15 +487,27 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
           <div className="flex-shrink-0 w-16">
             <div className="h-8 mb-2" /> {/* Spazio per header giorni */}
             <div className="relative" style={{ height: TIMELINE_HEIGHT }}>
-              {timelineHours.map(hour => (
-                <div
-                  key={hour}
-                  className="absolute left-0 text-sm text-muted-foreground font-medium"
-                  style={{ top: (hour - START_HOUR) * HOUR_HEIGHT - 8 }}
-                >
-                  {hour.toString().padStart(2, '0')}:00
-                </div>
-              ))}
+              {timelineHours.map((hour, index) => {
+                const displayHour = hour > 24 ? hour - 24 : hour;
+                const hourLabel = displayHour.toString().padStart(2, '0') + ':00';
+                const isAfterMidnight = hour > 24 || (hour < START_HOUR && DYNAMIC_END_HOUR > 24);
+                
+                return (
+                  <div
+                    key={`${hour}-${index}`}
+                    className={cn(
+                      "absolute left-0 text-sm font-medium",
+                      isAfterMidnight ? "text-orange-500" : "text-muted-foreground"
+                    )}
+                    style={{ top: (hour - START_HOUR) * HOUR_HEIGHT - 8 }}
+                  >
+                    {hourLabel}
+                    {isAfterMidnight && (
+                      <span className="text-xs text-orange-400 ml-1">+1</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -480,13 +529,16 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                 {/* Timeline giorno */}
                 <div className="relative bg-secondary/20 border border-border rounded-lg" style={{ height: TIMELINE_HEIGHT }}>
                   {/* Griglia ore */}
-                  {timelineHours.slice(0, -1).map(hour => (
-                    <div
-                      key={hour}
-                      className="absolute left-0 right-0 border-t border-border/30"
-                      style={{ top: (hour - START_HOUR) * HOUR_HEIGHT }}
-                    />
-                  ))}
+                  {timelineHours.slice(0, -1).map((hour, index) => {
+                    const adjustedTop = hour >= 24 ? (hour - START_HOUR) * HOUR_HEIGHT : (hour - START_HOUR) * HOUR_HEIGHT;
+                    return (
+                      <div
+                        key={`grid-${hour}-${index}`}
+                        className="absolute left-0 right-0 border-t border-border/30"
+                        style={{ top: adjustedTop }}
+                      />
+                    );
+                  })}
 
                   {/* Blocchi temporali */}
                   <TooltipProvider>
