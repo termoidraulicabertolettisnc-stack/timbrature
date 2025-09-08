@@ -73,20 +73,10 @@ serve(async (req) => {
       ? exportRequest.selectedProjects 
       : [];
 
-    // Get timesheets with joins
+    // Build base query for timesheets (without joins to avoid ambiguity)
     let timesheetQuery = supabase
       .from('timesheets')
-      .select(`
-        *,
-        profiles:user_id (
-          first_name,
-          last_name,
-          email
-        ),
-        projects:project_id (
-          name
-        )
-      `)
+      .select('*')
       .gte('date', startDate)
       .lte('date', endDate);
 
@@ -98,29 +88,65 @@ serve(async (req) => {
       timesheetQuery = timesheetQuery.in('project_id', projectFilter);
     }
 
-    const { data: timesheets, error: timesheetError } = await timesheetQuery;
+    // Execute timesheet query
+    const { data: timesheets, error: timesheetError } = await timesheetQuery.order('date', { ascending: false });
 
     if (timesheetError) {
-      console.error('Error fetching timesheets:', timesheetError);
+      console.error('Timesheet query error:', timesheetError);
       throw timesheetError;
     }
 
-    // Get employee absences for the same period (only for payroll format)
+    console.log(`Found ${timesheets?.length || 0} timesheets`);
+
+    if (!timesheets || timesheets.length === 0) {
+      return new Response(JSON.stringify([]), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Get unique user IDs and project IDs from timesheets
+    const userIds = [...new Set(timesheets.map(t => t.user_id).filter(Boolean))];
+    const projectIds = [...new Set(timesheets.map(t => t.project_id).filter(Boolean))];
+
+    // Fetch user profiles separately
+    let profiles: any[] = [];
+    if (userIds.length > 0) {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('user_id, first_name, last_name, email')
+        .in('user_id', userIds);
+
+      if (profilesError) {
+        console.error('Profiles query error:', profilesError);
+      } else {
+        profiles = profilesData || [];
+      }
+    }
+
+    // Fetch projects separately
+    let projects: any[] = [];
+    if (projectIds.length > 0) {
+      const { data: projectsData, error: projectsError } = await supabase
+        .from('projects')
+        .select('id, name')
+        .in('id', projectIds);
+
+      if (projectsError) {
+        console.error('Projects query error:', projectsError);
+      } else {
+        projects = projectsData || [];
+      }
+    }
+
+    // Get employee absences for payroll format
     let absences: any[] = [];
-    if (exportRequest.format === 'payroll') {
+    if (exportRequest.format === 'payroll' && employeeFilter.length > 0) {
       const { data: absencesData, error: absenceError } = await supabase
         .from('employee_absences')
-        .select(`
-          *,
-          profiles:user_id (
-            first_name,
-            last_name,
-            email
-          )
-        `)
+        .select('*')
         .gte('date', startDate)
         .lte('date', endDate)
-        .in('user_id', employeeFilter.length > 0 ? employeeFilter : []);
+        .in('user_id', employeeFilter);
 
       if (absenceError) {
         console.error('Error fetching absences:', absenceError);
@@ -129,13 +155,13 @@ serve(async (req) => {
       }
     }
 
-    // Get employee settings (only for payroll format)
+    // Get employee settings for payroll format
     let employeeSettings: any[] = [];
-    if (exportRequest.format === 'payroll') {
+    if (exportRequest.format === 'payroll' && employeeFilter.length > 0) {
       const { data: settingsData, error: settingsError } = await supabase
         .from('employee_settings')
         .select('*')
-        .in('user_id', employeeFilter.length > 0 ? employeeFilter : []);
+        .in('user_id', employeeFilter);
 
       if (settingsError) {
         console.error('Error fetching employee settings:', settingsError);
@@ -144,77 +170,78 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Found ${timesheets?.length || 0} timesheets`);
-    console.log(`Found ${absences?.length || 0} absences`);
-    console.log(`Found ${employeeSettings?.length || 0} employee settings`);
-    
-    // Combine timesheets and absences for payroll format
+    console.log(`Found ${profiles.length} profiles and ${projects.length} projects`);
+
+    // Create lookup maps for better performance
+    const profileMap = new Map(profiles.map(p => [p.user_id, p]));
+    const projectMap = new Map(projects.map(p => [p.id, p]));
+
+    // Process data for export
     const combinedData: any[] = [];
     const { includedFields } = exportRequest;
     
     // Add timesheets
-    if (timesheets) {
-      timesheets.forEach((timesheet: any) => {
-        const profile = timesheet.profiles;
-        const employeeName = profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown';
-        const settings = employeeSettings?.find(s => s.user_id === timesheet.user_id);
-        
-        const record: any = {
-          employee_id: timesheet.user_id,
-          employee: employeeName,
-          date: timesheet.date,
-          is_absence: false,
-          total_hours: timesheet.total_hours || 0,
-          overtime_hours: timesheet.overtime_hours || 0,
-          meal_voucher_earned: timesheet.meal_voucher_earned || false,
-          employee_settings: settings
-        };
-        
-        // Add fields based on format and includedFields
-        if (exportRequest.format !== 'payroll') {
-          // Regular export formats
-          if (includedFields.date) record['Data'] = timesheet.date;
-          if (includedFields.employee) {
-            record['Dipendente'] = employeeName;
-            record['Email'] = profile?.email || 'N/A';
+    timesheets.forEach((timesheet: any) => {
+      const profile = profileMap.get(timesheet.user_id);
+      const project = projectMap.get(timesheet.project_id);
+      const employeeName = profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown';
+      const settings = employeeSettings?.find(s => s.user_id === timesheet.user_id);
+      
+      const record: any = {
+        employee_id: timesheet.user_id,
+        employee: employeeName,
+        date: timesheet.date,
+        is_absence: false,
+        total_hours: timesheet.total_hours || 0,
+        overtime_hours: timesheet.overtime_hours || 0,
+        meal_voucher_earned: timesheet.meal_voucher_earned || false,
+        employee_settings: settings
+      };
+      
+      // Add fields based on format and includedFields
+      if (exportRequest.format !== 'payroll') {
+        // Regular export formats
+        if (includedFields.date) record['Data'] = timesheet.date;
+        if (includedFields.employee) {
+          record['Dipendente'] = employeeName;
+          record['Email'] = profile?.email || 'N/A';
+        }
+        if (includedFields.project) {
+          record['Progetto'] = project?.name || 'N/A';
+        }
+        if (includedFields.startTime && timesheet.start_time) {
+          record['Ora Inizio'] = new Date(timesheet.start_time).toLocaleTimeString('it-IT', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          });
+        }
+        if (includedFields.endTime && timesheet.end_time) {
+          record['Ora Fine'] = new Date(timesheet.end_time).toLocaleTimeString('it-IT', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          });
+        }
+        if (includedFields.totalHours) record['Ore Totali'] = timesheet.total_hours || 0;
+        if (includedFields.overtimeHours) record['Ore Straordinario'] = timesheet.overtime_hours || 0;
+        if (includedFields.nightHours) record['Ore Notturne'] = timesheet.night_hours || 0;
+        if (includedFields.notes && timesheet.notes) record['Note'] = timesheet.notes;
+        if (includedFields.location) {
+          if (timesheet.start_location_lat && timesheet.start_location_lng) {
+            record['Posizione Inizio'] = `${timesheet.start_location_lat}, ${timesheet.start_location_lng}`;
           }
-          if (includedFields.project) {
-            record['Progetto'] = timesheet.projects?.name || 'N/A';
-          }
-          if (includedFields.startTime && timesheet.start_time) {
-            record['Ora Inizio'] = new Date(timesheet.start_time).toLocaleTimeString('it-IT', { 
-              hour: '2-digit', 
-              minute: '2-digit' 
-            });
-          }
-          if (includedFields.endTime && timesheet.end_time) {
-            record['Ora Fine'] = new Date(timesheet.end_time).toLocaleTimeString('it-IT', { 
-              hour: '2-digit', 
-              minute: '2-digit' 
-            });
-          }
-          if (includedFields.totalHours) record['Ore Totali'] = timesheet.total_hours || 0;
-          if (includedFields.overtimeHours) record['Ore Straordinario'] = timesheet.overtime_hours || 0;
-          if (includedFields.nightHours) record['Ore Notturne'] = timesheet.night_hours || 0;
-          if (includedFields.notes && timesheet.notes) record['Note'] = timesheet.notes;
-          if (includedFields.location) {
-            if (timesheet.start_location_lat && timesheet.start_location_lng) {
-              record['Posizione Inizio'] = `${timesheet.start_location_lat}, ${timesheet.start_location_lng}`;
-            }
-            if (timesheet.end_location_lat && timesheet.end_location_lng) {
-              record['Posizione Fine'] = `${timesheet.end_location_lat}, ${timesheet.end_location_lng}`;
-            }
+          if (timesheet.end_location_lat && timesheet.end_location_lng) {
+            record['Posizione Fine'] = `${timesheet.end_location_lat}, ${timesheet.end_location_lng}`;
           }
         }
-        
-        combinedData.push(record);
-      });
-    }
+      }
+      
+      combinedData.push(record);
+    });
     
     // Add absences (only for payroll format)
-    if (exportRequest.format === 'payroll' && absences) {
+    if (exportRequest.format === 'payroll' && absences.length > 0) {
       absences.forEach((absence: any) => {
-        const profile = absence.profiles;
+        const profile = profileMap.get(absence.user_id);
         const employeeName = profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown';
         const settings = employeeSettings?.find(s => s.user_id === absence.user_id);
         
