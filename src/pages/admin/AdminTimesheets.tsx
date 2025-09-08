@@ -375,8 +375,13 @@ export default function AdminTimesheets() {
         format(day, 'yyyy-MM-dd') === timesheet.date
       );
 
+      console.log(`🔍 TIMESHEET DEBUG - ID: ${timesheet.id}, Date: ${timesheet.date}, StartTime: ${timesheet.start_time}`);
+      console.log(`🔍 WEEK DAYS:`, weekDays.map(d => format(d, 'yyyy-MM-dd')));
+      console.log(`🔍 START DAY INDEX:`, startDayIndex);
+
       if (startDayIndex !== -1) {
         const dayData = employee.days[startDayIndex];
+        console.log(`🔍 ADDING TIMESHEET TO DAY ${dayData.date}:`, timesheet.id);
         // Per timesheet in corso, calcola le ore in tempo reale
         const hoursToAdd = timesheet.total_hours || 0;
         const overtimeToAdd = timesheet.overtime_hours || 0;
@@ -387,6 +392,9 @@ export default function AdminTimesheets() {
         dayData.night_hours += nightToAdd;
         if (timesheet.meal_voucher_earned) dayData.meal_vouchers += 1;
         dayData.timesheets.push(timesheet);
+        console.log(`🔍 DAY ${dayData.date} NOW HAS ${dayData.timesheets.length} TIMESHEETS`);
+      } else {
+        console.log(`🔍 TIMESHEET ${timesheet.id} NOT ADDED - NO MATCHING DAY FOUND`);
       }
 
       // Per timesheet multi-giorno, aggiungi anche al giorno di fine se diverso
