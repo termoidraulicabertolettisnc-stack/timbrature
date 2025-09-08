@@ -320,6 +320,15 @@ export default function AdminTimesheets() {
       end: addDays(weekStart, 6)
     });
 
+    console.log(`🔍 WeekDays:`, weekDays.map(d => format(d, 'yyyy-MM-dd')));
+    console.log(`🔍 FilteredTimesheets:`, filteredTimesheets.length, filteredTimesheets.map(t => ({
+      id: t.id,
+      date: t.date,
+      start_time: t.start_time,
+      end_time: t.end_time,
+      user_id: t.user_id
+    })));
+
     const employeesMap = new Map<string, EmployeeWeeklyData>();
 
     filteredTimesheets.forEach(timesheet => {
@@ -934,9 +943,16 @@ function WeeklyView({
   // Collect all timesheets for each employee
   const getAllTimesheetsForEmployee = (employee: EmployeeWeeklyData): TimesheetWithProfile[] => {
     const allTimesheets: TimesheetWithProfile[] = [];
+    console.log(`🔍 Getting timesheets for employee ${employee.first_name} ${employee.last_name}:`);
     employee.days.forEach(day => {
+      console.log(`🔍 Day ${day.date}: ${day.timesheets.length} timesheets`, day.timesheets.map(t => ({
+        id: t.id,
+        start_time: t.start_time,
+        end_time: t.end_time
+      })));
       allTimesheets.push(...day.timesheets);
     });
+    console.log(`🔍 Total timesheets for ${employee.first_name}: ${allTimesheets.length}`);
     return allTimesheets;
   };
 
