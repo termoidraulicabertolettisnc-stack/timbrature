@@ -344,17 +344,32 @@ export default function AdminTimesheets() {
       }
 
       const employee = employeesMap.get(key)!;
-      const dayIndex = weekDays.findIndex(day => 
+      
+      // Aggiungi il timesheet al giorno di inizio
+      const startDayIndex = weekDays.findIndex(day => 
         format(day, 'yyyy-MM-dd') === timesheet.date
       );
 
-      if (dayIndex !== -1) {
-        const dayData = employee.days[dayIndex];
+      if (startDayIndex !== -1) {
+        const dayData = employee.days[startDayIndex];
         dayData.total_hours += timesheet.total_hours || 0;
         dayData.overtime_hours += timesheet.overtime_hours || 0;
         dayData.night_hours += timesheet.night_hours || 0;
         if (timesheet.meal_voucher_earned) dayData.meal_vouchers += 1;
         dayData.timesheets.push(timesheet);
+      }
+
+      // Per timesheet multi-giorno, aggiungi anche al giorno di fine se diverso
+      if (timesheet.end_date && timesheet.end_date !== timesheet.date) {
+        const endDayIndex = weekDays.findIndex(day => 
+          format(day, 'yyyy-MM-dd') === timesheet.end_date
+        );
+
+        if (endDayIndex !== -1 && endDayIndex !== startDayIndex) {
+          const endDayData = employee.days[endDayIndex];
+          // Non duplicare le ore totali, aggiungi solo il timesheet per la visualizzazione
+          endDayData.timesheets.push(timesheet);
+        }
       }
 
       employee.total_hours += timesheet.total_hours || 0;
