@@ -61,12 +61,12 @@ serve(async (req) => {
       endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
     }
 
-    // Build query
+    // Build query - specificare la relazione corretta per evitare ambiguità
     let query = supabase
       .from('timesheets')
       .select(`
         *,
-        profiles!inner(first_name, last_name, email),
+        profiles!timesheets_user_id_fkey(first_name, last_name, email),
         projects(name),
         clients(name)
       `)
@@ -89,9 +89,19 @@ serve(async (req) => {
     }
 
     console.log(`Found ${timesheets?.length || 0} timesheets`);
+    
+    // Debug: verifica struttura dati
+    if (timesheets && timesheets.length > 0) {
+      console.log('Sample timesheet structure:', {
+        hasProfiles: !!timesheets[0].profiles,
+        profilesData: timesheets[0].profiles,
+        hasProjects: !!timesheets[0].projects,
+        projectsData: timesheets[0].projects
+      });
+    }
 
     // Process data for export
-    const processedData = timesheets?.map(timesheet => {
+    const processedData = timesheets?.map((timesheet, index) => {
       const row: any = {};
       
       if (exportRequest.includedFields.date) {
@@ -99,7 +109,12 @@ serve(async (req) => {
       }
       
       if (exportRequest.includedFields.employee) {
-        row['Dipendente'] = `${timesheet.profiles.first_name} ${timesheet.profiles.last_name}`;
+        if (timesheet.profiles) {
+          row['Dipendente'] = `${timesheet.profiles.first_name} ${timesheet.profiles.last_name}`;
+        } else {
+          console.warn(`Timesheet ${index} has no profile data`);
+          row['Dipendente'] = 'N/A';
+        }
       }
       
       if (exportRequest.includedFields.project && timesheet.projects) {
@@ -153,23 +168,39 @@ serve(async (req) => {
     let filename: string;
 
     // Generate file based on format
+    let responseBody: string;
+    let contentType: string;
+    let filename: string;
+
     if (exportRequest.format === 'csv') {
-      fileContent = generateCSV(processedData);
+      responseBody = generateCSV(processedData);
       contentType = 'text/csv';
       filename = `timesheets_${startDate}_${endDate}.csv`;
     } else if (exportRequest.format === 'excel') {
-      fileContent = generateExcel(processedData);
+      responseBody = generateExcel(processedData);
       contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
       filename = `timesheets_${startDate}_${endDate}.xlsx`;
     } else {
-      fileContent = generatePDF(processedData, startDate, endDate);
+      responseBody = generatePDF(processedData, startDate, endDate);
       contentType = 'application/pdf';
       filename = `timesheets_${startDate}_${endDate}.pdf`;
     }
 
-    console.log(`Generated ${exportRequest.format} file: ${filename}`);
+    console.log(`Generated ${exportRequest.format} file: ${filename} with ${processedData.length} records`);
+    
+    // Debug: verifica se abbiamo dati da esportare
+    if (processedData.length === 0) {
+      console.warn('No data to export for the selected criteria');
+      return new Response(
+        JSON.stringify({ error: 'Nessun dato trovato per i criteri selezionati' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
 
-    return new Response(fileContent, {
+    return new Response(responseBody, {
       headers: {
         ...corsHeaders,
         'Content-Type': contentType,
