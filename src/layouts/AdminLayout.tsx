@@ -14,13 +14,13 @@ export const AdminLayout = () => {
         <AdminSidebar />
         
         <div className="flex-1 flex flex-col">
-          <header className="h-16 flex items-center justify-between border-b bg-background px-6">
-            <div className="flex items-center gap-4">
+          <header className="h-12 flex items-center justify-between border-b bg-background px-4">
+            <div className="flex items-center gap-3">
               <SidebarTrigger />
-              <h1 className="text-xl font-semibold text-foreground">TimeTracker Admin</h1>
+              <h1 className="text-lg font-semibold text-foreground">TimeTracker Admin</h1>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">{user?.email}</span>
               <Button variant="outline" size="sm" onClick={signOut}>
                 <LogOut className="h-4 w-4 mr-2" />
@@ -29,7 +29,7 @@ export const AdminLayout = () => {
             </div>
           </header>
           
-          <main className="flex-1 p-6 bg-muted/20">
+          <main className="flex-1 p-4 bg-muted/20">
             <Outlet />
           </main>
         </div>

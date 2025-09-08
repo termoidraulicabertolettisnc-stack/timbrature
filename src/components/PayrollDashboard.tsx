@@ -214,17 +214,17 @@ export default function PayrollDashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-2xl font-bold text-foreground">Vista Buste Paga</h3>
-          <p className="text-muted-foreground">
+          <h3 className="text-xl font-bold text-foreground">Vista Buste Paga</h3>
+          <p className="text-sm text-muted-foreground">
             Riepilogo mensile per ufficio buste paga
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -232,7 +232,7 @@ export default function PayrollDashboard() {
                 const date = new Date();
                 date.setMonth(date.getMonth() - i);
                 const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                const label = date.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+                const label = date.toLocaleDateString('it-IT', { month: 'short', year: 'numeric' });
                 return (
                   <SelectItem key={value} value={value}>
                     {label}
@@ -245,179 +245,149 @@ export default function PayrollDashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Dipendenti Attivi</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{payrollData.length}</div>
-          </CardContent>
+      <div className="grid gap-3 md:grid-cols-3">
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Dipendenti Attivi</p>
+              <p className="text-2xl font-bold">{payrollData.length}</p>
+            </div>
+            <Users className="h-8 w-8 text-muted-foreground" />
+          </div>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ore Ordinarie Totali</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {payrollData.reduce((sum, emp) => sum + emp.totals.ordinary, 0).toFixed(1)}
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Ore Ordinarie</p>
+              <p className="text-2xl font-bold">
+                {payrollData.reduce((sum, emp) => sum + emp.totals.ordinary, 0).toFixed(0)}h
+              </p>
             </div>
-          </CardContent>
+            <Calendar className="h-8 w-8 text-muted-foreground" />
+          </div>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ore Straordinario Totali</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {payrollData.reduce((sum, emp) => sum + emp.totals.overtime, 0).toFixed(1)}
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Ore Straordinario</p>
+              <p className="text-2xl font-bold">
+                {payrollData.reduce((sum, emp) => sum + emp.totals.overtime, 0).toFixed(0)}h
+              </p>
             </div>
-          </CardContent>
+            <Calendar className="h-8 w-8 text-muted-foreground" />
+          </div>
         </Card>
       </div>
 
-      {/* Payroll Table */}
+      {/* Compact Payroll Table */}
       <Card>
-        <CardHeader>
-          <CardTitle>Dettaglio Mensile</CardTitle>
-          <CardDescription>
-            Ore lavorate per dipendente - O: Ordinarie, S: Straordinari, N: Assenze
-          </CardDescription>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Dettaglio Mensile Compatto</CardTitle>
+            <CardDescription className="text-xs">
+              O: Ordinarie | S: Straordinari | A: Assenze
+            </CardDescription>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="sticky left-0 bg-background">Dipendente</TableHead>
-                  {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                    const day = i + 1;
-                    const isHol = isHoliday(day);
-                    const isSun = isSunday(day);
+                  <TableHead className="sticky left-0 bg-background w-48 min-w-48">
+                    Dipendente
+                  </TableHead>
+                  
+                  {/* Week Headers */}
+                  {Array.from({ length: Math.ceil(getDaysInMonth() / 7) }, (_, weekIndex) => {
+                    const startDay = weekIndex * 7 + 1;
+                    const endDay = Math.min((weekIndex + 1) * 7, getDaysInMonth());
                     return (
-                      <TableHead 
-                        key={day} 
-                        className={`text-center min-w-16 ${
-                          isHol || isSun ? 'bg-red-50 text-red-700' : ''
-                        }`}
-                      >
-                        {day}
+                      <TableHead key={weekIndex} className="text-center min-w-32">
+                        Sett. {weekIndex + 1}
+                        <br />
+                        <span className="text-xs text-muted-foreground">
+                          {startDay}-{endDay}
+                        </span>
                       </TableHead>
                     );
                   })}
-                  <TableHead className="text-center">Tot O</TableHead>
-                  <TableHead className="text-center">Tot S</TableHead>
-                  <TableHead className="text-center">Tot N</TableHead>
-                  <TableHead className="text-center">Buoni</TableHead>
+                  
+                  <TableHead className="text-center min-w-16">Tot O</TableHead>
+                  <TableHead className="text-center min-w-16">Tot S</TableHead>
+                  <TableHead className="text-center min-w-16">Tot A</TableHead>
+                  <TableHead className="text-center min-w-16">Buoni</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {payrollData.map((employee) => (
-                  <React.Fragment key={employee.employee_id}>
-                    {/* Ordinary Hours Row */}
-                    <TableRow>
-                      <TableCell className="sticky left-0 bg-background font-medium">
-                        O - {employee.employee_name}
-                      </TableCell>
-                      {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                        const day = i + 1;
+                  <TableRow key={employee.employee_id}>
+                    <TableCell className="sticky left-0 bg-background font-medium p-3">
+                      <div>
+                        <div className="font-medium text-sm">{employee.employee_name}</div>
+                      </div>
+                    </TableCell>
+                    
+                    {/* Weekly Data */}
+                    {Array.from({ length: Math.ceil(getDaysInMonth() / 7) }, (_, weekIndex) => {
+                      const startDay = weekIndex * 7 + 1;
+                      const endDay = Math.min((weekIndex + 1) * 7, getDaysInMonth());
+                      
+                      let weekOrdinary = 0;
+                      let weekOvertime = 0;
+                      let weekAbsences = 0;
+                      
+                      for (let day = startDay; day <= endDay; day++) {
                         const dayKey = String(day).padStart(2, '0');
-                        const ordinary = employee.daily_data[dayKey]?.ordinary || 0;
-                        const isHol = isHoliday(day);
-                        const isSun = isSunday(day);
-                        
-                        return (
-                          <TableCell 
-                            key={day} 
-                            className={`text-center ${
-                              isHol || isSun ? 'bg-red-50' : ''
-                            }`}
-                          >
-                            {ordinary > 0 ? ordinary.toFixed(1) : ''}
-                          </TableCell>
-                        );
-                      })}
-                      <TableCell className="text-center font-medium">
-                        {employee.totals.ordinary.toFixed(1)}
-                      </TableCell>
-                      <TableCell className="text-center">-</TableCell>
-                      <TableCell className="text-center">-</TableCell>
-                      <TableCell className="text-center font-medium">
-                        {employee.meal_vouchers}
-                      </TableCell>
-                    </TableRow>
-
-                    {/* Overtime Hours Row */}
-                    <TableRow>
-                      <TableCell className="sticky left-0 bg-background font-medium">
-                        S - {employee.employee_name}
-                      </TableCell>
-                      {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                        const day = i + 1;
-                        const dayKey = String(day).padStart(2, '0');
-                        const overtime = employee.daily_data[dayKey]?.overtime || 0;
-                        const isHol = isHoliday(day);
-                        const isSun = isSunday(day);
-                        
-                        return (
-                          <TableCell 
-                            key={day} 
-                            className={`text-center ${
-                              isHol || isSun ? 'bg-red-50' : ''
-                            }`}
-                          >
-                            {overtime > 0 ? overtime.toFixed(1) : ''}
-                          </TableCell>
-                        );
-                      })}
-                      <TableCell className="text-center">-</TableCell>
-                      <TableCell className="text-center font-medium">
-                        {employee.totals.overtime.toFixed(1)}
-                      </TableCell>
-                      <TableCell className="text-center">-</TableCell>
-                      <TableCell className="text-center">-</TableCell>
-                    </TableRow>
-
-                    {/* Absence Hours Row */}
-                    <TableRow>
-                      <TableCell className="sticky left-0 bg-background font-medium">
-                        N - {employee.employee_name}
-                      </TableCell>
-                      {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                        const day = i + 1;
-                        const dayKey = String(day).padStart(2, '0');
-                        const absence = employee.daily_data[dayKey]?.absence;
-                        const isHol = isHoliday(day);
-                        const isSun = isSunday(day);
-                        
-                        return (
-                          <TableCell 
-                            key={day} 
-                            className={`text-center ${
-                              isHol || isSun ? 'bg-red-50' : ''
-                            }`}
-                          >
-                            {absence ? (
-                              <Badge variant="secondary" className="text-xs">
-                                {getAbsenceTypeLabel(absence)}
-                              </Badge>
-                            ) : ''}
-                          </TableCell>
-                        );
-                      })}
-                      <TableCell className="text-center">-</TableCell>
-                      <TableCell className="text-center">-</TableCell>
-                      <TableCell className="text-center font-medium">
-                        {employee.totals.absence.toFixed(1)}
-                      </TableCell>
-                      <TableCell className="text-center">-</TableCell>
-                    </TableRow>
-                  </React.Fragment>
+                        const dayData = employee.daily_data[dayKey];
+                        if (dayData) {
+                          weekOrdinary += dayData.ordinary || 0;
+                          weekOvertime += dayData.overtime || 0;
+                          if (dayData.absence) weekAbsences++;
+                        }
+                      }
+                      
+                      return (
+                        <TableCell key={weekIndex} className="text-center p-2">
+                          <div className="space-y-1 text-xs">
+                            {weekOrdinary > 0 && (
+                              <div className="text-green-700 font-medium">
+                                O: {weekOrdinary.toFixed(1)}h
+                              </div>
+                            )}
+                            {weekOvertime > 0 && (
+                              <div className="text-blue-700 font-medium">
+                                S: {weekOvertime.toFixed(1)}h
+                              </div>
+                            )}
+                            {weekAbsences > 0 && (
+                              <div className="text-red-700 font-medium">
+                                A: {weekAbsences}gg
+                              </div>
+                            )}
+                            {weekOrdinary === 0 && weekOvertime === 0 && weekAbsences === 0 && (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </div>
+                        </TableCell>
+                      );
+                    })}
+                    
+                    <TableCell className="text-center font-medium text-green-700">
+                      {employee.totals.ordinary.toFixed(0)}h
+                    </TableCell>
+                    <TableCell className="text-center font-medium text-blue-700">
+                      {employee.totals.overtime.toFixed(0)}h
+                    </TableCell>
+                    <TableCell className="text-center font-medium text-red-700">
+                      {employee.totals.absence.toFixed(0)}h
+                    </TableCell>
+                    <TableCell className="text-center font-medium">
+                      {employee.meal_vouchers}
+                    </TableCell>
+                  </TableRow>
                 ))}
               </TableBody>
             </Table>
@@ -425,31 +395,30 @@ export default function PayrollDashboard() {
         </CardContent>
       </Card>
 
-      {/* Legend */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Legenda</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-2 md:grid-cols-2">
-            <div className="space-y-1">
-              <p><strong>O:</strong> Ore Ordinarie</p>
-              <p><strong>S:</strong> Ore Straordinario</p>
-              <p><strong>N:</strong> Ore di Assenza</p>
-            </div>
-            <div className="space-y-1">
-              <p><strong>F:</strong> Ferie</p>
-              <p><strong>M:</strong> Malattia</p>
-              <p><strong>I:</strong> Infortunio</p>
-              <p><strong>P:</strong> Permesso non retribuito</p>
-            </div>
+      {/* Compact Legend */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex gap-4">
+            <span className="flex items-center gap-1">
+              <div className="w-3 h-3 bg-green-100 border border-green-300 rounded"></div>
+              <strong>O:</strong> Ore Ordinarie
+            </span>
+            <span className="flex items-center gap-1">
+              <div className="w-3 h-3 bg-blue-100 border border-blue-300 rounded"></div>
+              <strong>S:</strong> Ore Straordinario
+            </span>
+            <span className="flex items-center gap-1">
+              <div className="w-3 h-3 bg-red-100 border border-red-300 rounded"></div>
+              <strong>A:</strong> Giorni di Assenza
+            </span>
           </div>
-          <div className="mt-4 p-3 bg-red-50 rounded-md">
-            <p className="text-sm text-red-700">
-              <strong>Giorni in evidenza:</strong> Festività e domeniche
-            </p>
+          <div className="flex gap-4 text-muted-foreground">
+            <span><strong>F:</strong> Ferie</span>
+            <span><strong>M:</strong> Malattia</span>
+            <span><strong>I:</strong> Infortunio</span>
+            <span><strong>P:</strong> Permesso</span>
           </div>
-        </CardContent>
+        </div>
       </Card>
     </div>
   );
