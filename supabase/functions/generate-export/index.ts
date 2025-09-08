@@ -7,7 +7,6 @@ const corsHeaders = {
 };
 
 interface ExportRequest {
-  format: 'csv' | 'excel' | 'pdf';
   dateRange: 'today' | 'thisWeek' | 'thisMonth' | 'custom';
   startDate?: string;
   endDate?: string;
@@ -38,9 +37,9 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const exportRequest: ExportRequest = await req.json();
-    console.log('Export request:', exportRequest);
+    console.log('Export request received:', exportRequest);
 
-    // Build date filter
+    // Calculate date range
     let startDate: string, endDate: string;
     const today = new Date();
     
@@ -61,47 +60,90 @@ serve(async (req) => {
       endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
     }
 
-    // Build query - specificare la relazione corretta per evitare ambiguità
-    let query = supabase
+    console.log(`Exporting data from ${startDate} to ${endDate}`);
+
+    // Build base query for timesheets
+    let timesheetQuery = supabase
       .from('timesheets')
-      .select(`
-        *,
-        profiles!timesheets_user_id_fkey(first_name, last_name, email),
-        projects(name),
-        clients(name)
-      `)
+      .select('*')
       .gte('date', startDate)
       .lte('date', endDate);
 
+    // Apply filters
     if (exportRequest.selectedEmployees.length > 0) {
-      query = query.in('user_id', exportRequest.selectedEmployees);
+      timesheetQuery = timesheetQuery.in('user_id', exportRequest.selectedEmployees);
     }
 
     if (exportRequest.selectedProjects.length > 0) {
-      query = query.in('project_id', exportRequest.selectedProjects);
+      timesheetQuery = timesheetQuery.in('project_id', exportRequest.selectedProjects);
     }
 
-    const { data: timesheets, error } = await query.order('date', { ascending: false });
+    // Execute timesheet query
+    const { data: timesheets, error: timesheetError } = await timesheetQuery.order('date', { ascending: false });
 
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
+    if (timesheetError) {
+      console.error('Timesheet query error:', timesheetError);
+      throw timesheetError;
     }
 
     console.log(`Found ${timesheets?.length || 0} timesheets`);
-    
-    // Debug: verifica struttura dati
-    if (timesheets && timesheets.length > 0) {
-      console.log('Sample timesheet structure:', {
-        hasProfiles: !!timesheets[0].profiles,
-        profilesData: timesheets[0].profiles,
-        hasProjects: !!timesheets[0].projects,
-        projectsData: timesheets[0].projects
-      });
+
+    if (!timesheets || timesheets.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Nessun dato trovato per i criteri selezionati',
+          data: []
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
 
+    // Get unique user IDs and project IDs from timesheets
+    const userIds = [...new Set(timesheets.map(t => t.user_id).filter(Boolean))];
+    const projectIds = [...new Set(timesheets.map(t => t.project_id).filter(Boolean))];
+
+    // Fetch user profiles
+    let profiles: any[] = [];
+    if (userIds.length > 0) {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('user_id, first_name, last_name, email')
+        .in('user_id', userIds);
+
+      if (profilesError) {
+        console.error('Profiles query error:', profilesError);
+      } else {
+        profiles = profilesData || [];
+      }
+    }
+
+    // Fetch projects
+    let projects: any[] = [];
+    if (projectIds.length > 0) {
+      const { data: projectsData, error: projectsError } = await supabase
+        .from('projects')
+        .select('id, name')
+        .in('id', projectIds);
+
+      if (projectsError) {
+        console.error('Projects query error:', projectsError);
+      } else {
+        projects = projectsData || [];
+      }
+    }
+
+    console.log(`Found ${profiles.length} profiles and ${projects.length} projects`);
+
+    // Create lookup maps for better performance
+    const profileMap = new Map(profiles.map(p => [p.user_id, p]));
+    const projectMap = new Map(projects.map(p => [p.id, p]));
+
     // Process data for export
-    const processedData = timesheets?.map((timesheet, index) => {
+    const processedData = timesheets.map((timesheet) => {
       const row: any = {};
       
       if (exportRequest.includedFields.date) {
@@ -109,16 +151,19 @@ serve(async (req) => {
       }
       
       if (exportRequest.includedFields.employee) {
-        if (timesheet.profiles) {
-          row['Dipendente'] = `${timesheet.profiles.first_name} ${timesheet.profiles.last_name}`;
+        const profile = profileMap.get(timesheet.user_id);
+        if (profile) {
+          row['Dipendente'] = `${profile.first_name} ${profile.last_name}`;
+          row['Email'] = profile.email;
         } else {
-          console.warn(`Timesheet ${index} has no profile data`);
           row['Dipendente'] = 'N/A';
+          row['Email'] = 'N/A';
         }
       }
       
-      if (exportRequest.includedFields.project && timesheet.projects) {
-        row['Progetto'] = timesheet.projects.name;
+      if (exportRequest.includedFields.project) {
+        const project = projectMap.get(timesheet.project_id);
+        row['Progetto'] = project ? project.name : 'N/A';
       }
       
       if (exportRequest.includedFields.startTime && timesheet.start_time) {
@@ -161,53 +206,35 @@ serve(async (req) => {
       }
       
       return row;
-    }) || [];
-
-    // Generate file based on format
-    let responseBody: string;
-    let contentType: string;
-    let filename: string;
-
-    if (exportRequest.format === 'csv') {
-      responseBody = generateCSV(processedData);
-      contentType = 'text/csv';
-      filename = `timesheets_${startDate}_${endDate}.csv`;
-    } else if (exportRequest.format === 'excel') {
-      responseBody = generateExcel(processedData);
-      contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      filename = `timesheets_${startDate}_${endDate}.xlsx`;
-    } else {
-      responseBody = generatePDF(processedData, startDate, endDate);
-      contentType = 'application/pdf';
-      filename = `timesheets_${startDate}_${endDate}.pdf`;
-    }
-
-    console.log(`Generated ${exportRequest.format} file: ${filename} with ${processedData.length} records`);
-    
-    // Debug: verifica se abbiamo dati da esportare
-    if (processedData.length === 0) {
-      console.warn('No data to export for the selected criteria');
-      return new Response(
-        JSON.stringify({ error: 'Nessun dato trovato per i criteri selezionati' }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    return new Response(responseBody, {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': contentType,
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
     });
+
+    console.log(`Successfully processed ${processedData.length} records for export`);
+
+    // Return structured data for frontend processing
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: processedData,
+        metadata: {
+          startDate,
+          endDate,
+          totalRecords: processedData.length,
+          generatedAt: new Date().toISOString()
+        }
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
 
   } catch (error) {
     console.error('Error in generate-export function:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        success: false, 
+        error: error.message,
+        data: []
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -215,52 +242,3 @@ serve(async (req) => {
     );
   }
 });
-
-function generateCSV(data: any[]): string {
-  if (data.length === 0) return '';
-  
-  const headers = Object.keys(data[0]);
-  const csvRows = [
-    headers.join(','),
-    ...data.map(row => 
-      headers.map(header => {
-        const value = row[header] || '';
-        // Escape commas and quotes
-        return typeof value === 'string' && (value.includes(',') || value.includes('"')) 
-          ? `"${value.replace(/"/g, '""')}"` 
-          : value;
-      }).join(',')
-    )
-  ];
-  
-  return csvRows.join('\n');
-}
-
-function generateExcel(data: any[]): string {
-  // For simplicity, we'll generate CSV format for Excel
-  // In a real implementation, you'd use a library like exceljs
-  const csv = generateCSV(data);
-  
-  // Return as base64 encoded string - the frontend will handle the blob conversion
-  return btoa(unescape(encodeURIComponent(csv)));
-}
-
-function generatePDF(data: any[], startDate: string, endDate: string): string {
-  // Simple PDF generation - in a real implementation, use jsPDF or similar
-  const pdfContent = `
-TIMESHEET EXPORT REPORT
-Period: ${startDate} to ${endDate}
-Generated: ${new Date().toLocaleString('it-IT')}
-
-${data.map((row, index) => {
-  const rowText = Object.entries(row)
-    .map(([key, value]) => `${key}: ${value}`)
-    .join('\n');
-  return `Record ${index + 1}:\n${rowText}\n`;
-}).join('\n')}
-
-Total Records: ${data.length}
-  `;
-  
-  return btoa(unescape(encodeURIComponent(pdfContent)));
-}

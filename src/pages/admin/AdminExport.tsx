@@ -10,6 +10,15 @@ import { Separator } from '@/components/ui/separator';
 import { FileDown, Calendar, Users, FolderKanban, Settings, Download, FileText, Table } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+  }
+}
 
 interface ExportSettings {
   format: 'csv' | 'excel' | 'pdf';
@@ -183,12 +192,98 @@ export default function AdminExport() {
     }));
   };
 
+  const generateCSV = (data: any[]): string => {
+    if (data.length === 0) return '';
+    
+    const headers = Object.keys(data[0]);
+    const csvRows = [
+      headers.join(','),
+      ...data.map(row => 
+        headers.map(header => {
+          const value = row[header] || '';
+          // Escape commas and quotes
+          return typeof value === 'string' && (value.includes(',') || value.includes('"')) 
+            ? `"${value.replace(/"/g, '""')}"` 
+            : value;
+        }).join(',')
+      )
+    ];
+    
+    return csvRows.join('\n');
+  };
+
+  const generateExcel = (data: any[], filename: string): void => {
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Timesheets');
+    
+    // Auto-width columns
+    const columnWidths = Object.keys(data[0] || {}).map(key => ({
+      wch: Math.max(key.length, 20)
+    }));
+    worksheet['!cols'] = columnWidths;
+    
+    XLSX.writeFile(workbook, filename);
+  };
+
+  const generatePDF = (data: any[], filename: string, startDate: string, endDate: string): void => {
+    const doc = new jsPDF();
+    
+    // Title
+    doc.setFontSize(18);
+    doc.text('Report Timesheets', 14, 22);
+    
+    // Subtitle
+    doc.setFontSize(12);
+    doc.text(`Periodo: ${startDate} - ${endDate}`, 14, 32);
+    doc.text(`Generato il: ${new Date().toLocaleString('it-IT')}`, 14, 40);
+    doc.text(`Totale record: ${data.length}`, 14, 48);
+    
+    if (data.length > 0) {
+      // Prepare table data
+      const headers = Object.keys(data[0]);
+      const tableData = data.map(row => headers.map(header => row[header] || ''));
+      
+      // Add table
+      doc.autoTable({
+        head: [headers],
+        body: tableData,
+        startY: 55,
+        styles: {
+          fontSize: 8,
+          cellPadding: 2,
+        },
+        headStyles: {
+          fillColor: [60, 141, 188],
+          textColor: 255,
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245],
+        },
+        margin: { top: 55 },
+      });
+    }
+    
+    doc.save(filename);
+  };
+
+  const downloadFile = (content: string, filename: string, mimeType: string): void => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
   const handleExport = async () => {
     setLoading(true);
     
     try {
       const exportData = {
-        format: exportSettings.format,
         dateRange: exportSettings.dateRange,
         startDate: exportSettings.startDate,
         endDate: exportSettings.endDate,
@@ -199,7 +294,7 @@ export default function AdminExport() {
 
       console.log('Sending export request:', exportData);
 
-      const { data, error } = await supabase.functions.invoke('generate-export', {
+      const { data: response, error } = await supabase.functions.invoke('generate-export', {
         body: exportData,
       });
 
@@ -208,59 +303,51 @@ export default function AdminExport() {
         throw error;
       }
 
-      // Handle the response based on format
-      let blob: Blob;
-      let filename: string;
-      const today = new Date().toISOString().split('T')[0];
-      const dateRange = exportSettings.dateRange === 'custom' 
-        ? `${exportSettings.startDate}_${exportSettings.endDate}`
-        : `${today}`;
+      console.log('Export response:', response);
 
-      if (exportSettings.format === 'csv') {
-        blob = new Blob([data], { type: 'text/csv' });
-        filename = `timesheets_${dateRange}.csv`;
-      } else if (exportSettings.format === 'excel') {
-        // Decode base64 for Excel
-        const binaryString = atob(data);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        blob = new Blob([bytes], { 
-          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-        });
-        filename = `timesheets_${dateRange}.xlsx`;
-      } else {
-        // Decode base64 for PDF
-        const binaryString = atob(data);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        blob = new Blob([bytes], { type: 'application/pdf' });
-        filename = `timesheets_${dateRange}.pdf`;
+      if (!response.success) {
+        throw new Error(response.error || 'Export failed');
       }
 
-      // Create download link and trigger download
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      const { data, metadata } = response;
+
+      if (!data || data.length === 0) {
+        toast({
+          title: "Nessun dato trovato",
+          description: "Non sono stati trovati dati per i criteri selezionati.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Generate filename
+      const dateRange = exportSettings.dateRange === 'custom' 
+        ? `${exportSettings.startDate}_${exportSettings.endDate}`
+        : `${metadata.startDate}_${metadata.endDate}`;
+
+      // Generate and download file based on format
+      if (exportSettings.format === 'csv') {
+        const csvContent = generateCSV(data);
+        const filename = `timesheets_${dateRange}.csv`;
+        downloadFile(csvContent, filename, 'text/csv');
+      } else if (exportSettings.format === 'excel') {
+        const filename = `timesheets_${dateRange}.xlsx`;
+        generateExcel(data, filename);
+      } else if (exportSettings.format === 'pdf') {
+        const filename = `timesheets_${dateRange}.pdf`;
+        generatePDF(data, filename, metadata.startDate, metadata.endDate);
+      }
 
       toast({
         title: "Export completato",
-        description: `File ${filename} scaricato con successo.`,
+        description: `File scaricato con successo. ${data.length} record esportati.`,
       });
 
     } catch (error) {
       console.error('Export failed:', error);
       toast({
         title: "Errore durante l'export",
-        description: "Si è verificato un errore durante la generazione del file.",
+        description: error.message || "Si è verificato un errore durante la generazione del file.",
         variant: "destructive",
       });
     } finally {
@@ -494,14 +581,14 @@ export default function AdminExport() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FolderKanban className="h-5 w-5" />
-                Commesse ({exportSettings.selectedProjects.length} selezionate)
+                Progetti ({exportSettings.selectedProjects.length} selezionati)
               </CardTitle>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={selectAllProjects}>
-                  Seleziona Tutte
+                  Seleziona Tutti
                 </Button>
                 <Button variant="outline" size="sm" onClick={clearAllProjects}>
-                  Deseleziona Tutte
+                  Deseleziona Tutti
                 </Button>
               </div>
             </CardHeader>
@@ -521,43 +608,46 @@ export default function AdminExport() {
             </CardContent>
           </Card>
 
-          {/* Export Button */}
+          {/* Export Summary */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <FileDown className="h-5 w-5" />
+                <Download className="h-5 w-5" />
                 Genera Export
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="text-sm text-muted-foreground">
-                  <p>Periodo: {format(new Date(exportSettings.startDate), 'dd/MM/yyyy')} - {format(new Date(exportSettings.endDate), 'dd/MM/yyyy')}</p>
-                  <p>Formato: {exportSettings.format.toUpperCase()}</p>
-                  <p>Dipendenti: {exportSettings.selectedEmployees.length}</p>
-                  <p>Commesse: {exportSettings.selectedProjects.length}</p>
-                </div>
-
-                <Button 
-                  onClick={handleExport}
-                  disabled={!canExport || loading}
-                  className="w-full flex items-center gap-2"
-                  size="lg"
-                >
-                  {loading ? (
-                    <FileText className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4" />
-                  )}
-                  {loading ? 'Generazione in corso...' : 'Genera Export'}
-                </Button>
-
-                {!canExport && (
-                  <p className="text-sm text-muted-foreground text-center">
-                    Seleziona almeno un dipendente o una commessa per procedere
-                  </p>
-                )}
+            <CardContent className="space-y-4">
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>Formato: <span className="font-medium">{exportSettings.format.toUpperCase()}</span></p>
+                <p>Periodo: <span className="font-medium">{exportSettings.startDate} - {exportSettings.endDate}</span></p>
+                <p>Dipendenti: <span className="font-medium">{exportSettings.selectedEmployees.length}</span></p>
+                <p>Progetti: <span className="font-medium">{exportSettings.selectedProjects.length}</span></p>
               </div>
+              
+              <Button 
+                onClick={handleExport}
+                disabled={loading || !canExport}
+                className="w-full"
+                size="lg"
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                    Generazione in corso...
+                  </>
+                ) : (
+                  <>
+                    <FileDown className="mr-2 h-4 w-4" />
+                    Genera Export
+                  </>
+                )}
+              </Button>
+              
+              {!canExport && (
+                <p className="text-sm text-amber-600 text-center">
+                  Seleziona almeno un dipendente o un progetto per procedere
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
