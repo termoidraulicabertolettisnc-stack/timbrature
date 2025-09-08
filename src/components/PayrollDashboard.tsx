@@ -281,110 +281,118 @@ export default function PayrollDashboard() {
         </Card>
       </div>
 
-      {/* Compact Payroll Table */}
+      {/* Payroll Table - Tutti i giorni del mese */}
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Dettaglio Mensile Compatto</CardTitle>
+            <CardTitle className="text-base">Dettaglio Mensile Completo</CardTitle>
             <CardDescription className="text-xs">
-              O: Ordinarie | S: Straordinari | A: Assenze
+              Ore per giorno - O: Ordinarie | S: Straordinari | A: Assenze
             </CardDescription>
           </div>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <Table>
+            <Table className="text-xs">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="sticky left-0 bg-background w-48 min-w-48">
+                  <TableHead className="sticky left-0 bg-background z-10 w-36 min-w-36 text-xs font-medium border-r">
                     Dipendente
                   </TableHead>
-                  
-                  {/* Week Headers */}
-                  {Array.from({ length: Math.ceil(getDaysInMonth() / 7) }, (_, weekIndex) => {
-                    const startDay = weekIndex * 7 + 1;
-                    const endDay = Math.min((weekIndex + 1) * 7, getDaysInMonth());
+                  {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                    const day = i + 1;
+                    const isHol = isHoliday(day);
+                    const isSun = isSunday(day);
                     return (
-                      <TableHead key={weekIndex} className="text-center min-w-32">
-                        Sett. {weekIndex + 1}
-                        <br />
-                        <span className="text-xs text-muted-foreground">
-                          {startDay}-{endDay}
-                        </span>
+                      <TableHead 
+                        key={day} 
+                        className={`text-center w-8 min-w-8 max-w-8 text-xs font-medium p-1 ${
+                          isHol || isSun ? 'bg-red-50 text-red-700' : ''
+                        }`}
+                        title={`Giorno ${day}`}
+                      >
+                        {day}
                       </TableHead>
                     );
                   })}
-                  
-                  <TableHead className="text-center min-w-16">Tot O</TableHead>
-                  <TableHead className="text-center min-w-16">Tot S</TableHead>
-                  <TableHead className="text-center min-w-16">Tot A</TableHead>
-                  <TableHead className="text-center min-w-16">Buoni</TableHead>
+                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-green-50 border-l">O</TableHead>
+                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-blue-50">S</TableHead>
+                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-red-50">A</TableHead>
+                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-yellow-50">B</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {payrollData.map((employee) => (
-                  <TableRow key={employee.employee_id}>
-                    <TableCell className="sticky left-0 bg-background font-medium p-3">
-                      <div>
-                        <div className="font-medium text-sm">{employee.employee_name}</div>
+                  <TableRow key={employee.employee_id} className="hover:bg-muted/50">
+                    <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                      <div className="truncate" title={employee.employee_name}>
+                        {employee.employee_name}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1 space-x-2">
+                        <span className="text-green-700">O:{employee.totals.ordinary.toFixed(0)}</span>
+                        <span className="text-blue-700">S:{employee.totals.overtime.toFixed(0)}</span>
+                        <span className="text-red-700">A:{employee.totals.absence.toFixed(0)}</span>
                       </div>
                     </TableCell>
                     
-                    {/* Weekly Data */}
-                    {Array.from({ length: Math.ceil(getDaysInMonth() / 7) }, (_, weekIndex) => {
-                      const startDay = weekIndex * 7 + 1;
-                      const endDay = Math.min((weekIndex + 1) * 7, getDaysInMonth());
+                    {/* Giorni del mese */}
+                    {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                      const day = i + 1;
+                      const dayKey = String(day).padStart(2, '0');
+                      const dayData = employee.daily_data[dayKey];
+                      const ordinary = dayData?.ordinary || 0;
+                      const overtime = dayData?.overtime || 0;
+                      const absence = dayData?.absence;
+                      const isHol = isHoliday(day);
+                      const isSun = isSunday(day);
                       
-                      let weekOrdinary = 0;
-                      let weekOvertime = 0;
-                      let weekAbsences = 0;
+                      // Determina il contenuto della cella
+                      let cellContent = '';
+                      let cellClass = 'text-center p-1 text-xs ';
+                      let bgClass = '';
                       
-                      for (let day = startDay; day <= endDay; day++) {
-                        const dayKey = String(day).padStart(2, '0');
-                        const dayData = employee.daily_data[dayKey];
-                        if (dayData) {
-                          weekOrdinary += dayData.ordinary || 0;
-                          weekOvertime += dayData.overtime || 0;
-                          if (dayData.absence) weekAbsences++;
+                      if (isHol || isSun) {
+                        bgClass = 'bg-red-50 ';
+                      }
+                      
+                      if (absence) {
+                        cellContent = getAbsenceTypeLabel(absence);
+                        cellClass += 'font-bold text-red-700 ';
+                      } else if (ordinary > 0 || overtime > 0) {
+                        if (overtime > 0) {
+                          cellContent = `${ordinary.toFixed(1)}+${overtime.toFixed(1)}`;
+                          cellClass += 'text-blue-700 font-medium ';
+                        } else {
+                          cellContent = ordinary.toFixed(1);
+                          cellClass += 'text-green-700 ';
                         }
+                      } else {
+                        cellContent = '-';
+                        cellClass += 'text-muted-foreground ';
                       }
                       
                       return (
-                        <TableCell key={weekIndex} className="text-center p-2">
-                          <div className="space-y-1 text-xs">
-                            {weekOrdinary > 0 && (
-                              <div className="text-green-700 font-medium">
-                                O: {weekOrdinary.toFixed(1)}h
-                              </div>
-                            )}
-                            {weekOvertime > 0 && (
-                              <div className="text-blue-700 font-medium">
-                                S: {weekOvertime.toFixed(1)}h
-                              </div>
-                            )}
-                            {weekAbsences > 0 && (
-                              <div className="text-red-700 font-medium">
-                                A: {weekAbsences}gg
-                              </div>
-                            )}
-                            {weekOrdinary === 0 && weekOvertime === 0 && weekAbsences === 0 && (
-                              <span className="text-muted-foreground">-</span>
-                            )}
-                          </div>
+                        <TableCell 
+                          key={day} 
+                          className={cellClass + bgClass}
+                          title={`Giorno ${day}: ${ordinary > 0 ? `Ordinarie: ${ordinary.toFixed(1)}h` : ''}${overtime > 0 ? ` - Straordinari: ${overtime.toFixed(1)}h` : ''}${absence ? ` - Assenza: ${absence}` : ''}${(!ordinary && !overtime && !absence) ? 'Nessun dato' : ''}`}
+                        >
+                          {cellContent}
                         </TableCell>
                       );
                     })}
                     
-                    <TableCell className="text-center font-medium text-green-700">
-                      {employee.totals.ordinary.toFixed(0)}h
+                    {/* Totali */}
+                    <TableCell className="text-center font-bold text-green-700 text-xs p-1 bg-green-50 border-l">
+                      {employee.totals.ordinary.toFixed(0)}
                     </TableCell>
-                    <TableCell className="text-center font-medium text-blue-700">
-                      {employee.totals.overtime.toFixed(0)}h
+                    <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-blue-50">
+                      {employee.totals.overtime.toFixed(0)}
                     </TableCell>
-                    <TableCell className="text-center font-medium text-red-700">
-                      {employee.totals.absence.toFixed(0)}h
+                    <TableCell className="text-center font-bold text-red-700 text-xs p-1 bg-red-50">
+                      {employee.totals.absence.toFixed(0)}
                     </TableCell>
-                    <TableCell className="text-center font-medium">
+                    <TableCell className="text-center font-bold text-xs p-1 bg-yellow-50">
                       {employee.meal_vouchers}
                     </TableCell>
                   </TableRow>
