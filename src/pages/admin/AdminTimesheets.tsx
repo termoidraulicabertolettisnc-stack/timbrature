@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,6 +20,7 @@ import { TimesheetEditDialog } from '@/components/TimesheetEditDialog';
 import { TimesheetInsertDialog } from '@/components/TimesheetInsertDialog';
 import { AbsenceInsertDialog } from '@/components/AbsenceInsertDialog';
 import { DayActionMenu } from '@/components/DayActionMenu';
+import { AbsenceIndicator } from '@/components/AbsenceIndicator';
 import LocationDisplay from '@/components/LocationDisplay';
 import { useRealtimeHours } from '@/hooks/use-realtime-hours';
 import { TimesheetWithProfile } from '@/types/timesheet';
@@ -67,6 +68,7 @@ interface DailyHours {
   night_hours: number;
   meal_vouchers: number;
   timesheets: TimesheetWithProfile[];
+  absences: any[];
 }
 
 interface EmployeeWeeklyData {
@@ -97,6 +99,7 @@ export default function AdminTimesheets() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [timesheets, setTimesheets] = useState<TimesheetWithProfile[]>([]);
+  const [absences, setAbsences] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -402,14 +405,15 @@ export default function AdminTimesheets() {
           first_name: timesheet.profiles.first_name,
           last_name: timesheet.profiles.last_name,
           email: timesheet.profiles.email,
-          days: weekDays.map(day => ({
-            date: format(day, 'yyyy-MM-dd'),
-            total_hours: 0,
-            overtime_hours: 0,
-            night_hours: 0,
-            meal_vouchers: 0,
-            timesheets: []
-          })),
+           days: weekDays.map(day => ({
+             date: format(day, 'yyyy-MM-dd'),
+             total_hours: 0,
+             overtime_hours: 0,
+             night_hours: 0,
+             meal_vouchers: 0,
+             timesheets: [],
+             absences: []
+           })),
           total_hours: 0,
           overtime_hours: 0,
           night_hours: 0,
@@ -482,6 +486,7 @@ export default function AdminTimesheets() {
 
     const employeesMap = new Map<string, EmployeeMonthlyData>();
 
+    // Aggiungi timesheet
     filteredTimesheets.forEach(timesheet => {
       if (!timesheet.profiles) return;
 
@@ -498,7 +503,8 @@ export default function AdminTimesheets() {
             overtime_hours: 0,
             night_hours: 0,
             meal_vouchers: 0,
-            timesheets: []
+            timesheets: [],
+            absences: []
           })),
           total_hours: 0,
           overtime_hours: 0,
@@ -527,10 +533,95 @@ export default function AdminTimesheets() {
       if (timesheet.meal_voucher_earned) employee.meal_vouchers += 1;
     });
 
+    // Aggiungi assenze al mese
+    filteredAbsences.forEach(absence => {
+      if (!absence.profiles) return;
+
+      const key = absence.user_id;
+      
+      // Se l'employee non esiste ancora, crealo
+      if (!employeesMap.has(key)) {
+        employeesMap.set(key, {
+          user_id: absence.user_id,
+          first_name: absence.profiles.first_name,
+          last_name: absence.profiles.last_name,
+          email: absence.profiles.email,
+          days: monthDays.map(day => ({
+            date: format(day, 'yyyy-MM-dd'),
+            total_hours: 0,
+            overtime_hours: 0,
+            night_hours: 0,
+            meal_vouchers: 0,
+            timesheets: [],
+            absences: []
+          })),
+          total_hours: 0,
+          overtime_hours: 0,
+          night_hours: 0,
+          meal_vouchers: 0
+        });
+      }
+
+      const employee = employeesMap.get(key)!;
+      const dayIndex = monthDays.findIndex(day => 
+        format(day, 'yyyy-MM-dd') === absence.date
+      );
+
+      if (dayIndex !== -1) {
+        const dayData = employee.days[dayIndex];
+        dayData.absences.push(absence);
+      }
+    });
+
     return Array.from(employeesMap.values()).sort((a, b) => 
       `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
     );
   };
+
+  // Filtra assenze in base ai filtri selezionati
+  const filteredAbsences = useMemo(() => {
+    return absences.filter(absence => {
+      // Filtro per data
+      const absenceDate = parseISO(absence.date);
+      const filterDate = parseISO(dateFilter);
+      
+      let dateMatches = false;
+      switch (activeView) {
+        case 'daily':
+          dateMatches = isSameDay(absenceDate, filterDate);
+          break;
+        case 'weekly':
+          const weekStart = startOfWeek(filterDate, { weekStartsOn: 1 });
+          const weekEnd = endOfWeek(filterDate, { weekStartsOn: 1 });
+          dateMatches = absenceDate >= weekStart && absenceDate <= weekEnd;
+          break;
+        case 'monthly':
+          const monthStart = startOfMonth(filterDate);
+          const monthEnd = endOfMonth(filterDate);
+          dateMatches = absenceDate >= monthStart && absenceDate <= monthEnd;
+          break;
+        default:
+          dateMatches = true;
+      }
+      
+      if (!dateMatches) return false;
+
+      // Filtro per dipendente
+      if (selectedEmployee !== 'all' && absence.user_id !== selectedEmployee) {
+        return false;
+      }
+
+      // Filtro per termine di ricerca
+      if (searchTerm) {
+        const fullName = `${absence.profiles?.first_name} ${absence.profiles?.last_name}`.toLowerCase();
+        if (!fullName.includes(searchTerm.toLowerCase())) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [absences, dateFilter, activeView, selectedEmployee, searchTerm]);
 
   const weeklyData = aggregateWeeklyData();
   const monthlyData = aggregateMonthlyData();
@@ -1150,6 +1241,11 @@ function WeeklyView({
                                  ) : '0h'
                                ) : '-')}
                              </div>
+                             {day.absences && day.absences.length > 0 && (
+                               <div className="mt-1">
+                                 <AbsenceIndicator absences={day.absences} className="justify-center" />
+                               </div>
+                             )}
                            </div>
                            <DayActionMenu
                              onAddTimesheet={() => onAddTimesheet(parseISO(day.date))}
@@ -1474,20 +1570,32 @@ function MonthlyView({
                                            <p>Ore Totali Giornata</p>
                                          </TooltipContent>
                                        </Tooltip>
-                                       {dayData.meal_vouchers > 0 && (
-                                         <Tooltip>
-                                           <TooltipTrigger asChild>
-                                             <div className="text-xs">🍽️</div>
-                                           </TooltipTrigger>
-                                           <TooltipContent>
-                                             <p>Buono Pasto Maturato</p>
-                                           </TooltipContent>
-                                         </Tooltip>
-                                       )}
+                                        {dayData.meal_vouchers > 0 && (
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <div className="text-xs">🍽️</div>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p>Buono Pasto Maturato</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        )}
+                                        {dayData.absences && dayData.absences.length > 0 && (
+                                          <div className="mt-1">
+                                            <AbsenceIndicator absences={dayData.absences} className="justify-center" />
+                                          </div>
+                                        )}
+                                      </div>
+                                   ) : (
+                                     <div className="text-xs text-muted-foreground">
+                                       {dayData && dayData.absences && dayData.absences.length > 0 ? '' : '-'}
                                      </div>
-                                  ) : (
-                                    <div className="text-xs text-muted-foreground">-</div>
-                                  )}
+                                   )}
+                                   {dayData && dayData.absences && dayData.absences.length > 0 && (
+                                     <div className="mt-1">
+                                       <AbsenceIndicator absences={dayData.absences} className="justify-center" />
+                                     </div>
+                                   )}
                                   <div className="absolute top-1 right-1">
                                     <DayActionMenu
                                       onAddTimesheet={() => onAddTimesheet(day)}
