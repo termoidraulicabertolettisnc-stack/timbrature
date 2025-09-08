@@ -14,6 +14,7 @@ interface PayrollData {
   daily_data: { [day: string]: { ordinary: number; overtime: number; absence: string | null } };
   totals: { ordinary: number; overtime: number; absence: number };
   meal_vouchers: number;
+  meal_voucher_amount: number;
 }
 
 export default function PayrollDashboard() {
@@ -102,6 +103,14 @@ export default function PayrollDashboard() {
 
       if (settingsError) throw settingsError;
 
+      // Get company settings for default values
+      const { data: companySettings, error: companySettingsError } = await supabase
+        .from('company_settings')
+        .select('*')
+        .in('company_id', profiles.map(p => p.company_id));
+
+      if (companySettingsError) throw companySettingsError;
+
       // Process data by employee
       const processedData: PayrollData[] = profiles.map(profile => {
         const employeeTimesheets = (timesheets || []).filter(t => t.user_id === profile.user_id);
@@ -113,6 +122,10 @@ export default function PayrollDashboard() {
         let totalOvertime = 0;
         let totalAbsence = 0;
         let mealVoucherDays = 0;
+        
+        // Get meal voucher amount (employee settings take precedence over company settings)
+        const companySettingsForEmployee = companySettings?.find(cs => cs.company_id === profile.company_id);
+        const mealVoucherAmount = settings?.meal_voucher_amount || companySettingsForEmployee?.meal_voucher_amount || 8.00;
 
         // Initialize all days of the month
         const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
@@ -155,7 +168,8 @@ export default function PayrollDashboard() {
           employee_name: `${profile.first_name} ${profile.last_name}`,
           daily_data: dailyData,
           totals: { ordinary: totalOrdinary, overtime: totalOvertime, absence: totalAbsence },
-          meal_vouchers: mealVoucherDays
+          meal_vouchers: mealVoucherDays,
+          meal_voucher_amount: mealVoucherAmount
         };
       });
 
@@ -329,7 +343,7 @@ export default function PayrollDashboard() {
                   <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-green-50 border-l">Tot O</TableHead>
                   <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-blue-50">Tot S</TableHead>
                   <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-red-50">Tot N</TableHead>
-                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-yellow-50">Buoni</TableHead>
+                  <TableHead className="text-center w-16 min-w-16 text-xs font-medium bg-yellow-50">Buoni Pasto</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -364,7 +378,12 @@ export default function PayrollDashboard() {
                       <TableCell className="text-center text-xs p-1 bg-blue-50">-</TableCell>
                       <TableCell className="text-center text-xs p-1 bg-red-50">-</TableCell>
                       <TableCell className="text-center font-bold text-xs p-1 bg-yellow-50">
-                        {employee.meal_vouchers}
+                        {employee.meal_vouchers > 0 ? (
+                          <div className="flex flex-col">
+                            <span>{employee.meal_vouchers}</span>
+                            <span className="text-xs opacity-75">€{employee.meal_voucher_amount.toFixed(2)}</span>
+                          </div>
+                        ) : '-'}
                       </TableCell>
                     </TableRow>
 
