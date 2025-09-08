@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Calendar, Download, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import * as XLSX from 'xlsx';
 
 interface PayrollData {
   employee_id: string;
@@ -216,6 +217,108 @@ export default function PayrollDashboard() {
     return labels[type] || type.charAt(0).toUpperCase();
   };
 
+  const exportToExcel = () => {
+    const [year, month] = selectedMonth.split('-');
+    const daysInMonth = getDaysInMonth();
+    
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new();
+    const ws: any = {};
+    
+    // Calculate Italian month name
+    const monthNames = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+                       'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+    const monthName = monthNames[parseInt(month) - 1];
+    
+    // Create headers
+    const headers = ['Dipendente'];
+    
+    // Add day headers with weekday names
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(parseInt(year), parseInt(month) - 1, day);
+      const dayOfWeek = date.getDay();
+      const dayNames = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
+      const dayName = dayNames[dayOfWeek];
+      headers.push(`${day} ${dayName}`);
+    }
+    headers.push('Tot', 'Buoni Pasto');
+    
+    // Set headers in row 1
+    headers.forEach((header, colIndex) => {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: colIndex });
+      ws[cellAddress] = { v: header, t: 's' };
+    });
+    
+    let currentRow = 1;
+    
+    // Add data rows (3 rows per employee)
+    payrollData.forEach(employee => {
+      // Ordinary hours row (O)
+      const ordinaryRow = [`O - ${employee.employee_name}`];
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayKey = String(day).padStart(2, '0');
+        const ordinary = employee.daily_data[dayKey]?.ordinary || 0;
+        ordinaryRow.push(ordinary > 0 ? ordinary.toFixed(1) : '');
+      }
+      ordinaryRow.push(employee.totals.ordinary.toFixed(1));
+      ordinaryRow.push(employee.meal_vouchers > 0 ? 
+        `${employee.meal_vouchers} x €${employee.meal_voucher_amount.toFixed(2)}` : '-');
+      
+      // Overtime hours row (S)
+      const overtimeRow = [`S - ${employee.employee_name}`];
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayKey = String(day).padStart(2, '0');
+        const overtime = employee.daily_data[dayKey]?.overtime || 0;
+        overtimeRow.push(overtime > 0 ? overtime.toFixed(1) : '');
+      }
+      overtimeRow.push(employee.totals.overtime.toFixed(1));
+      overtimeRow.push('-');
+      
+      // Absence row (N)
+      const absenceRow = [`N - ${employee.employee_name}`];
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayKey = String(day).padStart(2, '0');
+        const absence = employee.daily_data[dayKey]?.absence;
+        absenceRow.push(absence ? getAbsenceTypeLabel(absence) : '');
+      }
+      absenceRow.push(employee.totals.absence.toFixed(1));
+      absenceRow.push('-');
+      
+      // Add rows to worksheet
+      [ordinaryRow, overtimeRow, absenceRow].forEach((row, rowOffset) => {
+        row.forEach((cell, colIndex) => {
+          const cellAddress = XLSX.utils.encode_cell({ r: currentRow + rowOffset, c: colIndex });
+          ws[cellAddress] = { v: cell, t: typeof cell === 'number' ? 'n' : 's' };
+        });
+      });
+      
+      currentRow += 3;
+    });
+    
+    // Set range
+    const range = XLSX.utils.encode_range({
+      s: { r: 0, c: 0 },
+      e: { r: currentRow - 1, c: headers.length - 1 }
+    });
+    ws['!ref'] = range;
+    
+    // Set column widths
+    const colWidths = [{ wch: 25 }]; // Employee name column
+    for (let i = 1; i <= daysInMonth; i++) {
+      colWidths.push({ wch: 8 }); // Day columns
+    }
+    colWidths.push({ wch: 10 }); // Tot column
+    colWidths.push({ wch: 15 }); // Buoni Pasto column
+    ws['!cols'] = colWidths;
+    
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, `Buste Pago ${monthName} ${year}`);
+    
+    // Generate filename and save
+    const fileName = `Buste_Pago_${monthName}_${year}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -237,6 +340,15 @@ export default function PayrollDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            onClick={exportToExcel}
+            variant="outline"
+            size="sm"
+            className="gap-2"
+          >
+            <Download className="h-4 w-4" />
+            Esporta Excel
+          </Button>
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
             <SelectTrigger className="w-40">
               <SelectValue />
