@@ -583,8 +583,11 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
             const dayTimesheets = timesheets.filter(ts => {
               const isStartDay = ts.date === currentDayStr;
               const isEndDay = ts.end_date === currentDayStr;
-              const hasValidTimes = ts.start_time && ts.end_time;
-              return hasValidTimes && (isStartDay || isEndDay);
+              // Per timesheet in corso, considera solo il giorno di inizio
+              const isOngoingToday = !ts.end_time && ts.date === currentDayStr;
+              // CORREZIONE: Include timesheet validi (con start_time) 
+              const hasValidStartTime = !!ts.start_time;
+              return hasValidStartTime && (isStartDay || isEndDay || isOngoingToday);
             });
             
             console.log(`🔍 [${currentDayStr}] Timesheet dopo filtering migliorato:`, dayTimesheets.length);
