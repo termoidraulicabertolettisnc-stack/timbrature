@@ -52,6 +52,35 @@ export default function PayrollDashboard() {
     return holidays;
   };
 
+  const getDaysInMonth = () => {
+    const [year, month] = selectedMonth.split('-');
+    return new Date(parseInt(year), parseInt(month), 0).getDate();
+  };
+
+  const isHoliday = (day: number) => {
+    const [year, month] = selectedMonth.split('-');
+    const dateStr = `${year}-${month}-${String(day).padStart(2, '0')}`;
+    const holidays = getItalianHolidays(parseInt(year));
+    return holidays.has(dateStr);
+  };
+
+  const isSunday = (day: number) => {
+    const [year, month] = selectedMonth.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, day);
+    return date.getDay() === 0;
+  };
+
+  const getAbsenceTypeLabel = (type: string | null) => {
+    if (!type) return '';
+    const labels: { [key: string]: string } = {
+      'ferie': 'F',
+      'malattia': 'M',
+      'infortunio': 'I',
+      'permesso_non_retribuito': 'P'
+    };
+    return labels[type] || type.charAt(0).toUpperCase();
+  };
+
   const fetchPayrollData = async () => {
     try {
       setLoading(true);
@@ -187,35 +216,6 @@ export default function PayrollDashboard() {
       fetchPayrollData();
     }
   }, [user, selectedMonth]);
-
-  const getDaysInMonth = () => {
-    const [year, month] = selectedMonth.split('-');
-    return new Date(parseInt(year), parseInt(month), 0).getDate();
-  };
-
-  const isHoliday = (day: number) => {
-    const [year, month] = selectedMonth.split('-');
-    const dateStr = `${year}-${month}-${String(day).padStart(2, '0')}`;
-    const holidays = getItalianHolidays(parseInt(year));
-    return holidays.has(dateStr);
-  };
-
-  const isSunday = (day: number) => {
-    const [year, month] = selectedMonth.split('-');
-    const date = new Date(parseInt(year), parseInt(month) - 1, day);
-    return date.getDay() === 0;
-  };
-
-  const getAbsenceTypeLabel = (type: string | null) => {
-    if (!type) return '';
-    const labels: { [key: string]: string } = {
-      'ferie': 'F',
-      'malattia': 'M',
-      'infortunio': 'I',
-      'permesso_non_retribuito': 'P'
-    };
-    return labels[type] || type.charAt(0).toUpperCase();
-  };
 
   const exportToExcel = async () => {
     const [year, month] = selectedMonth.split('-');
