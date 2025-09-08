@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileDown, Calendar, Users, FolderKanban, Settings, Download, FileText, Table } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -21,7 +22,7 @@ declare module 'jspdf' {
 }
 
 interface ExportSettings {
-  format: 'csv' | 'excel' | 'pdf';
+  format: 'csv' | 'excel' | 'pdf' | 'payroll';
   dateRange: 'today' | 'thisWeek' | 'thisMonth' | 'custom';
   startDate: string;
   endDate: string;
@@ -38,6 +39,30 @@ interface ExportSettings {
     nightHours: boolean;
     notes: boolean;
     location: boolean;
+  };
+}
+
+interface PayrollData {
+  employee: {
+    name: string;
+    id: string;
+  };
+  days: {
+    [day: number]: {
+      ordinary: number;
+      overtime: number;
+      absence: number;
+      absenceType?: string;
+      isHoliday: boolean;
+    };
+  };
+  totals: {
+    ordinary: number;
+    overtime: number;
+    absence: number;
+  };
+  mealVouchers: {
+    [amount: string]: number;
   };
 }
 
@@ -67,6 +92,50 @@ export default function AdminExport() {
       location: false,
     }
   });
+
+  // Italian holidays calculator
+  const getItalianHolidays = (year: number) => {
+    const holidays = [];
+    
+    // Fixed holidays
+    holidays.push(new Date(year, 0, 1)); // Capodanno
+    holidays.push(new Date(year, 0, 6)); // Epifania
+    holidays.push(new Date(year, 3, 25)); // Festa della Liberazione
+    holidays.push(new Date(year, 4, 1)); // Festa del Lavoro
+    holidays.push(new Date(year, 5, 2)); // Festa della Repubblica
+    holidays.push(new Date(year, 7, 15)); // Ferragosto
+    holidays.push(new Date(year, 10, 1)); // Ognissanti
+    holidays.push(new Date(year, 11, 8)); // Immacolata Concezione
+    holidays.push(new Date(year, 11, 25)); // Natale
+    holidays.push(new Date(year, 11, 26)); // Santo Stefano
+    
+    // Cremona patron saint (San Omobono)
+    holidays.push(new Date(year, 10, 13)); // 13 novembre
+    
+    // Easter related holidays (simplified calculation)
+    const easter = getEasterDate(year);
+    holidays.push(new Date(easter.getTime() + 86400000)); // Pasquetta
+    
+    return holidays.map(h => format(h, 'yyyy-MM-dd'));
+  };
+
+  const getEasterDate = (year: number) => {
+    const a = year % 19;
+    const b = Math.floor(year / 100);
+    const c = year % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const n = Math.floor((h + l - 7 * m + 114) / 31);
+    const p = (h + l - 7 * m + 114) % 31;
+    return new Date(year, n - 1, p + 1);
+  };
 
   useEffect(() => {
     loadData();
@@ -192,6 +261,181 @@ export default function AdminExport() {
     }));
   };
 
+  const generatePayroll = (data: any[]) => {
+    const payrollData: PayrollData[] = [];
+    const holidays = getItalianHolidays(new Date(exportSettings.startDate).getFullYear());
+    
+    // Group data by employee
+    const employeeData = data.reduce((acc: any, record: any) => {
+      const employeeId = record.employee_id;
+      if (!acc[employeeId]) {
+        acc[employeeId] = {
+          employee: record.employee,
+          records: [],
+          settings: record.employee_settings
+        };
+      }
+      acc[employeeId].records.push(record);
+      return acc;
+    }, {});
+
+    // Process each employee
+    Object.values(employeeData).forEach((emp: any) => {
+      const employee = emp.employee;
+      const records = emp.records;
+      const settings = emp.settings;
+      
+      const days: PayrollData['days'] = {};
+      let totalOrdinary = 0, totalOvertime = 0, totalAbsence = 0;
+      let workingDays = 0;
+
+      // Get days in month
+      const startDate = new Date(exportSettings.startDate);
+      const endDate = new Date(exportSettings.endDate);
+      const daysInMonth = endDate.getDate();
+
+      // Process each day of the month
+      for (let day = 1; day <= daysInMonth; day++) {
+        const currentDate = format(new Date(startDate.getFullYear(), startDate.getMonth(), day), 'yyyy-MM-dd');
+        const isHoliday = holidays.includes(currentDate);
+        const dayRecord = records.find((r: any) => r.date === currentDate);
+        
+        if (dayRecord) {
+          if (dayRecord.is_absence) {
+            const absenceHours = dayRecord.absence_hours || 8;
+            days[day] = {
+              ordinary: 0,
+              overtime: 0,
+              absence: absenceHours,
+              absenceType: dayRecord.absence_type,
+              isHoliday
+            };
+            totalAbsence += absenceHours;
+          } else {
+            const ordinary = Math.max(0, (dayRecord.total_hours || 0) - (dayRecord.overtime_hours || 0));
+            const overtime = dayRecord.overtime_hours || 0;
+            
+            days[day] = {
+              ordinary,
+              overtime,
+              absence: 0,
+              isHoliday
+            };
+            totalOrdinary += ordinary;
+            totalOvertime += overtime;
+            
+            if (dayRecord.meal_voucher_earned) {
+              workingDays++;
+            }
+          }
+        } else if (!isHoliday) {
+          // Non-working day (weekend or absence without record)
+          const dayOfWeek = new Date(startDate.getFullYear(), startDate.getMonth(), day).getDay();
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Sunday or Saturday
+            days[day] = {
+              ordinary: 0,
+              overtime: 0,
+              absence: 0,
+              isHoliday: false
+            };
+          }
+        } else {
+          // Holiday
+          days[day] = {
+            ordinary: 0,
+            overtime: 0,
+            absence: 0,
+            isHoliday: true
+          };
+        }
+      }
+
+      // Calculate meal vouchers
+      const mealVoucherAmount = settings?.meal_voucher_amount || 8;
+      const mealVouchers: PayrollData['mealVouchers'] = {};
+      if (workingDays > 0) {
+        mealVouchers[mealVoucherAmount.toString()] = workingDays;
+      }
+
+      payrollData.push({
+        employee: {
+          name: employee,
+          id: employee.split(' - ')[0] || ''
+        },
+        days,
+        totals: {
+          ordinary: totalOrdinary,
+          overtime: totalOvertime,
+          absence: totalAbsence
+        },
+        mealVouchers
+      });
+    });
+
+    return payrollData;
+  };
+
+  const generatePayrollExcel = (payrollData: PayrollData[]) => {
+    const wb = XLSX.utils.book_new();
+    
+    // Create worksheet data
+    const wsData: any[][] = [];
+    
+    // Header row
+    const headerRow = ['Dipendente', 'Tipo'];
+    const daysInMonth = new Date(
+      new Date(exportSettings.startDate).getFullYear(),
+      new Date(exportSettings.startDate).getMonth() + 1,
+      0
+    ).getDate();
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+      headerRow.push(day.toString());
+    }
+    headerRow.push('Totale', 'Buoni Pasto 8€');
+    wsData.push(headerRow);
+
+    payrollData.forEach((empData) => {
+      // Ordinary hours row
+      const ordinaryRow = [empData.employee.name, 'O'];
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayData = empData.days[day];
+        ordinaryRow.push((dayData?.ordinary || 0).toString());
+      }
+      ordinaryRow.push(empData.totals.ordinary.toString());
+      ordinaryRow.push('');
+      wsData.push(ordinaryRow);
+
+      // Overtime hours row
+      const overtimeRow = ['', 'S'];
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayData = empData.days[day];
+        overtimeRow.push((dayData?.overtime || 0).toString());
+      }
+      overtimeRow.push(empData.totals.overtime.toString());
+      overtimeRow.push('');
+      wsData.push(overtimeRow);
+
+      // Absence hours row
+      const absenceRow = ['', 'N'];
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayData = empData.days[day];
+        absenceRow.push((dayData?.absence || 0).toString());
+      }
+      absenceRow.push(empData.totals.absence.toString());
+      absenceRow.push((empData.mealVouchers['8'] || 0).toString());
+      wsData.push(absenceRow);
+
+      // Empty row between employees
+      wsData.push([]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(wb, ws, 'Buste Paga');
+    
+    return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  };
+
   const generateCSV = (data: any[]): string => {
     if (data.length === 0) return '';
     
@@ -290,6 +534,7 @@ export default function AdminExport() {
         selectedEmployees: exportSettings.selectedEmployees,
         selectedProjects: exportSettings.selectedProjects,
         includedFields: exportSettings.includedFields,
+        format: exportSettings.format,
       };
 
       console.log('Sending export request:', exportData);
@@ -305,13 +550,7 @@ export default function AdminExport() {
 
       console.log('Export response:', response);
 
-      if (!response.success) {
-        throw new Error(response.error || 'Export failed');
-      }
-
-      const { data, metadata } = response;
-
-      if (!data || data.length === 0) {
+      if (!response || response.length === 0) {
         toast({
           title: "Nessun dato trovato",
           description: "Non sono stati trovati dati per i criteri selezionati.",
@@ -323,24 +562,38 @@ export default function AdminExport() {
       // Generate filename
       const dateRange = exportSettings.dateRange === 'custom' 
         ? `${exportSettings.startDate}_${exportSettings.endDate}`
-        : `${metadata.startDate}_${metadata.endDate}`;
+        : `${exportSettings.startDate}_${exportSettings.endDate}`;
 
       // Generate and download file based on format
-      if (exportSettings.format === 'csv') {
-        const csvContent = generateCSV(data);
+      if (exportSettings.format === 'payroll') {
+        const payrollData = generatePayroll(response);
+        const excelBuffer = generatePayrollExcel(payrollData);
+        const blob = new Blob([excelBuffer], { 
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+        });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `buste-paga-${format(new Date(exportSettings.startDate), 'yyyy-MM')}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else if (exportSettings.format === 'csv') {
+        const csvContent = generateCSV(response);
         const filename = `timesheets_${dateRange}.csv`;
         downloadFile(csvContent, filename, 'text/csv');
       } else if (exportSettings.format === 'excel') {
         const filename = `timesheets_${dateRange}.xlsx`;
-        generateExcel(data, filename);
+        generateExcel(response, filename);
       } else if (exportSettings.format === 'pdf') {
         const filename = `timesheets_${dateRange}.pdf`;
-        generatePDF(data, filename, metadata.startDate, metadata.endDate);
+        generatePDF(response, filename, exportSettings.startDate, exportSettings.endDate);
       }
 
       toast({
         title: "Export completato",
-        description: `File scaricato con successo. ${data.length} record esportati.`,
+        description: `File scaricato con successo. ${response.length} record esportati.`,
       });
 
     } catch (error) {
@@ -355,7 +608,7 @@ export default function AdminExport() {
     }
   };
 
-  const canExport = exportSettings.selectedEmployees.length > 0 || exportSettings.selectedProjects.length > 0;
+  const canExport = exportSettings.selectedEmployees.length > 0;
 
   return (
     <div className="space-y-6">
@@ -393,6 +646,7 @@ export default function AdminExport() {
                     <SelectItem value="csv">CSV (Comma Separated)</SelectItem>
                     <SelectItem value="excel">Excel (.xlsx)</SelectItem>
                     <SelectItem value="pdf">PDF Report</SelectItem>
+                    <SelectItem value="payroll">Buste Paga (Excel)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -440,214 +694,235 @@ export default function AdminExport() {
             </CardContent>
           </Card>
 
-          {/* Fields to Include */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Table className="h-5 w-5" />
-                Campi da Includere
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="date"
-                  checked={exportSettings.includedFields.date}
-                  onCheckedChange={(checked) => handleFieldChange('date', checked as boolean)}
-                />
-                <Label htmlFor="date">Data</Label>
-              </div>
+          {/* Fields to Include - Hide for payroll format */}
+          {exportSettings.format !== 'payroll' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Table className="h-5 w-5" />
+                  Campi da Includere
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="date"
+                    checked={exportSettings.includedFields.date}
+                    onCheckedChange={(checked) => handleFieldChange('date', checked as boolean)}
+                  />
+                  <Label htmlFor="date">Data</Label>
+                </div>
 
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="employee"
-                  checked={exportSettings.includedFields.employee}
-                  onCheckedChange={(checked) => handleFieldChange('employee', checked as boolean)}
-                />
-                <Label htmlFor="employee">Dipendente</Label>
-              </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="employee"
+                    checked={exportSettings.includedFields.employee}
+                    onCheckedChange={(checked) => handleFieldChange('employee', checked as boolean)}
+                  />
+                  <Label htmlFor="employee">Dipendente</Label>
+                </div>
 
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="project"
-                  checked={exportSettings.includedFields.project}
-                  onCheckedChange={(checked) => handleFieldChange('project', checked as boolean)}
-                />
-                <Label htmlFor="project">Progetto/Commessa</Label>
-              </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="project"
+                    checked={exportSettings.includedFields.project}
+                    onCheckedChange={(checked) => handleFieldChange('project', checked as boolean)}
+                  />
+                  <Label htmlFor="project">Progetto/Commessa</Label>
+                </div>
 
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="startTime"
-                  checked={exportSettings.includedFields.startTime}
-                  onCheckedChange={(checked) => handleFieldChange('startTime', checked as boolean)}
-                />
-                <Label htmlFor="startTime">Ora Inizio</Label>
-              </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="startTime"
+                    checked={exportSettings.includedFields.startTime}
+                    onCheckedChange={(checked) => handleFieldChange('startTime', checked as boolean)}
+                  />
+                  <Label htmlFor="startTime">Ora Inizio</Label>
+                </div>
 
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="endTime"
-                  checked={exportSettings.includedFields.endTime}
-                  onCheckedChange={(checked) => handleFieldChange('endTime', checked as boolean)}
-                />
-                <Label htmlFor="endTime">Ora Fine</Label>
-              </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="endTime"
+                    checked={exportSettings.includedFields.endTime}
+                    onCheckedChange={(checked) => handleFieldChange('endTime', checked as boolean)}
+                  />
+                  <Label htmlFor="endTime">Ora Fine</Label>
+                </div>
 
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="totalHours"
-                  checked={exportSettings.includedFields.totalHours}
-                  onCheckedChange={(checked) => handleFieldChange('totalHours', checked as boolean)}
-                />
-                <Label htmlFor="totalHours">Ore Totali</Label>
-              </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="totalHours"
+                    checked={exportSettings.includedFields.totalHours}
+                    onCheckedChange={(checked) => handleFieldChange('totalHours', checked as boolean)}
+                  />
+                  <Label htmlFor="totalHours">Ore Totali</Label>
+                </div>
 
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="overtimeHours"
-                  checked={exportSettings.includedFields.overtimeHours}
-                  onCheckedChange={(checked) => handleFieldChange('overtimeHours', checked as boolean)}
-                />
-                <Label htmlFor="overtimeHours">Ore Straordinarie</Label>
-              </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="overtimeHours"
+                    checked={exportSettings.includedFields.overtimeHours}
+                    onCheckedChange={(checked) => handleFieldChange('overtimeHours', checked as boolean)}
+                  />
+                  <Label htmlFor="overtimeHours">Straordinari</Label>
+                </div>
 
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="nightHours"
-                  checked={exportSettings.includedFields.nightHours}
-                  onCheckedChange={(checked) => handleFieldChange('nightHours', checked as boolean)}
-                />
-                <Label htmlFor="nightHours">Ore Notturne</Label>
-              </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="nightHours"
+                    checked={exportSettings.includedFields.nightHours}
+                    onCheckedChange={(checked) => handleFieldChange('nightHours', checked as boolean)}
+                  />
+                  <Label htmlFor="nightHours">Ore Notturne</Label>
+                </div>
 
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="notes"
-                  checked={exportSettings.includedFields.notes}
-                  onCheckedChange={(checked) => handleFieldChange('notes', checked as boolean)}
-                />
-                <Label htmlFor="notes">Note</Label>
-              </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="notes"
+                    checked={exportSettings.includedFields.notes}
+                    onCheckedChange={(checked) => handleFieldChange('notes', checked as boolean)}
+                  />
+                  <Label htmlFor="notes">Note</Label>
+                </div>
 
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="location"
-                  checked={exportSettings.includedFields.location}
-                  onCheckedChange={(checked) => handleFieldChange('location', checked as boolean)}
-                />
-                <Label htmlFor="location">Coordinate GPS</Label>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="location"
+                    checked={exportSettings.includedFields.location}
+                    onCheckedChange={(checked) => handleFieldChange('location', checked as boolean)}
+                  />
+                  <Label htmlFor="location">Posizione</Label>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-        {/* Filters */}
-        <div className="space-y-6">
           {/* Employee Selection */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                Dipendenti ({exportSettings.selectedEmployees.length} selezionati)
-              </CardTitle>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={selectAllEmployees}>
-                  Seleziona Tutti
-                </Button>
-                <Button variant="outline" size="sm" onClick={clearAllEmployees}>
-                  Deseleziona Tutti
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="max-h-60 overflow-y-auto space-y-2">
-              {employees.map((employee) => (
-                <div key={employee.user_id} className="flex items-center space-x-2">
-                  <Checkbox 
-                    id={`emp-${employee.user_id}`}
-                    checked={exportSettings.selectedEmployees.includes(employee.user_id)}
-                    onCheckedChange={(checked) => handleEmployeeToggle(employee.user_id, checked as boolean)}
-                  />
-                  <Label htmlFor={`emp-${employee.user_id}`} className="text-sm">
-                    {employee.first_name} {employee.last_name}
-                  </Label>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Project Selection */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FolderKanban className="h-5 w-5" />
-                Progetti ({exportSettings.selectedProjects.length} selezionati)
-              </CardTitle>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={selectAllProjects}>
-                  Seleziona Tutti
-                </Button>
-                <Button variant="outline" size="sm" onClick={clearAllProjects}>
-                  Deseleziona Tutti
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="max-h-60 overflow-y-auto space-y-2">
-              {projects.map((project) => (
-                <div key={project.id} className="flex items-center space-x-2">
-                  <Checkbox 
-                    id={`proj-${project.id}`}
-                    checked={exportSettings.selectedProjects.includes(project.id)}
-                    onCheckedChange={(checked) => handleProjectToggle(project.id, checked as boolean)}
-                  />
-                  <Label htmlFor={`proj-${project.id}`} className="text-sm">
-                    {project.name}
-                  </Label>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Export Summary */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Download className="h-5 w-5" />
-                Genera Export
+                Dipendenti
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="text-sm text-muted-foreground space-y-1">
-                <p>Formato: <span className="font-medium">{exportSettings.format.toUpperCase()}</span></p>
-                <p>Periodo: <span className="font-medium">{exportSettings.startDate} - {exportSettings.endDate}</span></p>
-                <p>Dipendenti: <span className="font-medium">{exportSettings.selectedEmployees.length}</span></p>
-                <p>Progetti: <span className="font-medium">{exportSettings.selectedProjects.length}</span></p>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={selectAllEmployees}
+                >
+                  Seleziona tutti
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={clearAllEmployees}
+                >
+                  Deseleziona tutti
+                </Button>
               </div>
               
+              <ScrollArea className="h-32 border rounded p-4">
+                {employees.map((employee) => (
+                  <div key={employee.user_id} className="flex items-center space-x-2 py-1">
+                    <Checkbox 
+                      id={`employee-${employee.user_id}`}
+                      checked={exportSettings.selectedEmployees.includes(employee.user_id)}
+                      onCheckedChange={(checked) => handleEmployeeToggle(employee.user_id, checked as boolean)}
+                    />
+                    <Label htmlFor={`employee-${employee.user_id}`}>
+                      {employee.first_name} {employee.last_name}
+                    </Label>
+                  </div>
+                ))}
+              </ScrollArea>
+            </CardContent>
+          </Card>
+
+          {/* Projects Section - Hide for payroll format */}
+          {exportSettings.format !== 'payroll' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FolderKanban className="h-5 w-5" />
+                  Progetti
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={selectAllProjects}
+                  >
+                    Seleziona tutti
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={clearAllProjects}
+                  >
+                    Deseleziona tutti
+                  </Button>
+                </div>
+                
+                <ScrollArea className="h-32 border rounded p-4">
+                  {projects.map((project) => (
+                    <div key={project.id} className="flex items-center space-x-2 py-1">
+                      <Checkbox 
+                        id={`project-${project.id}`}
+                        checked={exportSettings.selectedProjects.includes(project.id)}
+                        onCheckedChange={(checked) => handleProjectToggle(project.id, checked as boolean)}
+                      />
+                      <Label htmlFor={`project-${project.id}`}>
+                        {project.name}
+                      </Label>
+                    </div>
+                  ))}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Export Summary */}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileDown className="h-5 w-5" />
+                Riepilogo Export
+              </CardTitle>
+              <CardDescription>
+                Verifica le impostazioni prima di procedere con l'export
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <p><strong>Formato:</strong> {
+                  exportSettings.format === 'payroll' ? 'Buste Paga (Excel)' : 
+                  exportSettings.format === 'csv' ? 'CSV' :
+                  exportSettings.format === 'excel' ? 'Excel' : 'PDF'
+                }</p>
+                <p><strong>Periodo:</strong> {exportSettings.startDate} - {exportSettings.endDate}</p>
+                <p><strong>Dipendenti selezionati:</strong> {exportSettings.selectedEmployees.length}</p>
+                {exportSettings.format !== 'payroll' && (
+                  <p><strong>Progetti selezionati:</strong> {exportSettings.selectedProjects.length}</p>
+                )}
+              </div>
+
+              <Separator />
+
               <Button 
                 onClick={handleExport}
-                disabled={loading || !canExport}
+                disabled={!canExport || loading}
                 className="w-full"
                 size="lg"
               >
-                {loading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                    Generazione in corso...
-                  </>
-                ) : (
-                  <>
-                    <FileDown className="mr-2 h-4 w-4" />
-                    Genera Export
-                  </>
-                )}
+                <Download className="mr-2 h-4 w-4" />
+                {loading ? 'Generazione in corso...' : 'Genera Export'}
               </Button>
-              
-              {!canExport && (
-                <p className="text-sm text-amber-600 text-center">
-                  Seleziona almeno un dipendente o un progetto per procedere
-                </p>
-              )}
             </CardContent>
           </Card>
         </div>

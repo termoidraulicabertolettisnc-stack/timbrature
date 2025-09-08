@@ -12,6 +12,7 @@ interface ExportRequest {
   endDate?: string;
   selectedEmployees: string[];
   selectedProjects: string[];
+  format: 'csv' | 'excel' | 'pdf' | 'payroll';
   includedFields: {
     date: boolean;
     employee: boolean;
@@ -62,176 +63,188 @@ serve(async (req) => {
 
     console.log(`Exporting data from ${startDate} to ${endDate}`);
 
-    // Build base query for timesheets
+    // Get employee filter
+    const employeeFilter = exportRequest.selectedEmployees.length > 0 
+      ? exportRequest.selectedEmployees 
+      : [];
+
+    // Get project filter (not used for payroll format)
+    const projectFilter = exportRequest.format !== 'payroll' && exportRequest.selectedProjects.length > 0 
+      ? exportRequest.selectedProjects 
+      : [];
+
+    // Get timesheets with joins
     let timesheetQuery = supabase
       .from('timesheets')
-      .select('*')
+      .select(`
+        *,
+        profiles:user_id (
+          first_name,
+          last_name,
+          email
+        ),
+        projects:project_id (
+          name
+        )
+      `)
       .gte('date', startDate)
       .lte('date', endDate);
 
-    // Apply filters
-    if (exportRequest.selectedEmployees.length > 0) {
-      timesheetQuery = timesheetQuery.in('user_id', exportRequest.selectedEmployees);
+    if (employeeFilter.length > 0) {
+      timesheetQuery = timesheetQuery.in('user_id', employeeFilter);
     }
 
-    if (exportRequest.selectedProjects.length > 0) {
-      timesheetQuery = timesheetQuery.in('project_id', exportRequest.selectedProjects);
+    if (exportRequest.format !== 'payroll' && projectFilter.length > 0) {
+      timesheetQuery = timesheetQuery.in('project_id', projectFilter);
     }
 
-    // Execute timesheet query
-    const { data: timesheets, error: timesheetError } = await timesheetQuery.order('date', { ascending: false });
+    const { data: timesheets, error: timesheetError } = await timesheetQuery;
 
     if (timesheetError) {
-      console.error('Timesheet query error:', timesheetError);
+      console.error('Error fetching timesheets:', timesheetError);
       throw timesheetError;
     }
 
+    // Get employee absences for the same period (only for payroll format)
+    let absences: any[] = [];
+    if (exportRequest.format === 'payroll') {
+      const { data: absencesData, error: absenceError } = await supabase
+        .from('employee_absences')
+        .select(`
+          *,
+          profiles:user_id (
+            first_name,
+            last_name,
+            email
+          )
+        `)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .in('user_id', employeeFilter.length > 0 ? employeeFilter : []);
+
+      if (absenceError) {
+        console.error('Error fetching absences:', absenceError);
+      } else {
+        absences = absencesData || [];
+      }
+    }
+
+    // Get employee settings (only for payroll format)
+    let employeeSettings: any[] = [];
+    if (exportRequest.format === 'payroll') {
+      const { data: settingsData, error: settingsError } = await supabase
+        .from('employee_settings')
+        .select('*')
+        .in('user_id', employeeFilter.length > 0 ? employeeFilter : []);
+
+      if (settingsError) {
+        console.error('Error fetching employee settings:', settingsError);
+      } else {
+        employeeSettings = settingsData || [];
+      }
+    }
+
     console.log(`Found ${timesheets?.length || 0} timesheets`);
-
-    if (!timesheets || timesheets.length === 0) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Nessun dato trovato per i criteri selezionati',
-          data: []
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    console.log(`Found ${absences?.length || 0} absences`);
+    console.log(`Found ${employeeSettings?.length || 0} employee settings`);
+    
+    // Combine timesheets and absences for payroll format
+    const combinedData: any[] = [];
+    const { includedFields } = exportRequest;
+    
+    // Add timesheets
+    if (timesheets) {
+      timesheets.forEach((timesheet: any) => {
+        const profile = timesheet.profiles;
+        const employeeName = profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown';
+        const settings = employeeSettings?.find(s => s.user_id === timesheet.user_id);
+        
+        const record: any = {
+          employee_id: timesheet.user_id,
+          employee: employeeName,
+          date: timesheet.date,
+          is_absence: false,
+          total_hours: timesheet.total_hours || 0,
+          overtime_hours: timesheet.overtime_hours || 0,
+          meal_voucher_earned: timesheet.meal_voucher_earned || false,
+          employee_settings: settings
+        };
+        
+        // Add fields based on format and includedFields
+        if (exportRequest.format !== 'payroll') {
+          // Regular export formats
+          if (includedFields.date) record['Data'] = timesheet.date;
+          if (includedFields.employee) {
+            record['Dipendente'] = employeeName;
+            record['Email'] = profile?.email || 'N/A';
+          }
+          if (includedFields.project) {
+            record['Progetto'] = timesheet.projects?.name || 'N/A';
+          }
+          if (includedFields.startTime && timesheet.start_time) {
+            record['Ora Inizio'] = new Date(timesheet.start_time).toLocaleTimeString('it-IT', { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            });
+          }
+          if (includedFields.endTime && timesheet.end_time) {
+            record['Ora Fine'] = new Date(timesheet.end_time).toLocaleTimeString('it-IT', { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            });
+          }
+          if (includedFields.totalHours) record['Ore Totali'] = timesheet.total_hours || 0;
+          if (includedFields.overtimeHours) record['Ore Straordinario'] = timesheet.overtime_hours || 0;
+          if (includedFields.nightHours) record['Ore Notturne'] = timesheet.night_hours || 0;
+          if (includedFields.notes && timesheet.notes) record['Note'] = timesheet.notes;
+          if (includedFields.location) {
+            if (timesheet.start_location_lat && timesheet.start_location_lng) {
+              record['Posizione Inizio'] = `${timesheet.start_location_lat}, ${timesheet.start_location_lng}`;
+            }
+            if (timesheet.end_location_lat && timesheet.end_location_lng) {
+              record['Posizione Fine'] = `${timesheet.end_location_lat}, ${timesheet.end_location_lng}`;
+            }
+          }
         }
-      );
+        
+        combinedData.push(record);
+      });
+    }
+    
+    // Add absences (only for payroll format)
+    if (exportRequest.format === 'payroll' && absences) {
+      absences.forEach((absence: any) => {
+        const profile = absence.profiles;
+        const employeeName = profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown';
+        const settings = employeeSettings?.find(s => s.user_id === absence.user_id);
+        
+        const record: any = {
+          employee_id: absence.user_id,
+          employee: employeeName,
+          date: absence.date,
+          is_absence: true,
+          absence_type: absence.absence_type,
+          absence_hours: absence.hours || 8,
+          total_hours: 0,
+          overtime_hours: 0,
+          meal_voucher_earned: false,
+          employee_settings: settings
+        };
+        
+        combinedData.push(record);
+      });
     }
 
-    // Get unique user IDs and project IDs from timesheets
-    const userIds = [...new Set(timesheets.map(t => t.user_id).filter(Boolean))];
-    const projectIds = [...new Set(timesheets.map(t => t.project_id).filter(Boolean))];
+    console.log(`Successfully processed ${combinedData.length} records for export`);
 
-    // Fetch user profiles
-    let profiles: any[] = [];
-    if (userIds.length > 0) {
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('user_id, first_name, last_name, email')
-        .in('user_id', userIds);
-
-      if (profilesError) {
-        console.error('Profiles query error:', profilesError);
-      } else {
-        profiles = profilesData || [];
-      }
-    }
-
-    // Fetch projects
-    let projects: any[] = [];
-    if (projectIds.length > 0) {
-      const { data: projectsData, error: projectsError } = await supabase
-        .from('projects')
-        .select('id, name')
-        .in('id', projectIds);
-
-      if (projectsError) {
-        console.error('Projects query error:', projectsError);
-      } else {
-        projects = projectsData || [];
-      }
-    }
-
-    console.log(`Found ${profiles.length} profiles and ${projects.length} projects`);
-
-    // Create lookup maps for better performance
-    const profileMap = new Map(profiles.map(p => [p.user_id, p]));
-    const projectMap = new Map(projects.map(p => [p.id, p]));
-
-    // Process data for export
-    const processedData = timesheets.map((timesheet) => {
-      const row: any = {};
-      
-      if (exportRequest.includedFields.date) {
-        row['Data'] = timesheet.date;
-      }
-      
-      if (exportRequest.includedFields.employee) {
-        const profile = profileMap.get(timesheet.user_id);
-        if (profile) {
-          row['Dipendente'] = `${profile.first_name} ${profile.last_name}`;
-          row['Email'] = profile.email;
-        } else {
-          row['Dipendente'] = 'N/A';
-          row['Email'] = 'N/A';
-        }
-      }
-      
-      if (exportRequest.includedFields.project) {
-        const project = projectMap.get(timesheet.project_id);
-        row['Progetto'] = project ? project.name : 'N/A';
-      }
-      
-      if (exportRequest.includedFields.startTime && timesheet.start_time) {
-        row['Ora Inizio'] = new Date(timesheet.start_time).toLocaleTimeString('it-IT', { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        });
-      }
-      
-      if (exportRequest.includedFields.endTime && timesheet.end_time) {
-        row['Ora Fine'] = new Date(timesheet.end_time).toLocaleTimeString('it-IT', { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        });
-      }
-      
-      if (exportRequest.includedFields.totalHours) {
-        row['Ore Totali'] = timesheet.total_hours || 0;
-      }
-      
-      if (exportRequest.includedFields.overtimeHours) {
-        row['Ore Straordinario'] = timesheet.overtime_hours || 0;
-      }
-      
-      if (exportRequest.includedFields.nightHours) {
-        row['Ore Notturne'] = timesheet.night_hours || 0;
-      }
-      
-      if (exportRequest.includedFields.notes && timesheet.notes) {
-        row['Note'] = timesheet.notes;
-      }
-      
-      if (exportRequest.includedFields.location) {
-        if (timesheet.start_location_lat && timesheet.start_location_lng) {
-          row['Posizione Inizio'] = `${timesheet.start_location_lat}, ${timesheet.start_location_lng}`;
-        }
-        if (timesheet.end_location_lat && timesheet.end_location_lng) {
-          row['Posizione Fine'] = `${timesheet.end_location_lat}, ${timesheet.end_location_lng}`;
-        }
-      }
-      
-      return row;
+    return new Response(JSON.stringify(combinedData), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-
-    console.log(`Successfully processed ${processedData.length} records for export`);
-
-    // Return structured data for frontend processing
-    return new Response(
-      JSON.stringify({
-        success: true,
-        data: processedData,
-        metadata: {
-          startDate,
-          endDate,
-          totalRecords: processedData.length,
-          generatedAt: new Date().toISOString()
-        }
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
 
   } catch (error) {
     console.error('Error in generate-export function:', error);
     return new Response(
       JSON.stringify({ 
-        success: false, 
         error: error.message,
         data: []
       }),
