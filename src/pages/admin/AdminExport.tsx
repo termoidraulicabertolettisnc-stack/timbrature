@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileDown, Calendar, Users, FolderKanban, Settings, Download, FileText, Table } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
@@ -375,13 +375,11 @@ export default function AdminExport() {
     return payrollData;
   };
 
-  const generatePayrollExcel = (payrollData: PayrollData[]) => {
-    const wb = XLSX.utils.book_new();
+  const generatePayrollExcel = async (payrollData: PayrollData[]) => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Buste Pago');
     
-    // Create worksheet data
-    const wsData: any[][] = [];
-    
-    // Header row
+    // Create header row
     const headerRow = ['Dipendente', 'Tipo'];
     const daysInMonth = new Date(
       new Date(exportSettings.startDate).getFullYear(),
@@ -393,7 +391,33 @@ export default function AdminExport() {
       headerRow.push(day.toString());
     }
     headerRow.push('Totale', 'Buoni Pasto 8€');
-    wsData.push(headerRow);
+    
+    // Add header row to worksheet
+    const headerRowRef = worksheet.addRow(headerRow);
+    
+    // Style headers
+    headerRowRef.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4472C4' }
+      };
+      cell.font = { 
+        bold: true, 
+        color: { argb: 'FFFFFFFF' },
+        size: 11
+      };
+      cell.alignment = { 
+        vertical: 'middle', 
+        horizontal: 'center' 
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    });
 
     payrollData.forEach((empData) => {
       // Ordinary hours row
@@ -404,7 +428,21 @@ export default function AdminExport() {
       }
       ordinaryRow.push(empData.totals.ordinary.toString());
       ordinaryRow.push('');
-      wsData.push(ordinaryRow);
+      
+      const ordinaryRowRef = worksheet.addRow(ordinaryRow);
+      ordinaryRowRef.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE6F7E6' }
+        };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
 
       // Overtime hours row
       const overtimeRow = ['', 'S'];
@@ -414,7 +452,21 @@ export default function AdminExport() {
       }
       overtimeRow.push(empData.totals.overtime.toString());
       overtimeRow.push('');
-      wsData.push(overtimeRow);
+      
+      const overtimeRowRef = worksheet.addRow(overtimeRow);
+      overtimeRowRef.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE6F2FF' }
+        };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
 
       // Absence hours row
       const absenceRow = ['', 'N'];
@@ -424,16 +476,40 @@ export default function AdminExport() {
       }
       absenceRow.push(empData.totals.absence.toString());
       absenceRow.push((empData.mealVouchers['8'] || 0).toString());
-      wsData.push(absenceRow);
+      
+      const absenceRowRef = worksheet.addRow(absenceRow);
+      absenceRowRef.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFE6E6' }
+        };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
 
       // Empty row between employees
-      wsData.push([]);
+      worksheet.addRow([]);
     });
 
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    XLSX.utils.book_append_sheet(wb, ws, 'Buste Paga');
+    // Auto-fit columns
+    worksheet.columns.forEach((column, index) => {
+      if (index === 0) {
+        column.width = 20; // Employee name column
+      } else if (index === 1) {
+        column.width = 5; // Type column
+      } else if (index <= daysInMonth + 1) {
+        column.width = 5; // Day columns
+      } else {
+        column.width = 12; // Total and Buoni Pasto columns
+      }
+    });
     
-    return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    return workbook.xlsx.writeBuffer();
   };
 
   const generateCSV = (data: any[]): string => {
@@ -456,18 +532,67 @@ export default function AdminExport() {
     return csvRows.join('\n');
   };
 
-  const generateExcel = (data: any[], filename: string): void => {
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Timesheets');
+  const generateExcel = async (data: any[], filename: string): Promise<void> => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Timesheets');
     
-    // Auto-width columns
-    const columnWidths = Object.keys(data[0] || {}).map(key => ({
-      wch: Math.max(key.length, 20)
-    }));
-    worksheet['!cols'] = columnWidths;
+    if (data.length > 0) {
+      // Add headers
+      const headers = Object.keys(data[0]);
+      const headerRow = worksheet.addRow(headers);
+      
+      // Style headers
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF4472C4' }
+        };
+        cell.font = { 
+          bold: true, 
+          color: { argb: 'FFFFFFFF' },
+          size: 11
+        };
+        cell.alignment = { 
+          vertical: 'middle', 
+          horizontal: 'center' 
+        };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
+      
+      // Add data rows
+      data.forEach(row => {
+        const dataRow = worksheet.addRow(headers.map(header => row[header] || ''));
+        dataRow.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+        });
+      });
+      
+      // Auto-fit columns
+      worksheet.columns.forEach((column, index) => {
+        const header = headers[index];
+        column.width = Math.max(header ? header.length : 10, 20);
+      });
+    }
     
-    XLSX.writeFile(workbook, filename);
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    window.URL.revokeObjectURL(url);
   };
 
   const generatePDF = (data: any[], filename: string, startDate: string, endDate: string): void => {
@@ -567,7 +692,7 @@ export default function AdminExport() {
       // Generate and download file based on format
       if (exportSettings.format === 'payroll') {
         const payrollData = generatePayroll(response);
-        const excelBuffer = generatePayrollExcel(payrollData);
+        const excelBuffer = await generatePayrollExcel(payrollData);
         const blob = new Blob([excelBuffer], { 
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
         });
