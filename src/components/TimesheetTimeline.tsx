@@ -55,6 +55,37 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
   const START_HOUR = 6;
   const HOUR_HEIGHT = 60; // pixels per hour
   
+  // Converte timestamp in minuti dal midnight
+  const timeToMinutes = (timeString: string): number => {
+    try {
+      // Prima prova con parseISO per timestamp completi
+      let time = parseISO(timeString);
+      
+      // Se la data è invalida, potrebbe essere solo un orario (HH:mm:ss)
+      if (!isValid(time)) {
+        // Prova a parsare come orario puro aggiungendo una data
+        const timeOnly = timeString.match(/^(\d{2}):(\d{2}):?(\d{2})?$/);
+        if (timeOnly) {
+          const hours = parseInt(timeOnly[1], 10);
+          const minutes = parseInt(timeOnly[2], 10);
+          return hours * 60 + minutes;
+        }
+        // Fallback: prova con una data base
+        time = parseISO(`2024-01-01T${timeString}`);
+      }
+      
+      if (!isValid(time)) {
+        console.warn('Invalid time format:', timeString);
+        return 0;
+      }
+      
+      return time.getHours() * 60 + time.getMinutes();
+    } catch (error) {
+      console.warn('Error parsing time:', timeString, error);
+      return 0;
+    }
+  };
+
   // Calcola l'ora di fine dinamicamente basandosi sui timesheet
   const calculateDynamicEndHour = (): number => {
     let maxHour = 22; // Default end hour
@@ -108,37 +139,6 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
     if (adjustedHour >= DYNAMIC_END_HOUR) return TIMELINE_HEIGHT;
     
     return ((adjustedHour - START_HOUR) * 60 + minute) * (HOUR_HEIGHT / 60);
-  };
-
-  // Converte timestamp in minuti dal midnight
-  const timeToMinutes = (timeString: string): number => {
-    try {
-      // Prima prova con parseISO per timestamp completi
-      let time = parseISO(timeString);
-      
-      // Se la data è invalida, potrebbe essere solo un orario (HH:mm:ss)
-      if (!isValid(time)) {
-        // Prova a parsare come orario puro aggiungendo una data
-        const timeOnly = timeString.match(/^(\d{2}):(\d{2}):?(\d{2})?$/);
-        if (timeOnly) {
-          const hours = parseInt(timeOnly[1], 10);
-          const minutes = parseInt(timeOnly[2], 10);
-          return hours * 60 + minutes;
-        }
-        // Fallback: prova con una data base
-        time = parseISO(`2024-01-01T${timeString}`);
-      }
-      
-      if (!isValid(time)) {
-        console.warn('Invalid time format:', timeString);
-        return 0;
-      }
-      
-      return time.getHours() * 60 + time.getMinutes();
-    } catch (error) {
-      console.warn('Error parsing time:', timeString, error);
-      return 0;
-    }
   };
 
   // Calcola i blocchi temporali per ogni giorno
