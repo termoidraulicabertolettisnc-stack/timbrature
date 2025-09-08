@@ -85,21 +85,39 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
     setLoading(true);
 
     try {
+      // Ottieni l'utente corrente autenticato
+      const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!currentUser) throw new Error('Utente non autenticato');
+
+      console.log('Current user:', currentUser.id);
+      console.log('Inserting absence for user:', formData.user_id);
+
       // Ottieni il company_id del dipendente selezionato
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('company_id')
         .eq('user_id', formData.user_id)
-        .single();
+        .maybeSingle();
 
-      if (profileError) throw profileError;
-      if (!profileData?.company_id) throw new Error('Company ID non trovato per il dipendente');
+      if (profileError) {
+        console.error('Profile error:', profileError);
+        throw profileError;
+      }
+      if (!profileData?.company_id) {
+        console.error('No company_id found for user:', formData.user_id);
+        throw new Error('Company ID non trovato per il dipendente');
+      }
+
+      console.log('Company ID:', profileData.company_id);
 
       // Ottieni tutti i giorni nel periodo selezionato
       const days = eachDayOfInterval({
         start: formData.date_from,
         end: formData.date_to
       });
+
+      console.log('Days to insert:', days.length);
 
       // Prepara i dati per l'inserimento
       const absences = days.map(day => ({
@@ -109,15 +127,22 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
         absence_type: formData.absence_type,
         hours: formData.hours,
         notes: formData.notes || null,
-        created_by: formData.user_id
+        created_by: currentUser.id
       }));
+
+      console.log('Inserting absences:', absences);
 
       // Inserisci tutte le assenze
       const { error } = await supabase
         .from('employee_absences')
         .insert(absences);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Insert error:', error);
+        throw error;
+      }
+
+      console.log('Absences inserted successfully');
 
       toast({
         title: "Successo",
@@ -131,7 +156,7 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
       console.error('Error inserting absence:', error);
       toast({
         title: "Errore",
-        description: "Errore nell'inserimento dell'assenza",
+        description: `Errore nell'inserimento dell'assenza: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`,
         variant: "destructive",
       });
     } finally {
