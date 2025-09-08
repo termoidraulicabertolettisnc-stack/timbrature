@@ -9,8 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { CalendarIcon, Clock, Edit, Filter, Download, Users, ChevronDown, ChevronRight, Trash2, Navigation } from 'lucide-react';
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, addDays, isSameDay } from 'date-fns';
+import { CalendarIcon, Clock, Edit, Filter, Download, Users, ChevronDown, ChevronRight, Trash2, Navigation, ChevronLeft } from 'lucide-react';
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, addDays, isSameDay, subDays, subWeeks, subMonths, addWeeks, addMonths } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { OvertimeTracker } from '@/components/OvertimeTracker';
@@ -20,6 +20,9 @@ import { TimesheetEditDialog } from '@/components/TimesheetEditDialog';
 import LocationDisplay from '@/components/LocationDisplay';
 import { useRealtimeHours } from '@/hooks/use-realtime-hours';
 import { TimesheetWithProfile } from '@/types/timesheet';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 
 // Componente per mostrare ore con calcolo in tempo reale
 function HoursDisplay({ timesheet }: { timesheet: TimesheetWithProfile }) {
@@ -474,6 +477,58 @@ export default function AdminTimesheets() {
     setEditingTimesheet(null);
   };
 
+  const navigateDate = (direction: 'prev' | 'next') => {
+    const currentDate = parseISO(dateFilter);
+    let newDate: Date;
+
+    switch (activeView) {
+      case 'daily':
+        newDate = direction === 'prev' ? subDays(currentDate, 1) : addDays(currentDate, 1);
+        break;
+      case 'weekly':
+        newDate = direction === 'prev' ? subWeeks(currentDate, 1) : addWeeks(currentDate, 1);
+        break;
+      case 'monthly':
+        newDate = direction === 'prev' ? subMonths(currentDate, 1) : addMonths(currentDate, 1);
+        break;
+      default:
+        return;
+    }
+
+    setDateFilter(format(newDate, 'yyyy-MM-dd'));
+  };
+
+  const getDateRangeText = () => {
+    const baseDate = parseISO(dateFilter);
+    
+    switch (activeView) {
+      case 'daily':
+        return format(baseDate, 'dd/MM/yyyy', { locale: it });
+      case 'weekly':
+        const weekStart = startOfWeek(baseDate, { weekStartsOn: 1 });
+        const weekEnd = endOfWeek(baseDate, { weekStartsOn: 1 });
+        return `${format(weekStart, 'dd/MM', { locale: it })} - ${format(weekEnd, 'dd/MM/yyyy', { locale: it })}`;
+      case 'monthly':
+        return format(baseDate, 'MMMM yyyy', { locale: it });
+      default:
+        return '';
+    }
+  };
+
+  const getNavigationTooltip = (direction: 'prev' | 'next') => {
+    const action = direction === 'prev' ? 'Precedente' : 'Successivo';
+    switch (activeView) {
+      case 'daily':
+        return `${action} giorno`;
+      case 'weekly':
+        return `${action} settimana`;
+      case 'monthly':
+        return `${action} mese`;
+      default:
+        return action;
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -509,11 +564,55 @@ export default function AdminTimesheets() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Data</label>
-                <Input
-                  type="date"
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                />
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => navigateDate('prev')}
+                    title={getNavigationTooltip('prev')}
+                    className="h-10 w-10"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "flex-1 justify-start text-left font-normal h-10",
+                          !dateFilter && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {getDateRangeText()}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={parseISO(dateFilter)}
+                        onSelect={(date) => {
+                          if (date) {
+                            setDateFilter(format(date, 'yyyy-MM-dd'));
+                          }
+                        }}
+                        initialFocus
+                        className="p-3 pointer-events-auto"
+                      />
+                    </PopoverContent>
+                  </Popover>
+
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => navigateDate('next')}
+                    title={getNavigationTooltip('next')}
+                    className="h-10 w-10"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               
               <div className="space-y-2">
