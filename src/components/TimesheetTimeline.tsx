@@ -552,7 +552,17 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
 
           {/* Colonne per ogni giorno */}
           {extendedDays.map((day, dayIndex) => {
-            const dayTimesheets = timesheets.filter(ts => ts.date === format(day, 'yyyy-MM-dd'));
+            const currentDayStr = format(day, 'yyyy-MM-dd');
+            // Includi timesheet che iniziano questo giorno O che finiscono questo giorno (multi-giorno)
+            const dayTimesheets = timesheets.filter(ts => {
+              const isStartDay = ts.date === currentDayStr;
+              const isEndDay = ts.end_date === currentDayStr;
+              const hasValidTimes = ts.start_time && ts.end_time;
+              return hasValidTimes && (isStartDay || isEndDay);
+            });
+            
+            console.log(`🔍 [${currentDayStr}] Timesheet dopo filtering migliorato:`, dayTimesheets.length);
+            
             const timeBlocks = calculateTimeBlocks(dayTimesheets, day);
             
             return (
