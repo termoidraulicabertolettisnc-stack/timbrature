@@ -63,19 +63,13 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
 
   // Converte minuti dal midnight in posizione Y
   const minutesToPosition = (minutes: number): number => {
-    // Se i minuti superano le 24 ore (1440 minuti), mappa oltre la timeline
     const hour = Math.floor(minutes / 60);
     const minute = minutes % 60;
     
+    // Limita la visualizzazione al range 6:00-22:00
     if (hour < START_HOUR) return 0;
-    
-    // Per sessioni che si estendono oltre le 24 ore, continua la mappatura
-    if (hour >= 24) {
-      // Continua la timeline oltre le 22:00 per sessioni lunghe
-      return ((hour - START_HOUR) * 60 + minute) * (HOUR_HEIGHT / 60);
-    }
-    
     if (hour >= END_HOUR) return TIMELINE_HEIGHT;
+    
     return ((hour - START_HOUR) * 60 + minute) * (HOUR_HEIGHT / 60);
   };
 
@@ -140,25 +134,28 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
 
       const startMinutes = timeToMinutes(timesheet.start_time);
       const rawEndMinutes = timeToMinutes(timesheet.end_time);
-      let endMinutes = rawEndMinutes;
       
       // Se l'orario di fine è precedente a quello di inizio, si estende al giorno successivo
-      const extendsToNextDay = endMinutes < startMinutes;
-      if (extendsToNextDay) {
-        endMinutes = rawEndMinutes + 24 * 60;
-      }
-
+      const extendsToNextDay = rawEndMinutes < startMinutes;
+      
       const isFromPreviousDay = timesheet.date === prevDayStr;
-      let actualStartMinutes = startMinutes;
-      let actualEndMinutes = endMinutes;
+      const currentDayStr = format(dayDate, 'yyyy-MM-dd');
+      
+      let actualStartMinutes: number;
+      let actualEndMinutes: number;
 
       if (isFromPreviousDay) {
         // Questo timesheet inizia il giorno prima, mostra solo la parte di oggi
         actualStartMinutes = 0; // Inizia a mezzanotte
-        actualEndMinutes = rawEndMinutes; // Finisce all'orario originale
+        actualEndMinutes = rawEndMinutes; // Finisce all'orario originale del giorno successivo
       } else if (extendsToNextDay) {
         // Questo timesheet inizia oggi ma si estende domani, mostra solo la parte di oggi
-        actualEndMinutes = 24 * 60; // Finisce a mezzanotte
+        actualStartMinutes = startMinutes;
+        actualEndMinutes = 24 * 60; // Finisce a mezzanotte (1440 minuti)
+      } else {
+        // Timesheet normale dello stesso giorno
+        actualStartMinutes = startMinutes;
+        actualEndMinutes = rawEndMinutes;
       }
       const lunchStartMinutes = timesheet.lunch_start_time ? timeToMinutes(timesheet.lunch_start_time) : null;
       const lunchEndMinutes = timesheet.lunch_end_time ? timeToMinutes(timesheet.lunch_end_time) : null;
