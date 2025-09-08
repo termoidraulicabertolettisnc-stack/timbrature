@@ -135,11 +135,24 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
       profileName: ts.profiles ? `${ts.profiles.first_name} ${ts.profiles.last_name}` : 'N/A'
     })));
 
-    // Rimuovi duplicati basati su ID e mantieni solo quelli con start_time/end_time validi
+    // Rimuovi duplicati basati su ID e mantieni quelli con start_time valido
+    // Per timesheet in corso (end_time null), calcola end_time in tempo reale
     const validTimesheets = dayTimesheets.filter((ts, index, arr) => {
       const isUnique = index === arr.findIndex(t => t.id === ts.id);
-      const hasValidTimes = ts.start_time && ts.end_time;
-      return isUnique && hasValidTimes;
+      const hasValidStartTime = !!ts.start_time;
+      return isUnique && hasValidStartTime;
+    }).map(ts => {
+      // Se il timesheet è in corso (end_time null), calcola l'orario corrente
+      if (!ts.end_time && ts.start_time) {
+        const now = new Date();
+        const currentTime = format(now, "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
+        return {
+          ...ts,
+          end_time: currentTime,
+          isOngoing: true // Flag per indicare che è in corso
+        };
+      }
+      return ts;
     });
 
     console.log(`🔍 [${currentDayStr}] Timesheet validi dopo deduplicazione:`, validTimesheets.length);
