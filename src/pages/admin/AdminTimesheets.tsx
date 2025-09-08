@@ -19,6 +19,7 @@ import LocationTrackingIndicator from '@/components/LocationTrackingIndicator';
 import { TimesheetEditDialog } from '@/components/TimesheetEditDialog';
 import { TimesheetInsertDialog } from '@/components/TimesheetInsertDialog';
 import { AbsenceInsertDialog } from '@/components/AbsenceInsertDialog';
+import { DayActionMenu } from '@/components/DayActionMenu';
 import LocationDisplay from '@/components/LocationDisplay';
 import { useRealtimeHours } from '@/hooks/use-realtime-hours';
 import { TimesheetWithProfile } from '@/types/timesheet';
@@ -108,6 +109,7 @@ export default function AdminTimesheets() {
   // Insert dialog states
   const [timesheetInsertDialogOpen, setTimesheetInsertDialogOpen] = useState(false);
   const [absenceInsertDialogOpen, setAbsenceInsertDialogOpen] = useState(false);
+  const [selectedDateForDialog, setSelectedDateForDialog] = useState<Date | undefined>(undefined);
   
   // Filtri
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
@@ -559,6 +561,16 @@ export default function AdminTimesheets() {
     setEditingTimesheet(null);
   };
 
+  const handleAddTimesheet = (date?: Date) => {
+    setSelectedDateForDialog(date);
+    setTimesheetInsertDialogOpen(true);
+  };
+
+  const handleAddAbsence = (date?: Date) => {
+    setSelectedDateForDialog(date);
+    setAbsenceInsertDialogOpen(true);
+  };
+
   const navigateDate = (direction: 'prev' | 'next') => {
     const currentDate = parseISO(dateFilter);
     let newDate: Date;
@@ -639,7 +651,7 @@ export default function AdminTimesheets() {
         </div>
         <div className="flex items-center gap-2">
           <Button
-            onClick={() => setTimesheetInsertDialogOpen(true)}
+            onClick={() => handleAddTimesheet()}
             className="flex items-center gap-2"
             variant="default"
           >
@@ -647,7 +659,7 @@ export default function AdminTimesheets() {
             Nuova Timbratura
           </Button>
           <Button
-            onClick={() => setAbsenceInsertDialogOpen(true)}
+            onClick={() => handleAddAbsence()}
             className="flex items-center gap-2"
             variant="secondary"
           >
@@ -805,6 +817,8 @@ export default function AdminTimesheets() {
             onEdit={handleEditTimesheet}
             onDelete={deleteTimesheet}
             onTimesheetClick={handleEditTimesheetFromTimeline}
+            onAddTimesheet={handleAddTimesheet}
+            onAddAbsence={handleAddAbsence}
           />
         </TabsContent>
         
@@ -815,6 +829,8 @@ export default function AdminTimesheets() {
             dateFilter={dateFilter}
             onEdit={handleEditTimesheet}
             onDelete={deleteTimesheet}
+            onAddTimesheet={handleAddTimesheet}
+            onAddAbsence={handleAddAbsence}
           />
         </TabsContent>
       </Tabs>
@@ -830,12 +846,14 @@ export default function AdminTimesheets() {
         open={timesheetInsertDialogOpen}
         onOpenChange={setTimesheetInsertDialogOpen}
         onSuccess={loadTimesheets}
+        selectedDate={selectedDateForDialog}
       />
 
       <AbsenceInsertDialog
         open={absenceInsertDialogOpen}
         onOpenChange={setAbsenceInsertDialogOpen}
         onSuccess={loadTimesheets}
+        selectedDate={selectedDateForDialog}
       />
     </div>
   );
@@ -989,7 +1007,9 @@ function WeeklyView({
   dateFilter,
   onEdit,
   onDelete,
-  onTimesheetClick
+  onTimesheetClick,
+  onAddTimesheet,
+  onAddAbsence
 }: { 
   weeklyData: EmployeeWeeklyData[]; 
   loading: boolean; 
@@ -997,6 +1017,8 @@ function WeeklyView({
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onTimesheetClick: (timesheet: TimesheetWithProfile) => void;
+  onAddTimesheet: (date: Date) => void;
+  onAddAbsence: (date: Date) => void;
 }) {
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
 
@@ -1095,7 +1117,7 @@ function WeeklyView({
                     
                     <div className="flex items-center gap-4 overflow-x-auto">
                       {employee.days.map((day, index) => (
-                        <div key={day.date} className="text-center min-w-[60px]">
+                        <div key={day.date} className="text-center min-w-[60px] group relative">
                           <div className="text-xs text-muted-foreground">{dayNames[index]}</div>
                            <div className="space-y-1">
                               <div className="text-xs">
@@ -1129,6 +1151,10 @@ function WeeklyView({
                                ) : '-')}
                              </div>
                            </div>
+                           <DayActionMenu
+                             onAddTimesheet={() => onAddTimesheet(parseISO(day.date))}
+                             onAddAbsence={() => onAddAbsence(parseISO(day.date))}
+                           />
                         </div>
                       ))}
                       <div className="text-center min-w-[100px] bg-secondary/50 px-2 py-1 rounded">
@@ -1223,13 +1249,17 @@ function MonthlyView({
   loading, 
   dateFilter,
   onEdit,
-  onDelete
+  onDelete,
+  onAddTimesheet,
+  onAddAbsence
 }: { 
   monthlyData: EmployeeMonthlyData[]; 
   loading: boolean; 
   dateFilter: string;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
+  onAddTimesheet: (date: Date) => void;
+  onAddAbsence: (date: Date) => void;
 }) {
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
   const [selectedDays, setSelectedDays] = useState<Map<string, string>>(new Map()); // Map<employeeId, selectedDate>
@@ -1399,7 +1429,7 @@ function MonthlyView({
                                 <div 
                                   key={day.toISOString()}
                                   className={`
-                                    p-2 text-center border rounded-sm min-h-[60px] flex flex-col justify-center cursor-pointer
+                                    group relative p-2 text-center border rounded-sm min-h-[60px] flex flex-col justify-center cursor-pointer
                                     hover:bg-secondary/50 transition-colors
                                     ${isToday ? 'bg-primary/10 border-primary' : 'bg-secondary/30 border-border'}
                                     ${dayData && dayData.total_hours > 0 ? 'bg-success/10 hover:bg-success/20' : ''}
@@ -1458,6 +1488,12 @@ function MonthlyView({
                                   ) : (
                                     <div className="text-xs text-muted-foreground">-</div>
                                   )}
+                                  <div className="absolute top-1 right-1">
+                                    <DayActionMenu
+                                      onAddTimesheet={() => onAddTimesheet(day)}
+                                      onAddAbsence={() => onAddAbsence(day)}
+                                    />
+                                  </div>
                                 </div>
                               );
                             })}

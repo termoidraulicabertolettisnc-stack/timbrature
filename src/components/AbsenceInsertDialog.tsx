@@ -17,9 +17,10 @@ interface AbsenceInsertDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  selectedDate?: Date;
 }
 
-export function AbsenceInsertDialog({ open, onOpenChange, onSuccess }: AbsenceInsertDialogProps) {
+export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDate }: AbsenceInsertDialogProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -40,8 +41,8 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess }: AbsenceIn
       setFormData({
         user_id: '',
         absence_type: 'F',
-        date_from: new Date(),
-        date_to: new Date(),
+        date_from: selectedDate || new Date(),
+        date_to: selectedDate || new Date(),
         hours: 8,
         notes: ''
       });

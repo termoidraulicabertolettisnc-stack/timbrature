@@ -17,9 +17,10 @@ interface TimesheetInsertDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  selectedDate?: Date;
 }
 
-export function TimesheetInsertDialog({ open, onOpenChange, onSuccess }: TimesheetInsertDialogProps) {
+export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedDate }: TimesheetInsertDialogProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -42,7 +43,7 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess }: Timeshe
       setFormData({
         user_id: '',
         project_id: '',
-        date: new Date(),
+        date: selectedDate || new Date(),
         start_time: '',
         end_time: '',
         lunch_duration_minutes: 60,
