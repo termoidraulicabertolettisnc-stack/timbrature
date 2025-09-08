@@ -27,7 +27,7 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
   
   const [formData, setFormData] = useState({
     user_id: '',
-    absence_type: 'F' as 'A' | 'F' | 'FS' | 'I' | 'M' | 'PR' | 'PNR',
+    absence_type: 'F' as 'F' | 'I' | 'M' | 'PNR',
     date_from: new Date(),
     date_to: new Date(),
     hours: 8,
@@ -141,13 +141,10 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
 
   const getAbsenceTypeLabel = (type: string) => {
     const labels = {
-      'F': 'Ferie',
+      'F': 'Ferie/Permesso',
       'M': 'Malattia',
       'I': 'Infortunio',
-      'PR': 'Permesso retribuito',
-      'PNR': 'Permesso non retribuito',
-      'A': 'Assenza',
-      'FS': 'Ferie solidali'
+      'PNR': 'Permesso non retribuito'
     };
     return labels[type as keyof typeof labels] || type;
   };
@@ -194,13 +191,10 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="F">Ferie</SelectItem>
+                <SelectItem value="F">Ferie/Permesso</SelectItem>
                 <SelectItem value="M">Malattia</SelectItem>
                 <SelectItem value="I">Infortunio</SelectItem>
-                <SelectItem value="PR">Permesso retribuito</SelectItem>
                 <SelectItem value="PNR">Permesso non retribuito</SelectItem>
-                <SelectItem value="A">Assenza</SelectItem>
-                <SelectItem value="FS">Ferie solidali</SelectItem>
               </SelectContent>
             </Select>
           </div>
