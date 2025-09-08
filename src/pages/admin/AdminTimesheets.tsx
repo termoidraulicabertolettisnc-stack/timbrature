@@ -639,7 +639,10 @@ export default function AdminTimesheets() {
         </div>
         <div className="flex items-center gap-2">
           <Button
-            onClick={() => setTimesheetInsertDialogOpen(true)}
+            onClick={() => {
+              alert('Click su Nuova Timbratura!');
+              setTimesheetInsertDialogOpen(true);
+            }}
             className="flex items-center gap-2"
             variant="default"
           >
@@ -647,7 +650,10 @@ export default function AdminTimesheets() {
             Nuova Timbratura
           </Button>
           <Button
-            onClick={() => setAbsenceInsertDialogOpen(true)}
+            onClick={() => {
+              alert('Click su Inserisci Assenza!');
+              setAbsenceInsertDialogOpen(true);
+            }}
             className="flex items-center gap-2"
             variant="secondary"
           >
@@ -824,6 +830,18 @@ export default function AdminTimesheets() {
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         onSuccess={handleEditSuccess}
+      />
+
+      <TimesheetInsertDialog
+        open={timesheetInsertDialogOpen}
+        onOpenChange={setTimesheetInsertDialogOpen}
+        onSuccess={loadTimesheets}
+      />
+
+      <AbsenceInsertDialog
+        open={absenceInsertDialogOpen}
+        onOpenChange={setAbsenceInsertDialogOpen}
+        onSuccess={loadTimesheets}
       />
     </div>
   );
