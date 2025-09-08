@@ -281,13 +281,13 @@ export default function PayrollDashboard() {
         </Card>
       </div>
 
-      {/* Payroll Table - Tutti i giorni del mese */}
+      {/* Payroll Table - Tre righe per dipendente */}
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">Dettaglio Mensile Completo</CardTitle>
             <CardDescription className="text-xs">
-              Ore per giorno - O: Ordinarie | S: Straordinari | A: Assenze
+              O: Ordinarie | S: Straordinari | N: Assenze - Una riga per ogni tipologia
             </CardDescription>
           </div>
         </CardHeader>
@@ -296,7 +296,7 @@ export default function PayrollDashboard() {
             <Table className="text-xs">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="sticky left-0 bg-background z-10 w-36 min-w-36 text-xs font-medium border-r">
+                  <TableHead className="sticky left-0 bg-background z-10 w-40 min-w-40 text-xs font-medium border-r">
                     Dipendente
                   </TableHead>
                   {Array.from({ length: getDaysInMonth() }, (_, i) => {
@@ -315,87 +315,114 @@ export default function PayrollDashboard() {
                       </TableHead>
                     );
                   })}
-                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-green-50 border-l">O</TableHead>
-                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-blue-50">S</TableHead>
-                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-red-50">A</TableHead>
-                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-yellow-50">B</TableHead>
+                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-green-50 border-l">Tot O</TableHead>
+                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-blue-50">Tot S</TableHead>
+                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-red-50">Tot N</TableHead>
+                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-yellow-50">Buoni</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {payrollData.map((employee) => (
-                  <TableRow key={employee.employee_id} className="hover:bg-muted/50">
-                    <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
-                      <div className="truncate" title={employee.employee_name}>
-                        {employee.employee_name}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1 space-x-2">
-                        <span className="text-green-700">O:{employee.totals.ordinary.toFixed(0)}</span>
-                        <span className="text-blue-700">S:{employee.totals.overtime.toFixed(0)}</span>
-                        <span className="text-red-700">A:{employee.totals.absence.toFixed(0)}</span>
-                      </div>
-                    </TableCell>
-                    
-                    {/* Giorni del mese */}
-                    {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                      const day = i + 1;
-                      const dayKey = String(day).padStart(2, '0');
-                      const dayData = employee.daily_data[dayKey];
-                      const ordinary = dayData?.ordinary || 0;
-                      const overtime = dayData?.overtime || 0;
-                      const absence = dayData?.absence;
-                      const isHol = isHoliday(day);
-                      const isSun = isSunday(day);
-                      
-                      // Determina il contenuto della cella
-                      let cellContent = '';
-                      let cellClass = 'text-center p-1 text-xs ';
-                      let bgClass = '';
-                      
-                      if (isHol || isSun) {
-                        bgClass = 'bg-red-50 ';
-                      }
-                      
-                      if (absence) {
-                        cellContent = getAbsenceTypeLabel(absence);
-                        cellClass += 'font-bold text-red-700 ';
-                      } else if (ordinary > 0 || overtime > 0) {
-                        if (overtime > 0) {
-                          cellContent = `${ordinary.toFixed(1)}+${overtime.toFixed(1)}`;
-                          cellClass += 'text-blue-700 font-medium ';
-                        } else {
-                          cellContent = ordinary.toFixed(1);
-                          cellClass += 'text-green-700 ';
-                        }
-                      } else {
-                        cellContent = '-';
-                        cellClass += 'text-muted-foreground ';
-                      }
-                      
-                      return (
-                        <TableCell 
-                          key={day} 
-                          className={cellClass + bgClass}
-                          title={`Giorno ${day}: ${ordinary > 0 ? `Ordinarie: ${ordinary.toFixed(1)}h` : ''}${overtime > 0 ? ` - Straordinari: ${overtime.toFixed(1)}h` : ''}${absence ? ` - Assenza: ${absence}` : ''}${(!ordinary && !overtime && !absence) ? 'Nessun dato' : ''}`}
-                        >
-                          {cellContent}
-                        </TableCell>
-                      );
-                    })}
-                    
-                    {/* Totali */}
-                    <TableCell className="text-center font-bold text-green-700 text-xs p-1 bg-green-50 border-l">
-                      {employee.totals.ordinary.toFixed(0)}
-                    </TableCell>
-                    <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-blue-50">
-                      {employee.totals.overtime.toFixed(0)}
-                    </TableCell>
-                    <TableCell className="text-center font-bold text-red-700 text-xs p-1 bg-red-50">
-                      {employee.totals.absence.toFixed(0)}
-                    </TableCell>
-                    <TableCell className="text-center font-bold text-xs p-1 bg-yellow-50">
-                      {employee.meal_vouchers}
-                    </TableCell>
-                  </TableRow>
+                  <React.Fragment key={employee.employee_id}>
+                    {/* Riga Ore Ordinarie */}
+                    <TableRow className="hover:bg-green-50/50">
+                      <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                        <span className="text-green-700 font-bold">O</span> - {employee.employee_name}
+                      </TableCell>
+                      {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                        const day = i + 1;
+                        const dayKey = String(day).padStart(2, '0');
+                        const ordinary = employee.daily_data[dayKey]?.ordinary || 0;
+                        const isHol = isHoliday(day);
+                        const isSun = isSunday(day);
+                        
+                        return (
+                          <TableCell 
+                            key={day} 
+                            className={`text-center p-1 text-xs ${
+                              isHol || isSun ? 'bg-red-50' : ''
+                            } ${ordinary > 0 ? 'text-green-700 font-medium' : 'text-muted-foreground'}`}
+                          >
+                            {ordinary > 0 ? ordinary.toFixed(1) : ''}
+                          </TableCell>
+                        );
+                      })}
+                      <TableCell className="text-center font-bold text-green-700 text-xs p-1 bg-green-50 border-l">
+                        {employee.totals.ordinary.toFixed(1)}
+                      </TableCell>
+                      <TableCell className="text-center text-xs p-1 bg-blue-50">-</TableCell>
+                      <TableCell className="text-center text-xs p-1 bg-red-50">-</TableCell>
+                      <TableCell className="text-center font-bold text-xs p-1 bg-yellow-50">
+                        {employee.meal_vouchers}
+                      </TableCell>
+                    </TableRow>
+
+                    {/* Riga Ore Straordinarie */}
+                    <TableRow className="hover:bg-blue-50/50">
+                      <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                        <span className="text-blue-700 font-bold">S</span> - {employee.employee_name}
+                      </TableCell>
+                      {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                        const day = i + 1;
+                        const dayKey = String(day).padStart(2, '0');
+                        const overtime = employee.daily_data[dayKey]?.overtime || 0;
+                        const isHol = isHoliday(day);
+                        const isSun = isSunday(day);
+                        
+                        return (
+                          <TableCell 
+                            key={day} 
+                            className={`text-center p-1 text-xs ${
+                              isHol || isSun ? 'bg-red-50' : ''
+                            } ${overtime > 0 ? 'text-blue-700 font-medium' : 'text-muted-foreground'}`}
+                          >
+                            {overtime > 0 ? overtime.toFixed(1) : ''}
+                          </TableCell>
+                        );
+                      })}
+                      <TableCell className="text-center text-xs p-1 bg-green-50 border-l">-</TableCell>
+                      <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-blue-50">
+                        {employee.totals.overtime.toFixed(1)}
+                      </TableCell>
+                      <TableCell className="text-center text-xs p-1 bg-red-50">-</TableCell>
+                      <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                    </TableRow>
+
+                    {/* Riga Assenze */}
+                    <TableRow className="hover:bg-red-50/50">
+                      <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                        <span className="text-red-700 font-bold">N</span> - {employee.employee_name}
+                      </TableCell>
+                      {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                        const day = i + 1;
+                        const dayKey = String(day).padStart(2, '0');
+                        const absence = employee.daily_data[dayKey]?.absence;
+                        const isHol = isHoliday(day);
+                        const isSun = isSunday(day);
+                        
+                        return (
+                          <TableCell 
+                            key={day} 
+                            className={`text-center p-1 text-xs ${
+                              isHol || isSun ? 'bg-red-50' : ''
+                            }`}
+                          >
+                            {absence ? (
+                              <span className="text-red-700 font-bold text-xs">
+                                {getAbsenceTypeLabel(absence)}
+                              </span>
+                            ) : ''}
+                          </TableCell>
+                        );
+                      })}
+                      <TableCell className="text-center text-xs p-1 bg-green-50 border-l">-</TableCell>
+                      <TableCell className="text-center text-xs p-1 bg-blue-50">-</TableCell>
+                      <TableCell className="text-center font-bold text-red-700 text-xs p-1 bg-red-50">
+                        {employee.totals.absence.toFixed(1)}
+                      </TableCell>
+                      <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                    </TableRow>
+                  </React.Fragment>
                 ))}
               </TableBody>
             </Table>
