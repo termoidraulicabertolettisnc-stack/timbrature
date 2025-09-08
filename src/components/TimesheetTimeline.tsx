@@ -23,16 +23,6 @@ interface TimesheetTimelineProps {
   weekDays: Date[];
 }
 
-interface TimeBlock {
-  timesheet: TimesheetWithProfile;
-  startMinutes: number;
-  endMinutes: number;
-  isLunchBreak: boolean;
-  type: 'work' | 'overtime' | 'night';
-  startDate: string;
-  endDate: string;
-}
-
 export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelineProps) {
   const [selectedTimesheet, setSelectedTimesheet] = useState<string | null>(null);
 
@@ -132,23 +122,31 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
   };
 
   // Calcola i blocchi temporali per ogni giorno
-  const calculateTimeBlocks = (dayTimesheets: TimesheetWithProfile[], dayDate: Date, allDays: Date[]): TimeBlock[] => {
-    // Remove duplicates based on ID 
-    const uniqueTimesheets = dayTimesheets.filter((ts, index, arr) => 
-      index === arr.findIndex(t => t.id === ts.id)
-    );
+  const calculateTimeBlocks = (dayTimesheets: TimesheetWithProfile[], dayDate: Date): TimeBlock[] => {
+    // DEBUG: Log dei timesheet ricevuti per questo giorno
+    const currentDayStr = format(dayDate, 'yyyy-MM-dd');
+    console.log(`🔍 [${currentDayStr}] Timesheet ricevuti:`, dayTimesheets.map(ts => ({
+      id: ts.id,
+      date: ts.date,
+      end_date: ts.end_date,
+      start_time: ts.start_time,
+      end_time: ts.end_time,
+      profileName: ts.profiles ? `${ts.profiles.first_name} ${ts.profiles.last_name}` : 'N/A'
+    })));
 
-    if (uniqueTimesheets.length === 0) return [];
-
-    // Cerca anche timesheets che si estendono a questo giorno usando il nuovo campo end_date
-    const extendedTimesheets = timesheets.filter(ts => {
-      if (!ts.end_date || !ts.start_time || !ts.end_time) return false;
-      // Se end_date è diversa da date, è una sessione multi-giorno
-      const currentDayStr = format(dayDate, 'yyyy-MM-dd');
-      return ts.end_date === currentDayStr && ts.date !== currentDayStr;
+    // Rimuovi duplicati basati su ID e mantieni solo quelli con start_time/end_time validi
+    const validTimesheets = dayTimesheets.filter((ts, index, arr) => {
+      const isUnique = index === arr.findIndex(t => t.id === ts.id);
+      const hasValidTimes = ts.start_time && ts.end_time;
+      return isUnique && hasValidTimes;
     });
 
-    const allRelevantTimesheets = [...uniqueTimesheets, ...extendedTimesheets];
+    console.log(`🔍 [${currentDayStr}] Timesheet validi dopo deduplicazione:`, validTimesheets.length);
+
+    if (validTimesheets.length === 0) return [];
+
+    // RIMOSSA LA LOGICA extendedTimesheets - ora gestita da aggregateWeeklyData()
+    const allRelevantTimesheets = validTimesheets;
     const blocks: TimeBlock[] = [];
 
     allRelevantTimesheets.forEach(timesheet => {
@@ -555,7 +553,7 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
           {/* Colonne per ogni giorno */}
           {extendedDays.map((day, dayIndex) => {
             const dayTimesheets = timesheets.filter(ts => ts.date === format(day, 'yyyy-MM-dd'));
-            const timeBlocks = calculateTimeBlocks(dayTimesheets, day, extendedDays);
+            const timeBlocks = calculateTimeBlocks(dayTimesheets, day);
             
             return (
               <div key={day.toISOString()} className="flex-1 min-w-[120px]">
