@@ -127,7 +127,7 @@ export default function AdminTimesheets() {
 
   useEffect(() => {
     loadTimesheets();
-  }, [selectedEmployee, selectedProject, dateFilter, activeView]);
+  }, [selectedEmployee, selectedProject, dateFilter, activeView, realtimeUpdateTrigger]);
 
   const loadInitialData = async () => {
     try {
@@ -308,12 +308,53 @@ export default function AdminTimesheets() {
 
       const employee = employeesMap.get(key)!;
       employee.timesheets.push(timesheet);
-      employee.total_hours += timesheet.total_hours || 0;
-      employee.overtime_hours += timesheet.overtime_hours || 0;
-      employee.night_hours += timesheet.night_hours || 0;
+      
+      // CORREZIONE: Calcola le ore in tempo reale per timesheet in corso
+      let calculatedHours = 0;
+      let calculatedOvertimeHours = 0;
+      let calculatedNightHours = 0;
+      
+      if (timesheet.end_time) {
+        // Timesheet chiuso: usa i valori calcolati
+        calculatedHours = timesheet.total_hours || 0;
+        calculatedOvertimeHours = timesheet.overtime_hours || 0;
+        calculatedNightHours = timesheet.night_hours || 0;
+      } else if (timesheet.start_time) {
+        // Timesheet in corso: calcola le ore in tempo reale
+        const startTime = new Date(timesheet.start_time);
+        const currentTime = new Date();
+        const diffMs = currentTime.getTime() - startTime.getTime();
+        const diffHours = Math.max(0, diffMs / (1000 * 60 * 60));
+        
+        calculatedHours = diffHours;
+        
+        // Calcolo approssimativo per straordinari (se > 8 ore)
+        if (diffHours > 8) {
+          calculatedOvertimeHours = diffHours - 8;
+        }
+        
+        // Calcolo per ore notturne (se inizia prima delle 6 o dopo le 22)
+        const startHour = startTime.getHours();
+        if (startHour < 6 || startHour >= 22) {
+          calculatedNightHours = diffHours;
+        }
+        
+        console.log(`🔍 REAL-TIME CALC per ${timesheet.profiles.first_name}:`, {
+          id: timesheet.id,
+          start_time: timesheet.start_time,
+          hours_worked: calculatedHours.toFixed(2),
+          overtime: calculatedOvertimeHours.toFixed(2),
+          night: calculatedNightHours.toFixed(2)
+        });
+      }
+      
+      employee.total_hours += calculatedHours;
+      employee.overtime_hours += calculatedOvertimeHours;
+      employee.night_hours += calculatedNightHours;
+      
       if (timesheet.meal_voucher_earned) employee.meal_vouchers += 1;
-      if (timesheet.is_saturday) employee.saturday_hours += timesheet.total_hours || 0;
-      if (timesheet.is_holiday) employee.holiday_hours += timesheet.total_hours || 0;
+      if (timesheet.is_saturday) employee.saturday_hours += calculatedHours;
+      if (timesheet.is_holiday) employee.holiday_hours += calculatedHours;
     });
 
     return Array.from(employeesMap.values()).sort((a, b) => 
