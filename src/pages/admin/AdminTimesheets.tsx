@@ -109,6 +109,18 @@ export default function AdminTimesheets() {
   const [dateFilter, setDateFilter] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [searchTerm, setSearchTerm] = useState('');
 
+  // State per l'aggiornamento in tempo reale
+  const [realtimeUpdateTrigger, setRealtimeUpdateTrigger] = useState(0);
+
+  // Aggiorna ogni minuto per mostrare le ore in tempo reale
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRealtimeUpdateTrigger(prev => prev + 1);
+    }, 60000); // Aggiorna ogni minuto
+
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     loadInitialData();
   }, []);
@@ -1001,9 +1013,24 @@ function WeeklyView({
                         <div key={day.date} className="text-center min-w-[60px]">
                           <div className="text-xs text-muted-foreground">{dayNames[index]}</div>
                            <div className="space-y-1">
-                             <div className="text-xs">
-                               <span className="text-muted-foreground">Ord:</span> {day.total_hours - day.overtime_hours > 0 ? formatHours(day.total_hours - day.overtime_hours) : (day.timesheets.length > 0 ? '0h' : '-')}
-                             </div>
+                              <div className="text-xs">
+                                <span className="text-muted-foreground">Ord:</span> {(() => {
+                                  const regularHours = day.total_hours - day.overtime_hours;
+                                  if (regularHours > 0) return formatHours(regularHours);
+                                  
+                                  // Se ci sono timesheet in corso, calcola ore in tempo reale
+                                  const ongoingTimesheet = day.timesheets.find(ts => !ts.end_time && ts.start_time);
+                                  if (ongoingTimesheet) {
+                                    const startTime = new Date(ongoingTimesheet.start_time!);
+                                    const currentTime = new Date();
+                                    const diffMs = currentTime.getTime() - startTime.getTime();
+                                    const diffHours = Math.max(0, diffMs / (1000 * 60 * 60));
+                                    return formatHours(Math.min(diffHours, 8)); // Max 8h per ore ordinarie
+                                  }
+                                  
+                                  return day.timesheets.length > 0 ? '0h' : '-';
+                                })()}
+                              </div>
                              {day.overtime_hours > 0 && (
                                <div className="text-xs text-orange-600">
                                  <span className="text-muted-foreground">Str:</span> {formatHours(day.overtime_hours)}
@@ -1023,13 +1050,64 @@ function WeeklyView({
                         <div className="text-xs text-muted-foreground mb-1">Totale Settimana</div>
                         <div className="space-y-1">
                           <div className="text-xs">
-                            <span className="text-muted-foreground">Ord:</span> {formatHours(employee.total_hours - employee.overtime_hours)}
+                            <span className="text-muted-foreground">Ord:</span> {(() => {
+                              const totalRegularHours = employee.total_hours - employee.overtime_hours;
+                              
+                              // Calcola ore ordinarie in tempo reale per timesheet in corso
+                              let realtimeRegularHours = 0;
+                              employee.days.forEach(day => {
+                                const ongoingTimesheet = day.timesheets.find(ts => !ts.end_time && ts.start_time);
+                                if (ongoingTimesheet) {
+                                  const startTime = new Date(ongoingTimesheet.start_time!);
+                                  const currentTime = new Date();
+                                  const diffMs = currentTime.getTime() - startTime.getTime();
+                                  const diffHours = Math.max(0, diffMs / (1000 * 60 * 60));
+                                  realtimeRegularHours += Math.min(diffHours, 8); // Max 8h per ore ordinarie
+                                }
+                              });
+                              
+                              return formatHours(totalRegularHours + realtimeRegularHours);
+                            })()}
                           </div>
                           <div className="text-xs">
-                            <span className="text-muted-foreground">Str:</span> {formatHours(employee.overtime_hours)}
+                            <span className="text-muted-foreground">Str:</span> {(() => {
+                              let totalOvertimeHours = employee.overtime_hours;
+                              
+                              // Calcola straordinari in tempo reale per timesheet in corso
+                              employee.days.forEach(day => {
+                                const ongoingTimesheet = day.timesheets.find(ts => !ts.end_time && ts.start_time);
+                                if (ongoingTimesheet) {
+                                  const startTime = new Date(ongoingTimesheet.start_time!);
+                                  const currentTime = new Date();
+                                  const diffMs = currentTime.getTime() - startTime.getTime();
+                                  const diffHours = Math.max(0, diffMs / (1000 * 60 * 60));
+                                  if (diffHours > 8) {
+                                    totalOvertimeHours += (diffHours - 8);
+                                  }
+                                }
+                              });
+                              
+                              return formatHours(totalOvertimeHours);
+                            })()}
                           </div>
                           <div className="font-semibold text-sm border-t pt-1">
-                            <span className="text-muted-foreground">Tot:</span> {formatHours(employee.total_hours)}
+                            <span className="text-muted-foreground">Tot:</span> {(() => {
+                              let totalHours = employee.total_hours;
+                              
+                              // Calcola ore totali in tempo reale per timesheet in corso
+                              employee.days.forEach(day => {
+                                const ongoingTimesheet = day.timesheets.find(ts => !ts.end_time && ts.start_time);
+                                if (ongoingTimesheet) {
+                                  const startTime = new Date(ongoingTimesheet.start_time!);
+                                  const currentTime = new Date();
+                                  const diffMs = currentTime.getTime() - startTime.getTime();
+                                  const diffHours = Math.max(0, diffMs / (1000 * 60 * 60));
+                                  totalHours += diffHours;
+                                }
+                              });
+                              
+                              return formatHours(totalHours);
+                            })()}
                           </div>
                         </div>
                       </div>

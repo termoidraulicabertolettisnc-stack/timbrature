@@ -194,8 +194,20 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
         actualStartMinutes = startMinutes;
         actualEndMinutes = rawEndMinutes;
       } else {
-        // Non è il giorno giusto per questo timesheet
-        return;
+        // FIX: Verifica più flessibile per timesheet del giorno corrente
+        // Controlla se il timesheet appartiene a questo giorno considerando anche la data di inizio
+        const timesheetDate = parseISO(timesheet.start_time || timesheet.date);
+        const isCurrentDay = isSameDay(timesheetDate, dayDate);
+        
+        if (isCurrentDay) {
+          // È del giorno corrente, processa normalmente
+          actualStartMinutes = startMinutes;
+          actualEndMinutes = rawEndMinutes;
+        } else {
+          // Non è il giorno giusto per questo timesheet
+          console.log(`🔍 [${currentDayStr}] Timesheet ${timesheet.id} skipped - belongs to different day`);
+          return;
+        }
       }
 
       const lunchStartMinutes = timesheet.lunch_start_time ? timeToMinutes(timesheet.lunch_start_time) : null;
