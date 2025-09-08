@@ -340,9 +340,7 @@ export default function PayrollDashboard() {
                       </TableHead>
                     );
                   })}
-                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-green-50 border-l">Tot O</TableHead>
-                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-blue-50">Tot S</TableHead>
-                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-red-50">Tot N</TableHead>
+                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-gray-50 border-l">Tot</TableHead>
                   <TableHead className="text-center w-16 min-w-16 text-xs font-medium bg-yellow-50">Buoni Pasto</TableHead>
                 </TableRow>
               </TableHeader>
@@ -372,12 +370,10 @@ export default function PayrollDashboard() {
                           </TableCell>
                         );
                       })}
-                      <TableCell className="text-center font-bold text-green-700 text-xs p-1 bg-green-50 border-l">
+                      <TableCell className="text-center font-bold text-green-700 text-xs p-1 bg-gray-50 border-l">
                         {employee.totals.ordinary.toFixed(1)}
                       </TableCell>
-                      <TableCell className="text-center text-xs p-1 bg-blue-50">-</TableCell>
-                      <TableCell className="text-center text-xs p-1 bg-red-50">-</TableCell>
-                      <TableCell className="text-center font-bold text-xs p-1 bg-yellow-50">
+                      <TableCell className="text-center text-xs p-1 bg-yellow-50">
                         {employee.meal_vouchers > 0 ? (
                           <div className="flex flex-col">
                             <span>{employee.meal_vouchers}</span>
@@ -410,11 +406,9 @@ export default function PayrollDashboard() {
                           </TableCell>
                         );
                       })}
-                      <TableCell className="text-center text-xs p-1 bg-green-50 border-l">-</TableCell>
-                      <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-blue-50">
+                      <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-gray-50 border-l">
                         {employee.totals.overtime.toFixed(1)}
                       </TableCell>
-                      <TableCell className="text-center text-xs p-1 bg-red-50">-</TableCell>
                       <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
                     </TableRow>
 
@@ -445,9 +439,7 @@ export default function PayrollDashboard() {
                           </TableCell>
                         );
                       })}
-                      <TableCell className="text-center text-xs p-1 bg-green-50 border-l">-</TableCell>
-                      <TableCell className="text-center text-xs p-1 bg-blue-50">-</TableCell>
-                      <TableCell className="text-center font-bold text-red-700 text-xs p-1 bg-red-50">
+                      <TableCell className="text-center font-bold text-red-700 text-xs p-1 bg-gray-50 border-l">
                         {employee.totals.absence.toFixed(1)}
                       </TableCell>
                       <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
