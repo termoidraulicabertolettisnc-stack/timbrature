@@ -146,9 +146,20 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
       if (!ts.end_time && ts.start_time) {
         const now = new Date();
         const currentTime = format(now, "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
+        const startTime = new Date(ts.start_time);
+        const diffHours = (now.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+        
+        console.log(`🔍 TIMESHEET IN CORSO DEBUG:`, {
+          id: ts.id,
+          start_time: ts.start_time,
+          calculated_end_time: currentTime,
+          hours_worked: diffHours.toFixed(2)
+        });
+        
         return {
           ...ts,
           end_time: currentTime,
+          total_hours: diffHours, // Aggiungi le ore calcolate
           isOngoing: true // Flag per indicare che è in corso
         };
       }
