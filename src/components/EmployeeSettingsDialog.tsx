@@ -114,7 +114,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
         .from('company_settings')
         .select('*')
         .eq('company_id', selectedCompanyId)
-        .single();
+        .maybeSingle();
 
       if (companyError) throw companyError;
       setCompanySettings(companyData);
@@ -177,27 +177,20 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
 
       const settingsData = {
         ...settings,
+        user_id: employee.id,
         company_id: selectedCompanyId,
         created_by: user.id,
         updated_by: user.id,
       } as any; // Cast to any to handle Supabase type compatibility
 
-      if (settings.id) {
-        // Update existing settings
-        const { error } = await supabase
-          .from('employee_settings')
-          .update(settingsData)
-          .eq('id', settings.id);
+      // Use upsert to handle both insert and update cases
+      const { error } = await supabase
+        .from('employee_settings')
+        .upsert(settingsData, {
+          onConflict: 'user_id,company_id'
+        });
 
-        if (error) throw error;
-      } else {
-        // Create new settings
-        const { error } = await supabase
-          .from('employee_settings')
-          .insert([settingsData]);
-
-        if (error) throw error;
-      }
+      if (error) throw error;
 
       toast.success('Impostazioni salvate con successo');
       setHasChanges(false);
