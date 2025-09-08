@@ -275,16 +275,12 @@ export default function AdminTimesheets() {
 
   const loadAbsences = async (startDate: Date, endDate: Date) => {
     try {
+      console.log('🔍 Caricamento assenze per periodo:', format(startDate, 'yyyy-MM-dd'), '-', format(endDate, 'yyyy-MM-dd'));
+      
+      // Step 1: Query per recuperare le assenze
       let absenceQuery = supabase
         .from('employee_absences')
-        .select(`
-          *,
-          profiles!employee_absences_user_id_fkey (
-            first_name,
-            last_name,
-            email
-          )
-        `)
+        .select('*')
         .gte('date', format(startDate, 'yyyy-MM-dd'))
         .lte('date', format(endDate, 'yyyy-MM-dd'))
         .order('date', { ascending: false });
@@ -295,12 +291,41 @@ export default function AdminTimesheets() {
       }
 
       const { data: absenceData, error: absenceError } = await absenceQuery;
-
       if (absenceError) throw absenceError;
-      setAbsences(absenceData || []);
+      
+      console.log('📊 Assenze trovate:', absenceData?.length || 0, absenceData);
+
+      if (!absenceData || absenceData.length === 0) {
+        setAbsences([]);
+        return;
+      }
+
+      // Step 2: Recupera i profili degli utenti che hanno assenze
+      const userIds = [...new Set(absenceData.map(absence => absence.user_id))];
+      console.log('👥 User IDs con assenze:', userIds);
+      
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('user_id, first_name, last_name, email')
+        .in('user_id', userIds);
+
+      if (profilesError) throw profilesError;
+      console.log('👤 Profili recuperati:', profilesData);
+
+      // Step 3: Combina i dati lato client
+      const absencesWithProfiles = absenceData.map(absence => {
+        const profile = profilesData?.find(p => p.user_id === absence.user_id);
+        return {
+          ...absence,
+          profiles: profile || null
+        };
+      });
+
+      console.log('✅ Assenze con profili:', absencesWithProfiles);
+      setAbsences(absencesWithProfiles);
 
     } catch (error) {
-      console.error('Error loading absences:', error);
+      console.error('❌ Errore nel caricamento assenze:', error);
       toast({
         title: "Errore",
         description: "Errore nel caricamento delle assenze",
