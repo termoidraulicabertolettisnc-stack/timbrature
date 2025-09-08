@@ -71,8 +71,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
     }
   };
 
-  // Calcola l'ora di fine dinamicamente basandosi sui timesheet
-  const calculateDynamicEndHour = (): number => {
+  // Calcola l'ora di inizio e fine dinamicamente basandosi sui timesheet
+  const calculateDynamicHours = (): {startHour: number, endHour: number} => {
+    let minHour = 6; // Default start hour
     let maxHour = 22; // Default end hour
     
     timesheets.forEach(ts => {
@@ -88,23 +89,27 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
         if (actualEndHour > 0) { // Se finisce dopo mezzanotte
           maxHour = Math.max(maxHour, 24 + actualEndHour + 1);
         }
+        // Per sessioni multi-giorno, iniziamo dalla mezzanotte
+        minHour = 0;
       } else {
         // Sessione normale dello stesso giorno
+        const startHour = Math.floor(startMinutes / 60);
         const endHour = Math.floor(endMinutes / 60);
+        minHour = Math.min(minHour, startHour);
         maxHour = Math.max(maxHour, endHour + 1);
       }
     });
     
-    return maxHour;
+    return {startHour: minHour, endHour: maxHour};
   };
   
-  const DYNAMIC_END_HOUR = calculateDynamicEndHour();
-  const TOTAL_HOURS = DYNAMIC_END_HOUR - START_HOUR;
+  const {startHour: DYNAMIC_START_HOUR, endHour: DYNAMIC_END_HOUR} = calculateDynamicHours();
+  const TOTAL_HOURS = DYNAMIC_END_HOUR - DYNAMIC_START_HOUR;
   const TIMELINE_HEIGHT = TOTAL_HOURS * HOUR_HEIGHT;
 
   // Genera le ore di riferimento dinamicamente
   const timelineHours = Array.from({ length: TOTAL_HOURS + 1 }, (_, i) => {
-    const hour = START_HOUR + i;
+    const hour = DYNAMIC_START_HOUR + i;
     return hour > 24 ? hour - 24 : hour; // Gestisce il passaggio dopo mezzanotte
   });
 
@@ -113,17 +118,17 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
     const hour = Math.floor(minutes / 60);
     const minute = minutes % 60;
     
-    if (hour < START_HOUR) return 0;
+    if (hour < DYNAMIC_START_HOUR && DYNAMIC_START_HOUR > 0) return 0;
     
     // Per ore dopo mezzanotte (es. 01:00 = 25 nell'ora estesa)
     let adjustedHour = hour;
-    if (hour < START_HOUR && DYNAMIC_END_HOUR > 24) {
+    if (hour < DYNAMIC_START_HOUR && DYNAMIC_END_HOUR > 24) {
       adjustedHour = hour + 24;
     }
     
     if (adjustedHour >= DYNAMIC_END_HOUR) return TIMELINE_HEIGHT;
     
-    return ((adjustedHour - START_HOUR) * 60 + minute) * (HOUR_HEIGHT / 60);
+    return ((adjustedHour - DYNAMIC_START_HOUR) * 60 + minute) * (HOUR_HEIGHT / 60);
   };
 
   // Calcola i blocchi temporali per ogni giorno
@@ -526,7 +531,7 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
               {timelineHours.map((hour, index) => {
                 const displayHour = hour > 24 ? hour - 24 : hour;
                 const hourLabel = displayHour.toString().padStart(2, '0') + ':00';
-                const isAfterMidnight = hour > 24 || (hour < START_HOUR && DYNAMIC_END_HOUR > 24);
+                const isAfterMidnight = hour > 24 || (hour < DYNAMIC_START_HOUR && DYNAMIC_END_HOUR > 24);
                 
                 return (
                   <div
@@ -535,7 +540,7 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                       "absolute left-0 text-sm font-medium",
                       isAfterMidnight ? "text-orange-500" : "text-muted-foreground"
                     )}
-                    style={{ top: (hour - START_HOUR) * HOUR_HEIGHT - 8 }}
+                    style={{ top: (hour - DYNAMIC_START_HOUR) * HOUR_HEIGHT - 8 }}
                   >
                     {hourLabel}
                     {isAfterMidnight && (
@@ -566,7 +571,7 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
                 <div className="relative bg-secondary/20 border border-border rounded-lg" style={{ height: TIMELINE_HEIGHT }}>
                   {/* Griglia ore */}
                   {timelineHours.slice(0, -1).map((hour, index) => {
-                    const adjustedTop = hour >= 24 ? (hour - START_HOUR) * HOUR_HEIGHT : (hour - START_HOUR) * HOUR_HEIGHT;
+                    const adjustedTop = hour >= 24 ? (hour - DYNAMIC_START_HOUR) * HOUR_HEIGHT : (hour - DYNAMIC_START_HOUR) * HOUR_HEIGHT;
                     return (
                       <div
                         key={`grid-${hour}-${index}`}
