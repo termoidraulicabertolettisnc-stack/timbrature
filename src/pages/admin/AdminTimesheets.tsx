@@ -258,6 +258,9 @@ export default function AdminTimesheets() {
       if (error) throw error;
       setTimesheets((data as unknown as TimesheetWithProfile[]) || []);
 
+      // Carica anche le assenze per lo stesso periodo
+      await loadAbsences(startDate, endDate);
+
     } catch (error) {
       console.error('Error loading timesheets:', error);
       toast({
@@ -267,6 +270,42 @@ export default function AdminTimesheets() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAbsences = async (startDate: Date, endDate: Date) => {
+    try {
+      let absenceQuery = supabase
+        .from('employee_absences')
+        .select(`
+          *,
+          profiles!employee_absences_user_id_fkey (
+            first_name,
+            last_name,
+            email
+          )
+        `)
+        .gte('date', format(startDate, 'yyyy-MM-dd'))
+        .lte('date', format(endDate, 'yyyy-MM-dd'))
+        .order('date', { ascending: false });
+
+      // Applica filtro dipendente se selezionato
+      if (selectedEmployee !== 'all') {
+        absenceQuery = absenceQuery.eq('user_id', selectedEmployee);
+      }
+
+      const { data: absenceData, error: absenceError } = await absenceQuery;
+
+      if (absenceError) throw absenceError;
+      setAbsences(absenceData || []);
+
+    } catch (error) {
+      console.error('Error loading absences:', error);
+      toast({
+        title: "Errore",
+        description: "Errore nel caricamento delle assenze",
+        variant: "destructive",
+      });
     }
   };
 
@@ -412,7 +451,10 @@ export default function AdminTimesheets() {
              night_hours: 0,
              meal_vouchers: 0,
              timesheets: [],
-             absences: []
+             absences: absences.filter(absence => 
+               absence.user_id === timesheet.user_id && 
+               absence.date === format(day, 'yyyy-MM-dd')
+             )
            })),
           total_hours: 0,
           overtime_hours: 0,
@@ -469,6 +511,37 @@ export default function AdminTimesheets() {
       if (timesheet.meal_voucher_earned) employee.meal_vouchers += 1;
     });
 
+    // Aggiungi dipendenti che hanno solo assenze (nessun timesheet)
+    absences.forEach(absence => {
+      if (!absence.profiles) return;
+      
+      const key = absence.user_id;
+      if (!employeesMap.has(key)) {
+        employeesMap.set(key, {
+          user_id: absence.user_id,
+          first_name: absence.profiles.first_name,
+          last_name: absence.profiles.last_name,
+          email: absence.profiles.email,
+          days: weekDays.map(day => ({
+            date: format(day, 'yyyy-MM-dd'),
+            total_hours: 0,
+            overtime_hours: 0,
+            night_hours: 0,
+            meal_vouchers: 0,
+            timesheets: [],
+            absences: absences.filter(abs => 
+              abs.user_id === absence.user_id && 
+              abs.date === format(day, 'yyyy-MM-dd')
+            )
+          })),
+          total_hours: 0,
+          overtime_hours: 0,
+          night_hours: 0,
+          meal_vouchers: 0
+        });
+      }
+    });
+
     return Array.from(employeesMap.values()).sort((a, b) => 
       `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
     );
@@ -504,7 +577,10 @@ export default function AdminTimesheets() {
             night_hours: 0,
             meal_vouchers: 0,
             timesheets: [],
-            absences: []
+            absences: absences.filter(absence => 
+              absence.user_id === timesheet.user_id && 
+              absence.date === format(day, 'yyyy-MM-dd')
+            )
           })),
           total_hours: 0,
           overtime_hours: 0,
@@ -533,8 +609,8 @@ export default function AdminTimesheets() {
       if (timesheet.meal_voucher_earned) employee.meal_vouchers += 1;
     });
 
-    // Aggiungi assenze al mese
-    filteredAbsences.forEach(absence => {
+    // Aggiungi dipendenti che hanno solo assenze (nessun timesheet)
+    absences.forEach(absence => {
       if (!absence.profiles) return;
 
       const key = absence.user_id;
@@ -553,23 +629,16 @@ export default function AdminTimesheets() {
             night_hours: 0,
             meal_vouchers: 0,
             timesheets: [],
-            absences: []
+            absences: absences.filter(abs => 
+              abs.user_id === absence.user_id && 
+              abs.date === format(day, 'yyyy-MM-dd')
+            )
           })),
           total_hours: 0,
           overtime_hours: 0,
           night_hours: 0,
           meal_vouchers: 0
         });
-      }
-
-      const employee = employeesMap.get(key)!;
-      const dayIndex = monthDays.findIndex(day => 
-        format(day, 'yyyy-MM-dd') === absence.date
-      );
-
-      if (dayIndex !== -1) {
-        const dayData = employee.days[dayIndex];
-        dayData.absences.push(absence);
       }
     });
 
