@@ -518,6 +518,7 @@ export type Database = {
           created_at: string
           created_by: string
           date: string
+          end_date: string | null
           end_location_lat: number | null
           end_location_lng: number | null
           end_time: string | null
@@ -547,6 +548,7 @@ export type Database = {
           created_at?: string
           created_by: string
           date: string
+          end_date?: string | null
           end_location_lat?: number | null
           end_location_lng?: number | null
           end_time?: string | null
@@ -576,6 +578,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           date?: string
+          end_date?: string | null
           end_location_lat?: number | null
           end_location_lng?: number | null
           end_time?: string | null
