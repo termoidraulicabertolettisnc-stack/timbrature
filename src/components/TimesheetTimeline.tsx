@@ -111,7 +111,7 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
   };
 
   // Calcola i blocchi temporali per ogni giorno
-  const calculateTimeBlocks = (dayTimesheets: TimesheetWithProfile[]): TimeBlock[] => {
+  const calculateTimeBlocks = (dayTimesheets: TimesheetWithProfile[], dayDate: Date, allDays: Date[]): TimeBlock[] => {
     // Remove duplicates based on ID 
     const uniqueTimesheets = dayTimesheets.filter((ts, index, arr) => 
       index === arr.findIndex(t => t.id === ts.id)
@@ -119,102 +119,128 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
 
     if (uniqueTimesheets.length === 0) return [];
 
-    // Per ora gestiamo solo il primo timesheet del giorno
-    // In un caso reale, dovremmo consolidare più timesheets dello stesso dipendente
-    const timesheet = uniqueTimesheets[0];
+    // Cerca anche timesheets del giorno precedente che potrebbero estendersi a questo giorno
+    const prevDayDate = new Date(dayDate);
+    prevDayDate.setDate(prevDayDate.getDate() - 1);
+    const prevDayStr = format(prevDayDate, 'yyyy-MM-dd');
     
-    if (!timesheet.start_time || !timesheet.end_time) {
-      return [];
-    }
+    // Trova tutti i timesheets che iniziano il giorno prima ma si estendono a oggi
+    const extendedTimesheets = timesheets.filter(ts => {
+      if (ts.date !== prevDayStr || !ts.start_time || !ts.end_time) return false;
+      const startMinutes = timeToMinutes(ts.start_time);
+      const endMinutes = timeToMinutes(ts.end_time);
+      return endMinutes < startMinutes; // Si estende al giorno successivo
+    });
 
-    const startMinutes = timeToMinutes(timesheet.start_time);
-    let endMinutes = timeToMinutes(timesheet.end_time);
-    
-    // Se l'orario di fine è precedente a quello di inizio, 
-    // significa che si estende al giorno successivo
-    if (endMinutes < startMinutes) {
-      endMinutes += 24 * 60; // Aggiungi 24 ore
-    }
-    const lunchStartMinutes = timesheet.lunch_start_time ? timeToMinutes(timesheet.lunch_start_time) : null;
-    const lunchEndMinutes = timesheet.lunch_end_time ? timeToMinutes(timesheet.lunch_end_time) : null;
-
+    const allRelevantTimesheets = [...uniqueTimesheets, ...extendedTimesheets];
     const blocks: TimeBlock[] = [];
-    const totalHours = timesheet.total_hours || 0;
-    const overtimeHours = timesheet.overtime_hours || 0;
-    const nightHours = timesheet.night_hours || 0;
-    const regularHours = totalHours - overtimeHours;
 
-    // Determina se tutto il lavoro è notturno
-    const startHour = Math.floor(startMinutes / 60);
-    const endHour = Math.floor(endMinutes / 60);
-    const isFullyNightShift = nightHours > 0 && (startHour < 6 || endHour >= 22 || startHour >= 20);
+    allRelevantTimesheets.forEach(timesheet => {
+      if (!timesheet.start_time || !timesheet.end_time) return;
 
-    // Se è turno completamente notturno, tutto il blocco è notturno
-    if (isFullyNightShift) {
-      // Gestisci pausa pranzo se presente
-      if (lunchStartMinutes && lunchEndMinutes && 
-          lunchStartMinutes > startMinutes && lunchEndMinutes < endMinutes) {
-        
-        // Prima parte: dall'inizio alla pausa pranzo
-        blocks.push({
-          timesheet,
-          startMinutes,
-          endMinutes: lunchStartMinutes,
-          isLunchBreak: false,
-          type: 'night'
-        });
-        
-        // Pausa pranzo
-        blocks.push({
-          timesheet,
-          startMinutes: lunchStartMinutes,
-          endMinutes: lunchEndMinutes,
-          isLunchBreak: true,
-          type: 'work'
-        });
-        
-        // Seconda parte: dalla pausa pranzo alla fine
-        blocks.push({
-          timesheet,
-          startMinutes: lunchEndMinutes,
-          endMinutes,
-          isLunchBreak: false,
-          type: 'night'
-        });
-      } else {
-        // Blocco continuo notturno
-        blocks.push({
-          timesheet,
-          startMinutes,
-          endMinutes,
-          isLunchBreak: false,
-          type: 'night'
-        });
+      const startMinutes = timeToMinutes(timesheet.start_time);
+      const rawEndMinutes = timeToMinutes(timesheet.end_time);
+      let endMinutes = rawEndMinutes;
+      
+      // Se l'orario di fine è precedente a quello di inizio, si estende al giorno successivo
+      const extendsToNextDay = endMinutes < startMinutes;
+      if (extendsToNextDay) {
+        endMinutes = rawEndMinutes + 24 * 60;
       }
-    } else if (overtimeHours > 0 && totalHours > 8) {
-      // Se ci sono straordinari, dividi il tempo tra ore ordinarie e straordinarie
-      const totalWorkMinutes = endMinutes - startMinutes - (
-        lunchStartMinutes && lunchEndMinutes ? (lunchEndMinutes - lunchStartMinutes) : 0
-      );
-      const regularMinutes = Math.round((regularHours / totalHours) * totalWorkMinutes);
-      const overtimeStartMinutes = startMinutes + regularMinutes + (
-        lunchStartMinutes && lunchEndMinutes ? (lunchEndMinutes - lunchStartMinutes) : 0
-      );
 
-      // Gestisci pausa pranzo se presente
-      if (lunchStartMinutes && lunchEndMinutes && 
-          lunchStartMinutes > startMinutes && lunchEndMinutes < endMinutes) {
+      const isFromPreviousDay = timesheet.date === prevDayStr;
+      let actualStartMinutes = startMinutes;
+      let actualEndMinutes = endMinutes;
+
+      if (isFromPreviousDay) {
+        // Questo timesheet inizia il giorno prima, mostra solo la parte di oggi
+        actualStartMinutes = 0; // Inizia a mezzanotte
+        actualEndMinutes = rawEndMinutes; // Finisce all'orario originale
+      } else if (extendsToNextDay) {
+        // Questo timesheet inizia oggi ma si estende domani, mostra solo la parte di oggi
+        actualEndMinutes = 24 * 60; // Finisce a mezzanotte
+      }
+      const lunchStartMinutes = timesheet.lunch_start_time ? timeToMinutes(timesheet.lunch_start_time) : null;
+      const lunchEndMinutes = timesheet.lunch_end_time ? timeToMinutes(timesheet.lunch_end_time) : null;
+
+      const totalHours = timesheet.total_hours || 0;
+      const overtimeHours = timesheet.overtime_hours || 0;
+      const nightHours = timesheet.night_hours || 0;
+      const regularHours = totalHours - overtimeHours;
+
+      // Determina se tutto il lavoro è notturno
+      const startHour = Math.floor(actualStartMinutes / 60);
+      const endHour = Math.floor(actualEndMinutes / 60);
+      const isFullyNightShift = nightHours > 0 && (startHour < 6 || endHour >= 22 || startHour >= 20);
+
+      // Se è turno completamente notturno, tutto il blocco è notturno
+      if (isFullyNightShift) {
+        // Gestisci pausa pranzo se presente (solo se entro i limiti del giorno corrente)
+        if (lunchStartMinutes && lunchEndMinutes && 
+            lunchStartMinutes > actualStartMinutes && lunchEndMinutes < actualEndMinutes &&
+            !isFromPreviousDay) {
+          
+          // Prima parte: dall'inizio alla pausa pranzo
+          blocks.push({
+            timesheet,
+            startMinutes: actualStartMinutes,
+            endMinutes: lunchStartMinutes,
+            isLunchBreak: false,
+            type: 'night'
+          });
+          
+          // Pausa pranzo
+          blocks.push({
+            timesheet,
+            startMinutes: lunchStartMinutes,
+            endMinutes: lunchEndMinutes,
+            isLunchBreak: true,
+            type: 'work'
+          });
+          
+          // Seconda parte: dalla pausa pranzo alla fine
+          blocks.push({
+            timesheet,
+            startMinutes: lunchEndMinutes,
+            endMinutes: actualEndMinutes,
+            isLunchBreak: false,
+            type: 'night'
+          });
+        } else {
+          // Blocco continuo notturno
+          blocks.push({
+            timesheet,
+            startMinutes: actualStartMinutes,
+            endMinutes: actualEndMinutes,
+            isLunchBreak: false,
+            type: 'night'
+          });
+        }
+      } else if (overtimeHours > 0 && totalHours > 8) {
+        // Se ci sono straordinari, dividi il tempo tra ore ordinarie e straordinarie
+        const totalWorkMinutes = actualEndMinutes - actualStartMinutes - (
+          lunchStartMinutes && lunchEndMinutes && !isFromPreviousDay ? (lunchEndMinutes - lunchStartMinutes) : 0
+        );
+        const regularMinutes = Math.round((regularHours / totalHours) * totalWorkMinutes);
+        const overtimeStartMinutes = actualStartMinutes + regularMinutes + (
+          lunchStartMinutes && lunchEndMinutes && !isFromPreviousDay ? (lunchEndMinutes - lunchStartMinutes) : 0
+        );
+
+        // Gestisci pausa pranzo se presente (solo se entro i limiti del giorno corrente)
+        if (lunchStartMinutes && lunchEndMinutes && 
+            lunchStartMinutes > actualStartMinutes && lunchEndMinutes < actualEndMinutes &&
+            !isFromPreviousDay) {
         
         if (lunchStartMinutes < overtimeStartMinutes) {
           // La pausa pranzo è durante le ore ordinarie
-          // Ore ordinarie prima della pausa
-          blocks.push({
-            timesheet,
-            startMinutes,
-            endMinutes: lunchStartMinutes,
-            isLunchBreak: false,
-            type: 'work'
-          });
+            // Ore ordinarie prima della pausa
+            blocks.push({
+              timesheet,
+              startMinutes: actualStartMinutes,
+              endMinutes: lunchStartMinutes,
+              isLunchBreak: false,
+              type: 'work'
+            });
           
           // Pausa pranzo
           blocks.push({
@@ -236,34 +262,34 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
               type: 'work'
             });
             
-            // Ore straordinarie
-            blocks.push({
-              timesheet,
-              startMinutes: overtimeStartMinutes,
-              endMinutes,
-              isLunchBreak: false,
-              type: 'overtime'
-            });
+              // Ore straordinarie
+              blocks.push({
+                timesheet,
+                startMinutes: overtimeStartMinutes,
+                endMinutes: actualEndMinutes,
+                isLunchBreak: false,
+                type: 'overtime'
+              });
           } else {
-            // Straordinari iniziano subito dopo la pausa
-            blocks.push({
-              timesheet,
-              startMinutes: lunchEndMinutes,
-              endMinutes,
-              isLunchBreak: false,
-              type: 'overtime'
-            });
+              // Straordinari iniziano subito dopo la pausa
+              blocks.push({
+                timesheet,
+                startMinutes: lunchEndMinutes,
+                endMinutes: actualEndMinutes,
+                isLunchBreak: false,
+                type: 'overtime'
+              });
           }
         } else {
           // La pausa pranzo è durante le ore straordinarie
-          // Ore ordinarie
-          blocks.push({
-            timesheet,
-            startMinutes,
-            endMinutes: overtimeStartMinutes,
-            isLunchBreak: false,
-            type: 'work'
-          });
+            // Ore ordinarie
+            blocks.push({
+              timesheet,
+              startMinutes: actualStartMinutes,
+              endMinutes: overtimeStartMinutes,
+              isLunchBreak: false,
+              type: 'work'
+            });
           
           // Straordinari prima della pausa
           blocks.push({
@@ -283,77 +309,79 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
             type: 'work'
           });
           
-          // Straordinari dopo la pausa
+            // Straordinari dopo la pausa
+            blocks.push({
+              timesheet,
+              startMinutes: lunchEndMinutes,
+              endMinutes: actualEndMinutes,
+              isLunchBreak: false,
+              type: 'overtime'
+            });
+        }
+        } else {
+          // Nessuna pausa pranzo specifica
+          // Ore ordinarie
           blocks.push({
             timesheet,
-            startMinutes: lunchEndMinutes,
-            endMinutes,
+            startMinutes: actualStartMinutes,
+            endMinutes: overtimeStartMinutes,
+            isLunchBreak: false,
+            type: 'work'
+          });
+          
+          // Ore straordinarie
+          blocks.push({
+            timesheet,
+            startMinutes: overtimeStartMinutes,
+            endMinutes: actualEndMinutes,
             isLunchBreak: false,
             type: 'overtime'
           });
         }
       } else {
-        // Nessuna pausa pranzo specifica
-        // Ore ordinarie
-        blocks.push({
-          timesheet,
-          startMinutes,
-          endMinutes: overtimeStartMinutes,
-          isLunchBreak: false,
-          type: 'work'
-        });
-        
-        // Ore straordinarie
-        blocks.push({
-          timesheet,
-          startMinutes: overtimeStartMinutes,
-          endMinutes,
-          isLunchBreak: false,
-          type: 'overtime'
-        });
+        // Nessun straordinario, tutto è lavoro normale
+        if (lunchStartMinutes && lunchEndMinutes && 
+            lunchStartMinutes > actualStartMinutes && lunchEndMinutes < actualEndMinutes &&
+            !isFromPreviousDay) {
+          
+          // Prima parte: dall'inizio alla pausa pranzo
+          blocks.push({
+            timesheet,
+            startMinutes: actualStartMinutes,
+            endMinutes: lunchStartMinutes,
+            isLunchBreak: false,
+            type: 'work'
+          });
+          
+          // Pausa pranzo
+          blocks.push({
+            timesheet,
+            startMinutes: lunchStartMinutes,
+            endMinutes: lunchEndMinutes,
+            isLunchBreak: true,
+            type: 'work'
+          });
+          
+          // Seconda parte: dalla pausa pranzo alla fine
+          blocks.push({
+            timesheet,
+            startMinutes: lunchEndMinutes,
+            endMinutes: actualEndMinutes,
+            isLunchBreak: false,
+            type: 'work'
+          });
+        } else {
+          // Blocco continuo senza pausa pranzo
+          blocks.push({
+            timesheet,
+            startMinutes: actualStartMinutes,
+            endMinutes: actualEndMinutes,
+            isLunchBreak: false,
+            type: 'work'
+          });
+        }
       }
-    } else {
-      // Nessun straordinario, tutto è lavoro normale
-      if (lunchStartMinutes && lunchEndMinutes && 
-          lunchStartMinutes > startMinutes && lunchEndMinutes < endMinutes) {
-        
-        // Prima parte: dall'inizio alla pausa pranzo
-        blocks.push({
-          timesheet,
-          startMinutes,
-          endMinutes: lunchStartMinutes,
-          isLunchBreak: false,
-          type: 'work'
-        });
-        
-        // Pausa pranzo
-        blocks.push({
-          timesheet,
-          startMinutes: lunchStartMinutes,
-          endMinutes: lunchEndMinutes,
-          isLunchBreak: true,
-          type: 'work'
-        });
-        
-        // Seconda parte: dalla pausa pranzo alla fine
-        blocks.push({
-          timesheet,
-          startMinutes: lunchEndMinutes,
-          endMinutes,
-          isLunchBreak: false,
-          type: 'work'
-        });
-      } else {
-        // Blocco continuo senza pausa pranzo
-        blocks.push({
-          timesheet,
-          startMinutes,
-          endMinutes,
-          isLunchBreak: false,
-          type: 'work'
-        });
-      }
-    }
+    });
 
     return blocks;
   };
@@ -394,6 +422,23 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
 
   const dayNames = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 
+  // Estendi i giorni per includere domenica se ci sono sessioni che si estendono
+  const extendedDays = [...weekDays];
+  const needsExtraDay = timesheets.some(ts => {
+    if (!ts.start_time || !ts.end_time) return false;
+    const startMinutes = timeToMinutes(ts.start_time);
+    const endMinutes = timeToMinutes(ts.end_time);
+    return endMinutes < startMinutes; // Si estende al giorno successivo
+  });
+
+  if (needsExtraDay && weekDays.length === 6) {
+    // Aggiungi domenica se non c'è già
+    const lastDay = weekDays[weekDays.length - 1];
+    const nextDay = new Date(lastDay);
+    nextDay.setDate(nextDay.getDate() + 1);
+    extendedDays.push(nextDay);
+  }
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -421,9 +466,9 @@ export function TimesheetTimeline({ timesheets, weekDays }: TimesheetTimelinePro
           </div>
 
           {/* Colonne per ogni giorno */}
-          {weekDays.map((day, dayIndex) => {
+          {extendedDays.map((day, dayIndex) => {
             const dayTimesheets = timesheets.filter(ts => ts.date === format(day, 'yyyy-MM-dd'));
-            const timeBlocks = calculateTimeBlocks(dayTimesheets);
+            const timeBlocks = calculateTimeBlocks(dayTimesheets, day, extendedDays);
             
             return (
               <div key={day.toISOString()} className="flex-1 min-w-[120px]">
