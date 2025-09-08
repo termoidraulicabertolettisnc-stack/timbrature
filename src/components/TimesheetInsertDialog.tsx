@@ -117,7 +117,7 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess }: Timeshe
 
       const timesheetData = {
         user_id: formData.user_id,
-        project_id: formData.project_id || null,
+        project_id: formData.project_id === "none" ? null : formData.project_id || null,
         date: dateStr,
         start_time: startTimestamp,
         end_time: endTimestamp,
@@ -187,7 +187,7 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess }: Timeshe
                 <SelectValue placeholder="Seleziona commessa (opzionale)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Nessuna commessa</SelectItem>
+                <SelectItem value="none">Nessuna commessa</SelectItem>
                 {projects.map((project) => (
                   <SelectItem key={project.id} value={project.id}>
                     {project.name}
