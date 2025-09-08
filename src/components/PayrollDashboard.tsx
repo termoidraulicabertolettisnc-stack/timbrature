@@ -247,7 +247,7 @@ export default function PayrollDashboard() {
     headers.push('Tot', 'Buoni Pasto');
     
     // Add month title
-    const monthTitleRow = worksheet.addRow([`BUSTE PAGA - ${monthName.toUpperCase()} ${year}`]);
+    const monthTitleRow = worksheet.addRow([`${monthName.toUpperCase()} ${year}`]);
     monthTitleRow.getCell(1).font = { bold: true, size: 14 };
     monthTitleRow.getCell(1).alignment = { horizontal: 'center' };
     worksheet.mergeCells(`A1:${String.fromCharCode(65 + headers.length - 1)}1`);
@@ -396,7 +396,6 @@ export default function PayrollDashboard() {
     // Add legend
     worksheet.addRow([]);
     worksheet.addRow(['LEGENDA:']);
-    worksheet.addRow(['O: Ore Ordinarie', '', 'S: Ore Straordinario', '', 'N: Giorni di Assenza']);
     worksheet.addRow(['A: Assenza Ingiustificata', '', 'F: Ferie', '', 'FS: Festività']);
     worksheet.addRow(['I: Infortunio', '', 'M: Malattia', '', 'PR: Permesso Retribuito', '', 'PNR: Permesso non retribuito']);
     
@@ -505,9 +504,6 @@ export default function PayrollDashboard() {
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">Dettaglio Mensile Completo</CardTitle>
-            <CardDescription className="text-xs">
-              O: Ordinarie | S: Straordinari | N: Assenze - Una riga per ogni tipologia
-            </CardDescription>
           </div>
         </CardHeader>
         <CardContent className="p-0">
