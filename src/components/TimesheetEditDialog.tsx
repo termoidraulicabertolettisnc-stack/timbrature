@@ -20,34 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import LocationDisplay from './LocationDisplay';
 import LocationTrackingRoute from './LocationTrackingRoute';
-
-interface TimesheetWithProfile {
-  id: string;
-  date: string;
-  end_date: string | null;
-  start_time: string | null;
-  end_time: string | null;
-  lunch_start_time: string | null;
-  lunch_end_time: string | null;
-  lunch_duration_minutes: number | null;
-  notes: string | null;
-  user_id: string;
-  project_id: string | null;
-  is_saturday: boolean;
-  is_holiday: boolean;
-  start_location_lat: number | null;
-  start_location_lng: number | null;
-  end_location_lat: number | null;
-  end_location_lng: number | null;
-  profiles: {
-    first_name: string;
-    last_name: string;
-    email: string;
-  } | null;
-  projects: {
-    name: string;
-  } | null;
-}
+import { TimesheetWithProfile } from '@/types/timesheet';
 
 interface Project {
   id: string;
@@ -70,6 +43,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
   // Form state
   const [formData, setFormData] = useState({
     date: '',
+    end_date: '',
     start_time: '',
     end_time: '',
     lunch_start_time: '',
@@ -152,6 +126,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
     if (timesheet) {
       setFormData({
         date: timesheet.date,
+        end_date: timesheet.end_date || timesheet.date,
         start_time: timesheet.start_time ? format(parseISO(timesheet.start_time), 'HH:mm') : '',
         end_time: timesheet.end_time ? format(parseISO(timesheet.end_time), 'HH:mm') : '',
         lunch_start_time: timesheet.lunch_start_time ? format(parseISO(timesheet.lunch_start_time), 'HH:mm') : '',
@@ -207,6 +182,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
       // Prepare the update data
       const updateData: any = {
         date: formData.date,
+        end_date: formData.end_date !== formData.date ? formData.end_date : null,
         project_id: formData.project_id === 'none' ? null : formData.project_id,
         notes: formData.notes || null,
         is_saturday: formData.is_saturday,
@@ -223,7 +199,8 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
 
       // Handle end_time
       if (formData.end_time) {
-        updateData.end_time = new Date(`${formData.date}T${formData.end_time}:00`).toISOString();
+        const endDate = formData.end_date || formData.date;
+        updateData.end_time = new Date(`${endDate}T${formData.end_time}:00`).toISOString();
       } else {
         updateData.end_time = null;
       }
@@ -298,14 +275,25 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="date">Data</Label>
+              <Label htmlFor="date">Data inizio</Label>
               <Input
                 id="date"
                 type="date"
                 value={formData.date}
                 onChange={(e) => handleInputChange('date', e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="end_date">Data fine</Label>
+              <Input
+                id="end_date"
+                type="date"
+                value={formData.end_date}
+                onChange={(e) => handleInputChange('end_date', e.target.value)}
                 required
               />
             </div>

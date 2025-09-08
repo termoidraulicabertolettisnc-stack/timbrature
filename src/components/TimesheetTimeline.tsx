@@ -6,34 +6,16 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Clock, Zap, Moon, Utensils } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { TimesheetWithProfile } from '@/types/timesheet';
 
-interface TimesheetWithProfile {
-  id: string;
-  date: string;
-  end_date: string | null;
-  start_time: string | null;
-  end_time: string | null;
-  lunch_start_time: string | null;
-  lunch_end_time: string | null;
-  total_hours: number | null;
-  overtime_hours: number | null;
-  night_hours: number | null;
-  is_saturday: boolean;
-  is_holiday: boolean;
-  meal_voucher_earned: boolean;
-  notes: string | null;
-  user_id: string;
-  project_id: string | null;
-  created_at: string;
-  updated_at: string;
-  profiles: {
-    first_name: string;
-    last_name: string;
-    email: string;
-  } | null;
-  projects: {
-    name: string;
-  } | null;
+interface TimeBlock {
+  timesheet: TimesheetWithProfile;
+  startMinutes: number;
+  endMinutes: number;
+  isLunchBreak: boolean;
+  type: 'work' | 'overtime' | 'night';
+  startDate: string;
+  endDate: string;
 }
 
 interface TimesheetTimelineProps {
