@@ -623,8 +623,8 @@ export default function AdminTimesheets() {
     });
   }, [absences, dateFilter, activeView, selectedEmployee, searchTerm]);
 
-  const weeklyData = aggregateWeeklyData();
-  const monthlyData = aggregateMonthlyData();
+  const weeklyData = useMemo(() => aggregateWeeklyData(), [filteredTimesheets, dateFilter, absences]);
+  const monthlyData = useMemo(() => aggregateMonthlyData(), [filteredTimesheets, dateFilter, absences]);
 
   const exportData = () => {
     // TODO: Implementare export
