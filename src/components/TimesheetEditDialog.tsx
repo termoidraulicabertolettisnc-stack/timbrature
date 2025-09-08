@@ -182,7 +182,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
       // Prepare the update data
       const updateData: any = {
         date: formData.date,
-        end_date: formData.end_date !== formData.date ? formData.end_date : null,
+        end_date: formData.end_date, // Always pass the end_date as specified by user, let trigger handle logic
         project_id: formData.project_id === 'none' ? null : formData.project_id,
         notes: formData.notes || null,
         is_saturday: formData.is_saturday,
