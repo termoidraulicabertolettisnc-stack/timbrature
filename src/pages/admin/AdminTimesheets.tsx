@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { CalendarIcon, Clock, Edit, Filter, Download, Users, ChevronDown, ChevronRight, Trash2, Navigation, ChevronLeft } from 'lucide-react';
+import { CalendarIcon, Clock, Edit, Filter, Download, Users, ChevronDown, ChevronRight, Trash2, Navigation, ChevronLeft, Plus, UserPlus, Calendar } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, addDays, isSameDay, subDays, subWeeks, subMonths, addWeeks, addMonths } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -17,10 +17,12 @@ import { OvertimeTracker } from '@/components/OvertimeTracker';
 import { TimesheetTimeline } from '@/components/TimesheetTimeline';
 import LocationTrackingIndicator from '@/components/LocationTrackingIndicator';
 import { TimesheetEditDialog } from '@/components/TimesheetEditDialog';
+import { TimesheetInsertDialog } from '@/components/TimesheetInsertDialog';
+import { AbsenceInsertDialog } from '@/components/AbsenceInsertDialog';
 import LocationDisplay from '@/components/LocationDisplay';
 import { useRealtimeHours } from '@/hooks/use-realtime-hours';
 import { TimesheetWithProfile } from '@/types/timesheet';
-import { Calendar } from '@/components/ui/calendar';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -102,6 +104,10 @@ export default function AdminTimesheets() {
   // Edit dialog state
   const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  
+  // Insert dialog states
+  const [timesheetInsertDialogOpen, setTimesheetInsertDialogOpen] = useState(false);
+  const [absenceInsertDialogOpen, setAbsenceInsertDialogOpen] = useState(false);
   
   // Filtri
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
@@ -631,10 +637,28 @@ export default function AdminTimesheets() {
             Visualizza e modifica i timesheet di tutti i dipendenti
           </p>
         </div>
-        <Button onClick={exportData} className="flex items-center gap-2">
-          <Download className="h-4 w-4" />
-          Esporta
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setTimesheetInsertDialogOpen(true)}
+            className="flex items-center gap-2"
+            variant="default"
+          >
+            <Plus className="h-4 w-4" />
+            Nuova Timbratura
+          </Button>
+          <Button
+            onClick={() => setAbsenceInsertDialogOpen(true)}
+            className="flex items-center gap-2"
+            variant="secondary"
+          >
+            <UserPlus className="h-4 w-4" />
+            Inserisci Assenza
+          </Button>
+          <Button onClick={exportData} className="flex items-center gap-2" variant="outline">
+            <Download className="h-4 w-4" />
+            Esporta
+          </Button>
+        </div>
       </div>
 
       {/* Tabs per vista */}
@@ -682,7 +706,7 @@ export default function AdminTimesheets() {
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
+                      <CalendarComponent
                         mode="single"
                         selected={parseISO(dateFilter)}
                         onSelect={(date) => {
