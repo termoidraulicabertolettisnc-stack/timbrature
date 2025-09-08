@@ -303,15 +303,26 @@ export default function PayrollDashboard() {
                     const day = i + 1;
                     const isHol = isHoliday(day);
                     const isSun = isSunday(day);
+                    
+                    // Calcola il giorno della settimana
+                    const [year, month] = selectedMonth.split('-');
+                    const date = new Date(parseInt(year), parseInt(month) - 1, day);
+                    const dayOfWeek = date.getDay();
+                    const dayNames = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
+                    const dayName = dayNames[dayOfWeek];
+                    
                     return (
                       <TableHead 
                         key={day} 
                         className={`text-center w-8 min-w-8 max-w-8 text-xs font-medium p-1 ${
                           isHol || isSun ? 'bg-red-50 text-red-700' : ''
                         }`}
-                        title={`Giorno ${day}`}
+                        title={`${dayName} ${day}`}
                       >
-                        {day}
+                        <div className="flex flex-col">
+                          <span className="font-bold">{day}</span>
+                          <span className="text-xs font-normal opacity-75">{dayName}</span>
+                        </div>
                       </TableHead>
                     );
                   })}
