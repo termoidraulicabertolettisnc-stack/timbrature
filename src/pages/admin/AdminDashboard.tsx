@@ -1,5 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, Clock, FolderKanban, Calendar, TrendingUp, AlertCircle } from "lucide-react";
+import PayrollDashboard from "@/components/PayrollDashboard";
 
 export default function AdminDashboard() {
   return (
@@ -11,6 +13,27 @@ export default function AdminDashboard() {
         </p>
       </div>
 
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="overview">Panoramica</TabsTrigger>
+          <TabsTrigger value="payroll">Vista Buste Paga</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="overview" className="space-y-6 mt-6">
+          <OverviewDashboard />
+        </TabsContent>
+        
+        <TabsContent value="payroll" className="mt-6">
+          <PayrollDashboard />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function OverviewDashboard() {
+  return (
+    <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
