@@ -585,6 +585,7 @@ export default function AdminTimesheets() {
             dateFilter={dateFilter}
             onEdit={handleEditTimesheet}
             onDelete={deleteTimesheet}
+            onTimesheetClick={handleEditTimesheetFromTimeline}
           />
         </TabsContent>
         
@@ -756,13 +757,15 @@ function WeeklyView({
   loading, 
   dateFilter,
   onEdit,
-  onDelete
+  onDelete,
+  onTimesheetClick
 }: { 
   weeklyData: EmployeeWeeklyData[]; 
   loading: boolean; 
   dateFilter: string;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
+  onTimesheetClick: (timesheet: TimesheetWithProfile) => void;
 }) {
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
 
@@ -893,7 +896,7 @@ function WeeklyView({
                     <TimesheetTimeline 
                       timesheets={getAllTimesheetsForEmployee(employee)} 
                       weekDays={weekDays}
-                      onTimesheetClick={handleEditTimesheetFromTimeline}
+                      onTimesheetClick={onTimesheetClick}
                     />
                   </div>
                 </CollapsibleContent>
