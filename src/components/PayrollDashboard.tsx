@@ -161,13 +161,13 @@ export default function PayrollDashboard() {
         
         // Get effective settings (employee settings take precedence over company settings)
         const companySettingsForEmployee = companySettings?.find(cs => cs.company_id === profile.company_id);
-        const effectiveMealVoucherPolicy = settings?.meal_voucher_policy || companySettingsForEmployee?.meal_voucher_policy || 'oltre_6_ore';
+        const effectiveMealAllowancePolicy = (settings as any)?.meal_allowance_policy || (companySettingsForEmployee as any)?.meal_allowance_policy || 'disabled';
         const mealVoucherAmount = settings?.meal_voucher_amount || companySettingsForEmployee?.meal_voucher_amount || 8.00;
         
         console.log(`PayrollDashboard - ${profile.first_name} ${profile.last_name}:`, {
-          employeePolicy: settings?.meal_voucher_policy,
-          companyPolicy: companySettingsForEmployee?.meal_voucher_policy,
-          effectivePolicy: effectiveMealVoucherPolicy,
+          employeeMealAllowancePolicy: (settings as any)?.meal_allowance_policy,
+          companyMealAllowancePolicy: (companySettingsForEmployee as any)?.meal_allowance_policy,
+          effectiveMealAllowancePolicy: effectiveMealAllowancePolicy,
           saturdayHandling: settings?.saturday_handling || companySettingsForEmployee?.saturday_handling
         });
 
@@ -200,14 +200,15 @@ export default function PayrollDashboard() {
           totalOrdinary += ordinary;
           totalOvertime += overtime;
           
-          // Calculate meal vouchers based on policy
-          if (effectiveMealVoucherPolicy === 'disabilitato') {
-            // No meal vouchers earned if disabled
-          } else if (effectiveMealVoucherPolicy === 'oltre_6_ore') {
+          // Calculate meal vouchers based on unified policy
+          // Daily allowance policy means no meal vouchers (they're mutually exclusive)
+          if (effectiveMealAllowancePolicy === 'disabled' || effectiveMealAllowancePolicy === 'daily_allowance') {
+            // No meal vouchers earned if disabled or using daily allowance
+          } else if (effectiveMealAllowancePolicy === 'meal_vouchers_only') {
             if ((ts.total_hours || 0) > 6) {
               mealVoucherDays++;
             }
-          } else if (effectiveMealVoucherPolicy === 'sempre_parttime') {
+          } else if (effectiveMealAllowancePolicy === 'meal_vouchers_always') {
             mealVoucherDays++;
           }
         });
