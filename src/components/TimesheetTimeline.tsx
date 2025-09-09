@@ -65,31 +65,71 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
     loadEmployeeSettings();
   }, [employeeUserIds.join(',')]);
 
+  // Calcola le ore lavorate per un timesheet (anche se in corso)
+  const calculateWorkedHours = (timesheet: TimesheetWithProfile): number => {
+    if (!timesheet.start_time) return 0;
+    
+    // Se il timesheet è chiuso, usa le ore già calcolate
+    if (timesheet.end_time && timesheet.total_hours !== null) {
+      return timesheet.total_hours;
+    }
+    
+    // Se il timesheet è aperto, calcola le ore in tempo reale
+    const startTime = new Date(timesheet.start_time);
+    const endTime = timesheet.end_time ? new Date(timesheet.end_time) : new Date();
+    
+    const diffMs = endTime.getTime() - startTime.getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+    
+    // Sottrai la pausa pranzo se necessario
+    const settings = employeeSettings[timesheet.user_id];
+    
+    let lunchBreakHours = 0;
+    if (timesheet.lunch_start_time && timesheet.lunch_end_time) {
+      const lunchStart = new Date(timesheet.lunch_start_time);
+      const lunchEnd = new Date(timesheet.lunch_end_time);
+      lunchBreakHours = (lunchEnd.getTime() - lunchStart.getTime()) / (1000 * 60 * 60);
+    } else if (timesheet.lunch_duration_minutes) {
+      lunchBreakHours = timesheet.lunch_duration_minutes / 60;
+    } else if (diffHours > 6) {
+      // Pausa pranzo automatica se più di 6 ore
+      const lunchBreakType = settings?.lunch_break_type || companySettings?.lunch_break_type || '60_minuti';
+      const lunchMinutes = parseInt(lunchBreakType.split('_')[0]) || 60;
+      lunchBreakHours = lunchMinutes / 60;
+    }
+    
+    return Math.max(0, diffHours - lunchBreakHours);
+  };
+
   // Calculate if timesheet qualifies for daily allowance
   const calculateDailyAllowanceEarned = (timesheet: TimesheetWithProfile): boolean => {
+    const workedHours = calculateWorkedHours(timesheet);
+    if (workedHours === 0) return false;
+    
     const settings = employeeSettings[timesheet.user_id];
     const effectiveMealAllowancePolicy = settings?.meal_allowance_policy || companySettings?.meal_allowance_policy || 'disabled';
     const effectiveDailyAllowanceMinHours = settings?.daily_allowance_min_hours || companySettings?.default_daily_allowance_min_hours || 6;
 
     return (
       (effectiveMealAllowancePolicy === 'daily_allowance' || effectiveMealAllowancePolicy === 'both') && 
-      (timesheet.total_hours || 0) >= effectiveDailyAllowanceMinHours
+      workedHours >= effectiveDailyAllowanceMinHours
     );
   };
 
   // Calculate if timesheet qualifies for meal voucher
   const calculateMealVoucherEarned = (timesheet: TimesheetWithProfile): boolean => {
+    const workedHours = calculateWorkedHours(timesheet);
+    if (workedHours === 0) return false;
+    
     const settings = employeeSettings[timesheet.user_id];
     const effectiveMealAllowancePolicy = settings?.meal_allowance_policy || companySettings?.meal_allowance_policy || 'disabled';
     const effectiveMealVoucherMinHours = settings?.meal_voucher_min_hours || companySettings?.meal_voucher_min_hours || 6;
 
-    // For 'both' policy, use meal_voucher_earned from database, for meal_vouchers_always check hours
-    if (effectiveMealAllowancePolicy === 'both') {
-      return timesheet.meal_voucher_earned || false;
-    } else if (effectiveMealAllowancePolicy === 'meal_vouchers_always') {
-      return (timesheet.total_hours || 0) >= effectiveMealVoucherMinHours;
+    // For 'both' policy or 'meal_vouchers_only', check if worked hours meet minimum
+    if (effectiveMealAllowancePolicy === 'both' || effectiveMealAllowancePolicy === 'meal_vouchers_only') {
+      return workedHours >= effectiveMealVoucherMinHours;
     }
-
+    
     return false;
   };
 
