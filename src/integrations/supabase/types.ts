@@ -696,6 +696,7 @@ export type Database = {
         | "meal_vouchers_only"
         | "meal_vouchers_always"
         | "daily_allowance"
+        | "both"
       meal_voucher_type:
         | "oltre_6_ore"
         | "sempre_parttime"
@@ -847,6 +848,7 @@ export const Constants = {
         "meal_vouchers_only",
         "meal_vouchers_always",
         "daily_allowance",
+        "both",
       ],
       meal_voucher_type: [
         "oltre_6_ore",
