@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { format, parseISO, eachHourOfInterval, addHours, startOfHour, isSameHour, differenceInMinutes, isValid, isSameDay, addDays } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Clock, Zap, Moon, Utensils } from 'lucide-react';
+import { Clock, Zap, Moon, Utensils, Euro } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TimesheetWithProfile } from '@/types/timesheet';
+import { supabase } from '@/integrations/supabase/client';
 
 interface TimeBlock {
   timesheet: TimesheetWithProfile;
@@ -26,6 +27,71 @@ interface TimesheetTimelineProps {
 
 export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: TimesheetTimelineProps) {
   const [selectedTimesheet, setSelectedTimesheet] = useState<string | null>(null);
+  const [employeeSettings, setEmployeeSettings] = useState<any>({});
+  const [companySettings, setCompanySettings] = useState<any>(null);
+
+  // Get unique employee user_ids from timesheets
+  const employeeUserIds = [...new Set(timesheets.map(ts => ts.user_id))];
+
+  useEffect(() => {
+    const loadEmployeeSettings = async () => {
+      if (employeeUserIds.length === 0) return;
+
+      try {
+        // Load employee settings and company settings
+        const { data: empSettings } = await supabase
+          .from('employee_settings')
+          .select('*')
+          .in('user_id', employeeUserIds);
+
+        const { data: companySettingsData } = await supabase
+          .from('company_settings')
+          .select('*')
+          .limit(1)
+          .single();
+
+        const settingsMap: any = {};
+        empSettings?.forEach(emp => {
+          settingsMap[emp.user_id] = emp;
+        });
+
+        setEmployeeSettings(settingsMap);
+        setCompanySettings(companySettingsData);
+      } catch (error) {
+        console.error('Error loading employee settings:', error);
+      }
+    };
+
+    loadEmployeeSettings();
+  }, [employeeUserIds.join(',')]);
+
+  // Calculate if timesheet qualifies for daily allowance
+  const calculateDailyAllowanceEarned = (timesheet: TimesheetWithProfile): boolean => {
+    const settings = employeeSettings[timesheet.user_id];
+    const effectiveMealAllowancePolicy = settings?.meal_allowance_policy || companySettings?.meal_allowance_policy || 'disabled';
+    const effectiveDailyAllowanceMinHours = settings?.daily_allowance_min_hours || companySettings?.default_daily_allowance_min_hours || 6;
+
+    return (
+      (effectiveMealAllowancePolicy === 'daily_allowance' || effectiveMealAllowancePolicy === 'both') && 
+      (timesheet.total_hours || 0) >= effectiveDailyAllowanceMinHours
+    );
+  };
+
+  // Calculate if timesheet qualifies for meal voucher
+  const calculateMealVoucherEarned = (timesheet: TimesheetWithProfile): boolean => {
+    const settings = employeeSettings[timesheet.user_id];
+    const effectiveMealAllowancePolicy = settings?.meal_allowance_policy || companySettings?.meal_allowance_policy || 'disabled';
+    const effectiveMealVoucherMinHours = settings?.meal_voucher_min_hours || companySettings?.meal_voucher_min_hours || 6;
+
+    // For 'both' policy, use meal_voucher_earned from database, for meal_vouchers_always check hours
+    if (effectiveMealAllowancePolicy === 'both') {
+      return timesheet.meal_voucher_earned || false;
+    } else if (effectiveMealAllowancePolicy === 'meal_vouchers_always') {
+      return (timesheet.total_hours || 0) >= effectiveMealVoucherMinHours;
+    }
+
+    return false;
+  };
 
   // Orari di riferimento dinamici
   const START_HOUR = 6;
@@ -823,7 +889,14 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
                                 <div className="flex gap-1 flex-wrap mt-1">
                                   {block.timesheet.is_saturday && <Badge variant="secondary" className="text-xs">Sab</Badge>}
                                   {block.timesheet.is_holiday && <Badge variant="secondary" className="text-xs">Fest</Badge>}
-                                  {block.timesheet.meal_voucher_earned && <Badge variant="default" className="text-xs">Buono</Badge>}
+                                  {calculateMealVoucherEarned(block.timesheet) && <Badge variant="default" className="text-xs flex items-center gap-1">
+                                    <Utensils className="h-2.5 w-2.5" />
+                                    Buono
+                                  </Badge>}
+                                  {calculateDailyAllowanceEarned(block.timesheet) && <Badge variant="outline" className="text-xs flex items-center gap-1">
+                                    <Euro className="h-2.5 w-2.5" />
+                                    Indennità
+                                  </Badge>}
                                 </div>
                                 {block.timesheet.notes && (
                                   <div className="text-sm mt-1">
