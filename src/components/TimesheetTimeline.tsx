@@ -29,9 +29,62 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
   const [selectedTimesheet, setSelectedTimesheet] = useState<string | null>(null);
   const [employeeSettings, setEmployeeSettings] = useState<any>({});
   const [companySettings, setCompanySettings] = useState<any>(null);
+  const [realtimeTimesheets, setRealtimeTimesheets] = useState<TimesheetWithProfile[]>(timesheets);
 
   // Get unique employee user_ids from timesheets
   const employeeUserIds = [...new Set(timesheets.map(ts => ts.user_id))];
+
+  // Update local state when props change
+  useEffect(() => {
+    setRealtimeTimesheets(timesheets);
+  }, [timesheets]);
+
+  // Set up realtime updates for timesheets
+  useEffect(() => {
+    const channel = supabase
+      .channel('timesheet-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'timesheets'
+        },
+        (payload) => {
+          console.log('🔄 Timesheet realtime update:', payload);
+          // Refresh timesheets when changes occur
+          if (payload.new && payload.eventType !== 'DELETE') {
+            setRealtimeTimesheets(prev => 
+              prev.map(ts => ts.id === payload.new.id ? { ...ts, ...payload.new } : ts)
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Timer to refresh calculations for open timesheets every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      const hasOpenTimesheets = realtimeTimesheets.some(ts => 
+        ts.start_time && !ts.end_time && 
+        format(new Date(ts.date), 'yyyy-MM-dd') === format(now, 'yyyy-MM-dd')
+      );
+      
+      if (hasOpenTimesheets) {
+        console.log('⏰ Refreshing open timesheet calculations');
+        // Force re-render by updating a dummy state
+        setSelectedTimesheet(prev => prev);
+      }
+    }, 60000); // Every minute
+
+    return () => clearInterval(interval);
+  }, [realtimeTimesheets]);
 
   useEffect(() => {
     const loadEmployeeSettings = async () => {
@@ -110,10 +163,19 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
     const effectiveMealAllowancePolicy = settings?.meal_allowance_policy || companySettings?.meal_allowance_policy || 'disabled';
     const effectiveDailyAllowanceMinHours = settings?.daily_allowance_min_hours || companySettings?.default_daily_allowance_min_hours || 6;
 
-    return (
+    const result = (
       (effectiveMealAllowancePolicy === 'daily_allowance' || effectiveMealAllowancePolicy === 'both') && 
       workedHours >= effectiveDailyAllowanceMinHours
     );
+    
+    console.log(`💰 Daily allowance for ${timesheet.id} (${timesheet.date}):`, {
+      workedHours: workedHours.toFixed(2),
+      effectiveMealAllowancePolicy,
+      effectiveDailyAllowanceMinHours,
+      result
+    });
+    
+    return result;
   };
 
   // Calculate if timesheet qualifies for meal voucher
@@ -126,11 +188,18 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
     const effectiveMealVoucherMinHours = settings?.meal_voucher_min_hours || companySettings?.meal_voucher_min_hours || 6;
 
     // For 'both' policy or 'meal_vouchers_only', check if worked hours meet minimum
-    if (effectiveMealAllowancePolicy === 'both' || effectiveMealAllowancePolicy === 'meal_vouchers_only') {
-      return workedHours >= effectiveMealVoucherMinHours;
-    }
+    const result = (effectiveMealAllowancePolicy === 'both' || effectiveMealAllowancePolicy === 'meal_vouchers_only') &&
+      workedHours >= effectiveMealVoucherMinHours;
     
-    return false;
+    console.log(`🍽️ Meal voucher for ${timesheet.id} (${timesheet.date}):`, {
+      workedHours: workedHours.toFixed(2),
+      effectiveMealAllowancePolicy,
+      effectiveMealVoucherMinHours,
+      dbValue: timesheet.meal_voucher_earned,
+      calculated: result
+    });
+    
+    return result;
   };
 
   // Orari di riferimento dinamici
@@ -642,7 +711,7 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
 
   // Estendi i giorni per includere giorni necessari per sessioni multi-giorno
   const extendedDays = [...weekDays];
-  const needsExtraDay = timesheets.some(ts => {
+  const needsExtraDay = realtimeTimesheets.some(ts => {
     if (!ts.end_date) return false;
     return ts.end_date !== ts.date; // Ha una data di fine diversa
   });
@@ -697,7 +766,7 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
           {extendedDays.map((day, dayIndex) => {
             const currentDayStr = format(day, 'yyyy-MM-dd');
             // Includi timesheet che iniziano questo giorno O che finiscono questo giorno (multi-giorno)
-            const dayTimesheets = timesheets.filter(ts => {
+            const dayTimesheets = realtimeTimesheets.filter(ts => {
               const isStartDay = ts.date === currentDayStr;
               const isEndDay = ts.end_date === currentDayStr;
               // Per timesheet in corso, considera solo il giorno di inizio
