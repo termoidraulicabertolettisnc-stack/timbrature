@@ -1546,6 +1546,25 @@ function MonthlyView({
     // Determina la policy effettiva (employee settings hanno priorità su company settings)
     let effectivePolicy = employeeSetting?.meal_allowance_policy || companySettings?.meal_allowance_policy || 'disabled';
     
+    if (effectivePolicy === 'both') {
+      // Per policy "both", verifica entrambi i benefici
+      const dailyAllowanceMinHours = employeeSetting?.daily_allowance_min_hours || companySettings?.default_daily_allowance_min_hours || 6;
+      const dailyAllowanceAmount = employeeSetting?.daily_allowance_amount || companySettings?.default_daily_allowance_amount || 10.00;
+      
+      const hasMealVoucher = dayData.meal_vouchers > 0;
+      const hasDailyAllowance = dayData.total_hours >= dailyAllowanceMinHours;
+      
+      if (hasMealVoucher && hasDailyAllowance) {
+        return { show: true, icon: '🍽️💰', tooltip: `Buono Pasto + Indennità: €${dailyAllowanceAmount.toFixed(2)}` };
+      } else if (hasMealVoucher) {
+        return { show: true, icon: '🍽️', tooltip: 'Buono Pasto Maturato' };
+      } else if (hasDailyAllowance) {
+        return { show: true, icon: '💰', tooltip: `Indennità: €${dailyAllowanceAmount.toFixed(2)}` };
+      }
+      
+      return { show: false, icon: '', tooltip: '' };
+    }
+    
     // Se meal_vouchers > 0, significa che nel database è stato calcolato un buono pasto/benefit
     // Ma dobbiamo verificare se la policy corrente prevede buoni pasto o indennità
     if (dayData.meal_vouchers > 0) {
@@ -1558,26 +1577,9 @@ function MonthlyView({
           const dailyAllowanceAmount = employeeSetting?.daily_allowance_amount || companySettings?.daily_allowance_amount || 10.00;
           return { show: true, icon: '💰', tooltip: `Indennità: €${dailyAllowanceAmount.toFixed(2)}` };
           
-        case 'both':
-          // Con policy "both", se meal_voucher_earned è true, mostra buono pasto
-          // altrimenti mostra indennità (se ha lavorato le ore minime per l'indennità)
-          if (dayData.meal_vouchers > 0) {
-            return { show: true, icon: '🍽️', tooltip: 'Buono Pasto Maturato' };
-          }
-          break;
-          
         case 'disabled':
         default:
           return { show: false, icon: '', tooltip: '' };
-      }
-    } else if (effectivePolicy === 'both') {
-      // Per policy "both", anche se non ha maturato buono pasto, potrebbe aver maturato indennità
-      // Verifica le ore lavorate contro le ore minime per l'indennità
-      const dailyAllowanceMinHours = employeeSetting?.daily_allowance_min_hours || companySettings?.daily_allowance_min_hours || 6;
-      const dailyAllowanceAmount = employeeSetting?.daily_allowance_amount || companySettings?.daily_allowance_amount || 10.00;
-      
-      if (dayData.total_hours >= dailyAllowanceMinHours) {
-        return { show: true, icon: '💰', tooltip: `Indennità: €${dailyAllowanceAmount.toFixed(2)}` };
       }
     }
     
