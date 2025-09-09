@@ -1453,6 +1453,60 @@ function MonthlyView({
 }) {
   const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
   const [selectedDays, setSelectedDays] = useState<Map<string, string>>(new Map()); // Map<employeeId, selectedDate>
+  const [employeeSettings, setEmployeeSettings] = useState<Map<string, any>>(new Map());
+  const [companySettings, setCompanySettings] = useState<any>(null);
+
+  useEffect(() => {
+    loadEmployeeSettings();
+  }, [monthlyData]);
+
+  const loadEmployeeSettings = async () => {
+    if (monthlyData.length === 0) return;
+
+    try {
+      // Carica le impostazioni aziendali
+      const { data: companyData, error: companyError } = await supabase
+        .from('company_settings')
+        .select('*')
+        .limit(1)
+        .single();
+
+      if (companyError && companyError.code !== 'PGRST116') {
+        console.error('Error loading company settings:', companyError);
+      } else {
+        setCompanySettings(companyData);
+      }
+
+      // Ottieni tutti gli user_id unici
+      const userIds = [...new Set(monthlyData.map(emp => emp.user_id))];
+
+      // Carica le impostazioni specifiche dei dipendenti (ordinata per updated_at DESC)
+      const { data: employeeData, error: employeeError } = await supabase
+        .from('employee_settings')
+        .select('*')
+        .in('user_id', userIds)
+        .order('updated_at', { ascending: false });
+
+      if (employeeError) {
+        console.error('Error loading employee settings:', employeeError);
+      } else {
+        const settingsMap = new Map();
+        // Prendi solo il più recente per ogni user_id
+        const latestSettings = new Map();
+        employeeData?.forEach(setting => {
+          if (!latestSettings.has(setting.user_id)) {
+            latestSettings.set(setting.user_id, setting);
+          }
+        });
+        latestSettings.forEach((setting, userId) => {
+          settingsMap.set(userId, setting);
+        });
+        setEmployeeSettings(settingsMap);
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  };
 
   const toggleEmployee = (userId: string) => {
     const newExpanded = new Set(expandedEmployees);
@@ -1484,6 +1538,34 @@ function MonthlyView({
   const formatHours = (hours: number) => {
     if (hours === 0) return '-';
     return `${hours.toFixed(1)}h`;
+  };
+
+  const getBenefitDisplay = (employee: EmployeeMonthlyData, dayData: DailyHours) => {
+    const employeeSetting = employeeSettings.get(employee.user_id);
+    
+    // Determina la policy effettiva (employee settings hanno priorità su company settings)
+    let effectivePolicy = employeeSetting?.meal_allowance_policy || companySettings?.meal_allowance_policy || 'disabled';
+    
+    // Se meal_vouchers > 0, significa che nel database è stato calcolato un buono pasto/benefit
+    // Ma dobbiamo verificare se la policy corrente prevede buoni pasto o indennità
+    if (dayData.meal_vouchers > 0) {
+      switch (effectivePolicy) {
+        case 'meal_vouchers_only':
+        case 'meal_vouchers_always':
+          return { show: true, icon: '🍽️', tooltip: 'Buono Pasto Maturato' };
+          
+        case 'daily_allowance':
+          // Per indennità, calcola l'importo
+          const dailyAllowanceAmount = employeeSetting?.daily_allowance_amount || companySettings?.daily_allowance_amount || 10.00;
+          return { show: true, icon: '💰', tooltip: `Indennità: €${dailyAllowanceAmount.toFixed(2)}` };
+          
+        case 'disabled':
+        default:
+          return { show: false, icon: '', tooltip: '' };
+      }
+    }
+    
+    return { show: false, icon: '', tooltip: '' };
   };
 
   const baseDate = parseISO(dateFilter);
@@ -1595,13 +1677,29 @@ function MonthlyView({
                         </div>
                        </div>
                     </div>
-                     {employee.meal_vouchers > 0 && (
-                       <div className="flex gap-4 text-sm ml-7">
-                         <span className="text-muted-foreground">
-                           Buoni pasto: {employee.meal_vouchers}
-                         </span>
-                       </div>
-                     )}
+                      {employee.meal_vouchers > 0 && (
+                        <div className="flex gap-4 text-sm ml-7">
+                          <span className="text-muted-foreground">
+                            {(() => {
+                              const employeeSetting = employeeSettings.get(employee.user_id);
+                              const effectivePolicy = employeeSetting?.meal_allowance_policy || companySettings?.meal_allowance_policy || 'disabled';
+                              
+                              switch (effectivePolicy) {
+                                case 'meal_vouchers_only':
+                                case 'meal_vouchers_always':
+                                  return `Buoni pasto: ${employee.meal_vouchers}`;
+                                case 'daily_allowance':
+                                  const dailyAllowanceAmount = employeeSetting?.daily_allowance_amount || companySettings?.daily_allowance_amount || 10.00;
+                                  const totalAmount = (employee.meal_vouchers * dailyAllowanceAmount).toFixed(2);
+                                  return `Indennità giornaliera: €${totalAmount} (${employee.meal_vouchers} giorni)`;
+                                case 'disabled':
+                                default:
+                                  return `Benefits: ${employee.meal_vouchers}`;
+                              }
+                            })()}
+                          </span>
+                        </div>
+                      )}
                   </CardHeader>
                   <CardContent className="pt-0">
                     <div className="space-y-3 ml-7">
@@ -1664,16 +1762,19 @@ function MonthlyView({
                                            <p>Ore Totali Giornata</p>
                                          </TooltipContent>
                                        </Tooltip>
-                                        {dayData.meal_vouchers > 0 && (
-                                          <Tooltip>
-                                            <TooltipTrigger asChild>
-                                              <div className="text-xs">🍽️</div>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                              <p>Buono Pasto Maturato</p>
-                                            </TooltipContent>
-                                          </Tooltip>
-                                        )}
+                                         {(() => {
+                                           const benefit = getBenefitDisplay(employee, dayData);
+                                           return benefit.show && (
+                                             <Tooltip>
+                                               <TooltipTrigger asChild>
+                                                 <div className="text-xs">{benefit.icon}</div>
+                                               </TooltipTrigger>
+                                               <TooltipContent>
+                                                 <p>{benefit.tooltip}</p>
+                                               </TooltipContent>
+                                             </Tooltip>
+                                           );
+                                         })()}
                                         {dayData.absences && dayData.absences.length > 0 && (
                                           <div className="mt-1">
                                             <AbsenceIndicator absences={dayData.absences} className="justify-center" />
