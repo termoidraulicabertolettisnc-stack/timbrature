@@ -171,9 +171,21 @@ export default function PayrollDashboard() {
         employeeTimesheets.forEach(ts => {
           const day = new Date(ts.date).getDate();
           const dayKey = String(day).padStart(2, '0');
+          const date = new Date(ts.date);
+          const isSaturday = date.getDay() === 6;
           
-          const ordinary = Math.max(0, (ts.total_hours || 0) - (ts.overtime_hours || 0));
-          const overtime = ts.overtime_hours || 0;
+          // Check if Saturday is handled as business trip for this employee
+          const effectiveSaturdayHandling = settings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
+          const shouldExcludeSaturdayOvertime = isSaturday && effectiveSaturdayHandling === 'trasferta';
+          
+          let overtime = ts.overtime_hours || 0;
+          
+          // If Saturday is configured as business trip, don't count its overtime
+          if (shouldExcludeSaturdayOvertime) {
+            overtime = 0;
+          }
+          
+          const ordinary = Math.max(0, (ts.total_hours || 0) - overtime);
           
           dailyData[dayKey].ordinary = ordinary;
           dailyData[dayKey].overtime = overtime;
