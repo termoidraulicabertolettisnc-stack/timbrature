@@ -279,7 +279,18 @@ const BusinessTripsDashboard = () => {
         const effectiveDailyAllowanceMinHours = settings?.daily_allowance_min_hours || companySettingsForEmployee?.daily_allowance_min_hours || 6;
         const effectiveDailyAllowanceAmount = settings?.daily_allowance_amount || companySettingsForEmployee?.daily_allowance_amount || 10;
         const effectiveSaturdayRate = settings?.saturday_hourly_rate || companySettingsForEmployee?.saturday_hourly_rate || 10;
+        const effectiveMealVoucherPolicy = settings?.meal_voucher_policy || companySettingsForEmployee?.meal_voucher_policy || 'oltre_6_ore';
         const mealVoucherAmount = settings?.meal_voucher_amount || companySettingsForEmployee?.meal_voucher_amount || 8.00;
+        
+        console.log(`BusinessTripsDashboard - ${profile.first_name} ${profile.last_name}:`, {
+          employeeMealVoucherPolicy: settings?.meal_voucher_policy,
+          companyMealVoucherPolicy: companySettingsForEmployee?.meal_voucher_policy,
+          effectiveMealVoucherPolicy: effectiveMealVoucherPolicy,
+          dailyAllowancePolicy: effectiveDailyAllowancePolicy,
+          saturdayHandling: effectiveSaturdayHandling,
+          dailyAllowanceAmount: effectiveDailyAllowanceAmount,
+          dailyAllowanceMinHours: effectiveDailyAllowanceMinHours
+        });
 
         // Initialize all days of the month
         const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
@@ -308,11 +319,14 @@ const BusinessTripsDashboard = () => {
           }
           
           // Check for daily allowance eligibility
-          if (effectiveDailyAllowancePolicy !== 'disabled' && (ts.total_hours || 0) >= effectiveDailyAllowanceMinHours) {
-            if (!isBusinessTrip) { // Don't double count Saturday business trips
-              dailyAllowanceDays += 1;
-              dailyAllowanceAmount += effectiveDailyAllowanceAmount;
-            }
+          if (effectiveDailyAllowancePolicy === 'alternative_to_voucher' && (ts.total_hours || 0) >= effectiveDailyAllowanceMinHours) {
+            // For alternative to voucher policy, count all qualifying days including Saturday business trips
+            dailyAllowanceDays += 1;
+            dailyAllowanceAmount += effectiveDailyAllowanceAmount;
+          } else if (effectiveDailyAllowancePolicy === 'enabled' && (ts.total_hours || 0) >= effectiveDailyAllowanceMinHours && !isBusinessTrip) {
+            // For regular daily allowance, don't double count Saturday business trips
+            dailyAllowanceDays += 1;
+            dailyAllowanceAmount += effectiveDailyAllowanceAmount;
           }
           
           const ordinary = Math.max(0, (ts.total_hours || 0) - overtime);
@@ -324,8 +338,14 @@ const BusinessTripsDashboard = () => {
           totalOrdinary += ordinary;
           totalOvertime += overtime;
           
-          // Calculate meal vouchers (simplified - if worked more than 6 hours)
-          if ((ts.total_hours || 0) > 6) {
+          // Calculate meal vouchers based on policy
+          if (effectiveMealVoucherPolicy === 'disabilitato') {
+            // No meal vouchers earned if disabled
+          } else if (effectiveMealVoucherPolicy === 'oltre_6_ore') {
+            if ((ts.total_hours || 0) > 6) {
+              mealVoucherDays++;
+            }
+          } else if (effectiveMealVoucherPolicy === 'sempre_parttime') {
             mealVoucherDays++;
           }
         });

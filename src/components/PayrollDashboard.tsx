@@ -128,21 +128,24 @@ export default function PayrollDashboard() {
 
       if (absenceError) throw absenceError;
 
-      // Get employee settings for meal voucher calculation
-      const { data: employeeSettings, error: settingsError } = await supabase
-        .from('employee_settings')
-        .select('*')
-        .in('user_id', userIds);
+        // Get employee settings for meal voucher calculation
+        const { data: employeeSettings, error: settingsError } = await supabase
+          .from('employee_settings')
+          .select('*')
+          .in('user_id', userIds);
 
-      if (settingsError) throw settingsError;
+        if (settingsError) throw settingsError;
 
-      // Get company settings for default values
-      const { data: companySettings, error: companySettingsError } = await supabase
-        .from('company_settings')
-        .select('*')
-        .in('company_id', profiles.map(p => p.company_id));
+        // Get company settings for default values
+        const { data: companySettings, error: companySettingsError } = await supabase
+          .from('company_settings')
+          .select('*')
+          .in('company_id', profiles.map(p => p.company_id));
 
-      if (companySettingsError) throw companySettingsError;
+        if (companySettingsError) throw companySettingsError;
+
+        console.log('PayrollDashboard - Employee Settings:', employeeSettings);
+        console.log('PayrollDashboard - Company Settings:', companySettings);
 
       // Process data by employee
       const processedData: PayrollData[] = profiles.map(profile => {
@@ -156,9 +159,17 @@ export default function PayrollDashboard() {
         let absenceTotals: { [absenceType: string]: number } = {};
         let mealVoucherDays = 0;
         
-        // Get meal voucher amount (employee settings take precedence over company settings)
+        // Get effective settings (employee settings take precedence over company settings)
         const companySettingsForEmployee = companySettings?.find(cs => cs.company_id === profile.company_id);
+        const effectiveMealVoucherPolicy = settings?.meal_voucher_policy || companySettingsForEmployee?.meal_voucher_policy || 'oltre_6_ore';
         const mealVoucherAmount = settings?.meal_voucher_amount || companySettingsForEmployee?.meal_voucher_amount || 8.00;
+        
+        console.log(`PayrollDashboard - ${profile.first_name} ${profile.last_name}:`, {
+          employeePolicy: settings?.meal_voucher_policy,
+          companyPolicy: companySettingsForEmployee?.meal_voucher_policy,
+          effectivePolicy: effectiveMealVoucherPolicy,
+          saturdayHandling: settings?.saturday_handling || companySettingsForEmployee?.saturday_handling
+        });
 
         // Initialize all days of the month
         const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
@@ -189,8 +200,14 @@ export default function PayrollDashboard() {
           totalOrdinary += ordinary;
           totalOvertime += overtime;
           
-          // Calculate meal vouchers (simplified - if worked more than 6 hours)
-          if ((ts.total_hours || 0) > 6) {
+          // Calculate meal vouchers based on policy
+          if (effectiveMealVoucherPolicy === 'disabilitato') {
+            // No meal vouchers earned if disabled
+          } else if (effectiveMealVoucherPolicy === 'oltre_6_ore') {
+            if ((ts.total_hours || 0) > 6) {
+              mealVoucherDays++;
+            }
+          } else if (effectiveMealVoucherPolicy === 'sempre_parttime') {
             mealVoucherDays++;
           }
         });
