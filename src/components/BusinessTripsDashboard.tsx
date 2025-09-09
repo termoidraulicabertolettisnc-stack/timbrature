@@ -31,7 +31,7 @@ interface BusinessTripData {
   meal_voucher_amount: number;
 }
 
-export default function BusinessTripsDashboard() {
+const BusinessTripsDashboard = () => {
   const { user } = useAuth();
   const [businessTripData, setBusinessTripData] = useState<BusinessTripData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -785,4 +785,6 @@ export default function BusinessTripsDashboard() {
       </Card>
     </div>
   );
-}
+};
+
+export default BusinessTripsDashboard;
