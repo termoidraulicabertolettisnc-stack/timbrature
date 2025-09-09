@@ -164,6 +164,7 @@ export default function PayrollDashboard() {
         // Get effective settings (employee settings take precedence over company settings)
         const companySettingsForEmployee = companySettings?.find(cs => cs.company_id === profile.company_id);
         const effectiveMealAllowancePolicy = (settings as any)?.meal_allowance_policy || (companySettingsForEmployee as any)?.meal_allowance_policy || 'disabled';
+        const effectiveMealVoucherMinHours = settings?.meal_voucher_min_hours || companySettingsForEmployee?.meal_voucher_min_hours || 6;
         const mealVoucherAmount = settings?.meal_voucher_amount || companySettingsForEmployee?.meal_voucher_amount || 8.00;
         
         console.log(`PayrollDashboard - ${profile.first_name} ${profile.last_name}:`, {
@@ -203,15 +204,21 @@ export default function PayrollDashboard() {
           totalOvertime += overtime;
           
           // Calculate meal vouchers based on unified policy
-          // Daily allowance policy means no meal vouchers (they're mutually exclusive)
-          if (effectiveMealAllowancePolicy === 'disabled' || effectiveMealAllowancePolicy === 'daily_allowance') {
-            // No meal vouchers earned if disabled or using daily allowance
+          if (effectiveMealAllowancePolicy === 'disabled') {
+            // No meal vouchers earned if disabled
+          } else if (effectiveMealAllowancePolicy === 'daily_allowance') {
+            // Daily allowance policy means no meal vouchers (they're mutually exclusive)
           } else if (effectiveMealAllowancePolicy === 'meal_vouchers_only') {
             if ((ts.total_hours || 0) > 6) {
               mealVoucherDays++;
             }
           } else if (effectiveMealAllowancePolicy === 'meal_vouchers_always') {
             mealVoucherDays++;
+          } else if (effectiveMealAllowancePolicy === 'both') {
+            // With 'both' policy, meal vouchers are earned based on hours worked
+            if ((ts.total_hours || 0) >= effectiveMealVoucherMinHours) {
+              mealVoucherDays++;
+            }
           }
         });
 
