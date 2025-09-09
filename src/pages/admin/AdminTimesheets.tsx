@@ -132,6 +132,30 @@ export default function AdminTimesheets() {
     return () => clearInterval(interval);
   }, []);
 
+  // Setup realtime subscription for timesheets
+  useEffect(() => {
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'timesheets'
+        },
+        (payload) => {
+          console.log('💫 Timesheet realtime update:', payload);
+          // Ricarica i dati quando ci sono cambiamenti
+          loadTimesheets();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   useEffect(() => {
     loadInitialData();
   }, []);
