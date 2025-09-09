@@ -172,8 +172,13 @@ export type Database = {
           daily_allowance_amount: number | null
           daily_allowance_min_hours: number | null
           daily_allowance_policy: string | null
+          default_daily_allowance_amount: number | null
+          default_daily_allowance_min_hours: number | null
           id: string
           lunch_break_type: Database["public"]["Enums"]["lunch_break_type"]
+          meal_allowance_policy:
+            | Database["public"]["Enums"]["meal_allowance_policy"]
+            | null
           meal_voucher_amount: number | null
           meal_voucher_denominations: Json | null
           meal_voucher_policy: Database["public"]["Enums"]["meal_voucher_type"]
@@ -193,8 +198,13 @@ export type Database = {
           daily_allowance_amount?: number | null
           daily_allowance_min_hours?: number | null
           daily_allowance_policy?: string | null
+          default_daily_allowance_amount?: number | null
+          default_daily_allowance_min_hours?: number | null
           id?: string
           lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
+          meal_allowance_policy?:
+            | Database["public"]["Enums"]["meal_allowance_policy"]
+            | null
           meal_voucher_amount?: number | null
           meal_voucher_denominations?: Json | null
           meal_voucher_policy?: Database["public"]["Enums"]["meal_voucher_type"]
@@ -214,8 +224,13 @@ export type Database = {
           daily_allowance_amount?: number | null
           daily_allowance_min_hours?: number | null
           daily_allowance_policy?: string | null
+          default_daily_allowance_amount?: number | null
+          default_daily_allowance_min_hours?: number | null
           id?: string
           lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
+          meal_allowance_policy?:
+            | Database["public"]["Enums"]["meal_allowance_policy"]
+            | null
           meal_voucher_amount?: number | null
           meal_voucher_denominations?: Json | null
           meal_voucher_policy?: Database["public"]["Enums"]["meal_voucher_type"]
@@ -294,6 +309,9 @@ export type Database = {
           lunch_break_type:
             | Database["public"]["Enums"]["lunch_break_type"]
             | null
+          meal_allowance_policy:
+            | Database["public"]["Enums"]["meal_allowance_policy"]
+            | null
           meal_voucher_amount: number | null
           meal_voucher_policy:
             | Database["public"]["Enums"]["meal_voucher_type"]
@@ -324,6 +342,9 @@ export type Database = {
           id?: string
           lunch_break_type?:
             | Database["public"]["Enums"]["lunch_break_type"]
+            | null
+          meal_allowance_policy?:
+            | Database["public"]["Enums"]["meal_allowance_policy"]
             | null
           meal_voucher_amount?: number | null
           meal_voucher_policy?:
@@ -357,6 +378,9 @@ export type Database = {
           id?: string
           lunch_break_type?:
             | Database["public"]["Enums"]["lunch_break_type"]
+            | null
+          meal_allowance_policy?:
+            | Database["public"]["Enums"]["meal_allowance_policy"]
             | null
           meal_voucher_amount?: number | null
           meal_voucher_policy?:
@@ -661,6 +685,11 @@ export type Database = {
         | "45_minuti"
         | "90_minuti"
         | "120_minuti"
+      meal_allowance_policy:
+        | "disabled"
+        | "meal_vouchers_only"
+        | "meal_vouchers_always"
+        | "daily_allowance"
       meal_voucher_type:
         | "oltre_6_ore"
         | "sempre_parttime"
@@ -806,6 +835,12 @@ export const Constants = {
         "45_minuti",
         "90_minuti",
         "120_minuti",
+      ],
+      meal_allowance_policy: [
+        "disabled",
+        "meal_vouchers_only",
+        "meal_vouchers_always",
+        "daily_allowance",
       ],
       meal_voucher_type: [
         "oltre_6_ore",
