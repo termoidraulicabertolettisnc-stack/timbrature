@@ -13,20 +13,19 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 interface CompanySettings {
   id: string;
   company_id: string;
-  standard_daily_hours: number;
-  lunch_break_type: 'libera' | '30_minuti' | '60_minuti';
+  standard_weekly_hours: any;
+  lunch_break_type: 'libera' | '0_minuti' | '15_minuti' | '30_minuti' | '45_minuti' | '60_minuti' | '90_minuti' | '120_minuti';
   overtime_calculation: 'dopo_8_ore' | 'sempre';
   saturday_handling: 'trasferta' | 'straordinario';
-  meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni' | 'disabilitato';
+  meal_allowance_policy: 'disabled' | 'meal_vouchers_only' | 'meal_vouchers_always' | 'daily_allowance';
   night_shift_start: string;
   night_shift_end: string;
   business_trip_rate_with_meal: number;
   business_trip_rate_without_meal: number;
   saturday_hourly_rate: number;
   meal_voucher_amount: number;
-  daily_allowance_amount: number;
-  daily_allowance_policy: 'disabled' | 'alternative_to_voucher';
-  daily_allowance_min_hours: number;
+  default_daily_allowance_amount: number;
+  default_daily_allowance_min_hours: number;
   created_at: string;
   updated_at: string;
 }
@@ -55,7 +54,7 @@ export default function AdminSettings() {
       }
 
       if (data) {
-  setSettings((data as unknown as CompanySettings) || null);
+        setSettings((data as unknown as CompanySettings) || null);
       } else {
         // Crea impostazioni di default se non esistono
         await createDefaultSettings();
@@ -86,20 +85,21 @@ export default function AdminSettings() {
 
       const defaultSettings = {
         company_id: profileData.company_id,
-        standard_daily_hours: 8,
+        standard_weekly_hours: {
+          lun: 8, mar: 8, mer: 8, gio: 8, ven: 8, sab: 0, dom: 0
+        },
         lunch_break_type: '60_minuti' as const,
         overtime_calculation: 'dopo_8_ore' as const,
         saturday_handling: 'trasferta' as const,
-        meal_voucher_policy: 'oltre_6_ore' as const,
+        meal_allowance_policy: 'meal_vouchers_only' as const,
         night_shift_start: '20:00:00',
         night_shift_end: '05:00:00',
         business_trip_rate_with_meal: 30.98,
         business_trip_rate_without_meal: 46.48,
         saturday_hourly_rate: 10.00,
         meal_voucher_amount: 8.00,
-        daily_allowance_amount: 10.00,
-        daily_allowance_policy: 'disabled' as const,
-        daily_allowance_min_hours: 6,
+        default_daily_allowance_amount: 10.00,
+        default_daily_allowance_min_hours: 6,
       };
 
       const { data, error } = await supabase
@@ -129,20 +129,19 @@ export default function AdminSettings() {
       const { error } = await supabase
         .from('company_settings')
         .update({
-          standard_daily_hours: settings.standard_daily_hours,
+          standard_weekly_hours: settings.standard_weekly_hours,
           lunch_break_type: settings.lunch_break_type,
           overtime_calculation: settings.overtime_calculation,
           saturday_handling: settings.saturday_handling,
-          meal_voucher_policy: settings.meal_voucher_policy,
+          meal_allowance_policy: settings.meal_allowance_policy,
           night_shift_start: settings.night_shift_start,
           night_shift_end: settings.night_shift_end,
           business_trip_rate_with_meal: settings.business_trip_rate_with_meal,
           business_trip_rate_without_meal: settings.business_trip_rate_without_meal,
           saturday_hourly_rate: settings.saturday_hourly_rate,
           meal_voucher_amount: settings.meal_voucher_amount,
-          daily_allowance_amount: settings.daily_allowance_amount,
-          daily_allowance_policy: settings.daily_allowance_policy,
-          daily_allowance_min_hours: settings.daily_allowance_min_hours,
+          default_daily_allowance_amount: settings.default_daily_allowance_amount,
+          default_daily_allowance_min_hours: settings.default_daily_allowance_min_hours,
         })
         .eq('id', settings.id);
 
@@ -226,35 +225,48 @@ export default function AdminSettings() {
       )}
 
       <div className="grid gap-6">
-        {/* Orario di Lavoro */}
+        {/* Orario di Lavoro Settimanale */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5" />
-              Orario di Lavoro Standard
+              Orario di Lavoro Settimanale Standard
             </CardTitle>
             <CardDescription>
-              Configura l'orario di lavoro giornaliero standard
+              Configura l'orario di lavoro standard per ciascun giorno della settimana
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="daily_hours">Ore Giornaliere Standard</Label>
-                <Input
-                  id="daily_hours"
-                  type="number"
-                  min="1"
-                  max="12"
-                  step="0.5"
-                  value={settings.standard_daily_hours}
-                  onChange={(e) => updateSetting('standard_daily_hours', parseFloat(e.target.value))}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Ore di lavoro standard per giorno (utilizzate per calcolo straordinari)
-                </p>
-              </div>
+            <div className="grid gap-4 md:grid-cols-4 lg:grid-cols-7">
+              {[
+                { key: 'lun', label: 'Lunedì' },
+                { key: 'mar', label: 'Martedì' },
+                { key: 'mer', label: 'Mercoledì' },
+                { key: 'gio', label: 'Giovedì' },
+                { key: 'ven', label: 'Venerdì' },
+                { key: 'sab', label: 'Sabato' },
+                { key: 'dom', label: 'Domenica' }
+              ].map((day) => (
+                <div key={day.key} className="space-y-2">
+                  <Label htmlFor={day.key}>{day.label}</Label>
+                  <Input
+                    id={day.key}
+                    type="number"
+                    min="0"
+                    max="12"
+                    step="0.5"
+                    value={settings.standard_weekly_hours?.[day.key] || 0}
+                    onChange={(e) => updateSetting('standard_weekly_hours', {
+                      ...settings.standard_weekly_hours,
+                      [day.key]: parseFloat(e.target.value) || 0
+                    })}
+                  />
+                </div>
+              ))}
             </div>
+            <p className="text-xs text-muted-foreground">
+              Ore di lavoro standard per ciascun giorno (utilizzate per calcolo straordinari)
+            </p>
           </CardContent>
         </Card>
 
@@ -280,15 +292,23 @@ export default function AdminSettings() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="0_minuti">Nessuna Pausa</SelectItem>
+                  <SelectItem value="15_minuti">15 Minuti Fissi</SelectItem>
                   <SelectItem value="30_minuti">30 Minuti Fissi</SelectItem>
+                  <SelectItem value="45_minuti">45 Minuti Fissi</SelectItem>
                   <SelectItem value="60_minuti">60 Minuti Fissi</SelectItem>
-                  <SelectItem value="libera">Libera (Start/Stop)</SelectItem>
+                  <SelectItem value="90_minuti">90 Minuti Fissi</SelectItem>
+                  <SelectItem value="120_minuti">120 Minuti Fissi</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
+                {settings.lunch_break_type === '0_minuti' && 'Nessuna pausa pranzo detratta'}
+                {settings.lunch_break_type === '15_minuti' && 'Pausa pranzo fissa di 15 minuti detratta automaticamente'}
                 {settings.lunch_break_type === '30_minuti' && 'Pausa pranzo fissa di 30 minuti detratta automaticamente'}
+                {settings.lunch_break_type === '45_minuti' && 'Pausa pranzo fissa di 45 minuti detratta automaticamente'}
                 {settings.lunch_break_type === '60_minuti' && 'Pausa pranzo fissa di 60 minuti detratta automaticamente'}
-                {settings.lunch_break_type === 'libera' && 'I dipendenti devono registrare inizio e fine pausa pranzo'}
+                {settings.lunch_break_type === '90_minuti' && 'Pausa pranzo fissa di 90 minuti detratta automaticamente'}
+                {settings.lunch_break_type === '120_minuti' && 'Pausa pranzo fissa di 120 minuti detratta automaticamente'}
               </p>
             </div>
           </CardContent>
@@ -316,14 +336,14 @@ export default function AdminSettings() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="dopo_8_ore">Dopo {settings.standard_daily_hours} Ore Effettive</SelectItem>
+                  <SelectItem value="dopo_8_ore">Dopo Ore Standard Giornaliere</SelectItem>
                   <SelectItem value="sempre">Sempre</SelectItem>
                 </SelectContent>
               </Select>
                <p className="text-xs text-muted-foreground">
-                {settings.overtime_calculation === 'dopo_8_ore' && `Straordinari calcolati dopo ${settings.standard_daily_hours} ore di lavoro effettivo`}
-                {settings.overtime_calculation === 'sempre' && `Straordinari sempre calcolati`}
-              </p>
+                {settings.overtime_calculation === 'dopo_8_ore' && 'Straordinari calcolati dopo le ore standard configurate per giorno'}
+                {settings.overtime_calculation === 'sempre' && 'Straordinari sempre calcolati'}
+               </p>
             </div>
           </CardContent>
         </Card>
@@ -362,39 +382,39 @@ export default function AdminSettings() {
           </CardContent>
         </Card>
 
-        {/* Buoni Pasto */}
+        {/* Policy Buoni Pasto e Indennità Unificata */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Gift className="h-5 w-5" />
-              Policy Buoni Pasto
+              Policy Buoni Pasto e Indennità Unificata
             </CardTitle>
             <CardDescription>
-              Configura quando vengono assegnati i buoni pasto
+              Configura la policy unificata per buoni pasto e indennità giornaliere (mutualmente esclusivi)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="meal_voucher">Policy Buoni Pasto</Label>
+              <Label htmlFor="meal_allowance_policy">Policy Unificata</Label>
               <Select 
-                value={settings.meal_voucher_policy} 
-                onValueChange={(value) => updateSetting('meal_voucher_policy', value)}
+                value={settings.meal_allowance_policy} 
+                onValueChange={(value) => updateSetting('meal_allowance_policy', value)}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="oltre_6_ore">Se oltre 6 Ore Effettive</SelectItem>
-                  <SelectItem value="sempre_parttime">Sempre per Part-time</SelectItem>
-                  <SelectItem value="conteggio_giorni">Conta Giorni oltre 6 Ore</SelectItem>
-                  <SelectItem value="disabilitato">Disabilitato</SelectItem>
+                  <SelectItem value="disabled">Disabilitato</SelectItem>
+                  <SelectItem value="meal_vouchers_only">Solo Buoni Pasto ({'>'}6h)</SelectItem>
+                  <SelectItem value="meal_vouchers_always">Buoni Pasto Sempre</SelectItem>
+                  <SelectItem value="daily_allowance">Indennità Giornaliera ({'>'}6h)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {settings.meal_voucher_policy === 'oltre_6_ore' && 'Buono pasto assegnato se si lavora più di 6 ore effettive'}
-                {settings.meal_voucher_policy === 'sempre_parttime' && 'Buono pasto sempre assegnato ai dipendenti part-time'}
-                {settings.meal_voucher_policy === 'conteggio_giorni' && 'Non viene assegnato buono ma si contano i giorni oltre 6 ore per indennità'}
-                {settings.meal_voucher_policy === 'disabilitato' && 'I buoni pasto sono completamente disabilitati'}
+                {settings.meal_allowance_policy === 'disabled' && 'Né buoni pasto né indennità giornaliere vengono assegnati'}
+                {settings.meal_allowance_policy === 'meal_vouchers_only' && 'Buoni pasto assegnati solo se si lavora più di 6 ore effettive'}
+                {settings.meal_allowance_policy === 'meal_vouchers_always' && 'Buoni pasto sempre assegnati per ogni giorno lavorativo'}
+                {settings.meal_allowance_policy === 'daily_allowance' && 'Indennità giornaliera assegnata se si lavora più di 6 ore (nessun buono pasto)'}
               </p>
             </div>
           </CardContent>
@@ -438,21 +458,21 @@ export default function AdminSettings() {
           </CardContent>
         </Card>
 
-        {/* Meal Vouchers and Daily Allowances */}
+        {/* Importi e Configurazioni */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Gift className="h-5 w-5" />
-              Buoni Pasto e Indennità
+              Importi e Configurazioni
             </CardTitle>
             <CardDescription>
-              Configura buoni pasto e indennità giornaliera per i dipendenti
+              Configura gli importi per buoni pasto, indennità e tariffe
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="meal_voucher_amount">Importo buono pasto (€)</Label>
+                <Label htmlFor="meal_voucher_amount">Importo Buono Pasto (€)</Label>
                 <Input
                   id="meal_voucher_amount"
                   type="number"
@@ -462,185 +482,90 @@ export default function AdminSettings() {
                   onChange={(e) => updateSetting('meal_voucher_amount', parseFloat(e.target.value) || 8.00)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Valore del buono pasto giornaliero
+                  Importo del buono pasto giornaliero
                 </p>
               </div>
+              
               <div className="space-y-2">
-                <Label htmlFor="daily_allowance_policy">Politica indennità giornaliera</Label>
-                <Select 
-                  value={settings.daily_allowance_policy} 
-                  onValueChange={(value) => updateSetting('daily_allowance_policy', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="disabled">Disabilitata</SelectItem>
-                    <SelectItem value="alternative_to_voucher">Alternativa al buono pasto</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="daily_allowance_amount">Importo Indennità Giornaliera (€)</Label>
+                <Input
+                  id="daily_allowance_amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={settings.default_daily_allowance_amount}
+                  onChange={(e) => updateSetting('default_daily_allowance_amount', parseFloat(e.target.value) || 10.00)}
+                />
                 <p className="text-xs text-muted-foreground">
-                  L'indennità può sostituire il buono pasto
+                  Importo dell'indennità giornaliera
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="daily_allowance_min_hours">Ore Minime per Indennità</Label>
+                <Input
+                  id="daily_allowance_min_hours"
+                  type="number"
+                  min="0"
+                  max="12"
+                  step="0.5"
+                  value={settings.default_daily_allowance_min_hours}
+                  onChange={(e) => updateSetting('default_daily_allowance_min_hours', parseInt(e.target.value) || 6)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Ore minime per ottenere l'indennità giornaliera
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="saturday_rate">Tariffa Sabato (€/h)</Label>
+                <Input
+                  id="saturday_rate"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={settings.saturday_hourly_rate}
+                  onChange={(e) => updateSetting('saturday_hourly_rate', parseFloat(e.target.value) || 10.00)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Tariffa oraria per le ore lavorate il sabato (quando configurato come trasferta)
                 </p>
               </div>
             </div>
-
-            {settings.daily_allowance_policy === 'alternative_to_voucher' && (
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="daily_allowance_amount">Importo indennità giornaliera (€)</Label>
-                  <Input
-                    id="daily_allowance_amount"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={settings.daily_allowance_amount}
-                    onChange={(e) => updateSetting('daily_allowance_amount', parseFloat(e.target.value) || 10.00)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Importo dell'indennità giornaliera
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="daily_allowance_min_hours">Ore minime per indennità</Label>
-                  <Input
-                    id="daily_allowance_min_hours"
-                    type="number"
-                    min="0"
-                    value={settings.daily_allowance_min_hours}
-                    onChange={(e) => updateSetting('daily_allowance_min_hours', parseInt(e.target.value) || 6)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Ore minime lavorate per avere diritto all'indennità
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className="p-3 bg-muted/50 rounded-lg">
-              <p className="text-sm font-medium mb-2">Come funziona:</p>
-              <ul className="text-xs text-muted-foreground space-y-1">
-                <li>• <strong>Buono pasto:</strong> €{settings.meal_voucher_amount} per giorni con più di 6 ore</li>
-                {settings.daily_allowance_policy === 'alternative_to_voucher' && (
-                  <>
-                    <li>• <strong>Indennità giornaliera:</strong> €{settings.daily_allowance_amount} per giorni con almeno {settings.daily_allowance_min_hours} ore</li>
-                    <li>• <strong>Alternativa:</strong> I dipendenti ricevono l'indennità INVECE del buono pasto</li>
-                  </>
-                )}
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Business Trip Rates */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Gift className="h-5 w-5" />
-              Indennità Trasferte
-            </CardTitle>
-            <CardDescription>
-              Configura gli importi per le trasferte di lavoro
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            <Separator />
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="trip_with_meal">Trasferta con buono pasto (€)</Label>
+                <Label htmlFor="business_trip_with_meal">Tariffa Trasferta con Vitto (€)</Label>
                 <Input
-                  id="trip_with_meal"
+                  id="business_trip_with_meal"
                   type="number"
                   min="0"
                   step="0.01"
                   value={settings.business_trip_rate_with_meal}
-                  onChange={(e) => updateSetting('business_trip_rate_with_meal', parseFloat(e.target.value))}
+                  onChange={(e) => updateSetting('business_trip_rate_with_meal', parseFloat(e.target.value) || 30.98)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Importo giornaliero quando è fornito il buono pasto (importo minore)
+                  Tariffa giornaliera per trasferte quando il vitto è incluso
                 </p>
               </div>
+              
               <div className="space-y-2">
-                <Label htmlFor="trip_without_meal">Trasferta senza buono pasto (€)</Label>
+                <Label htmlFor="business_trip_without_meal">Tariffa Trasferta senza Vitto (€)</Label>
                 <Input
-                  id="trip_without_meal"
+                  id="business_trip_without_meal"
                   type="number"
                   min="0"
                   step="0.01"
                   value={settings.business_trip_rate_without_meal}
-                  onChange={(e) => updateSetting('business_trip_rate_without_meal', parseFloat(e.target.value))}
+                  onChange={(e) => updateSetting('business_trip_rate_without_meal', parseFloat(e.target.value) || 46.48)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Importo giornaliero quando NON è fornito il buono pasto (importo maggiore)
+                  Tariffa giornaliera per trasferte quando il vitto non è incluso
                 </p>
               </div>
             </div>
-            <div className="p-3 bg-muted/50 rounded-lg">
-              <p className="text-sm font-medium mb-2">Come funziona:</p>
-              <ul className="text-xs text-muted-foreground space-y-1">
-                <li>• <strong>Sabato in trasferta:</strong> L'importo dipende dal diritto al buono pasto del sabato</li>
-                <li>• <strong>Indennità giornaliera:</strong> Quando configurata "in trasferte al posto del buono pasto"</li>
-                <li>• <strong>Con buono pasto:</strong> €{settings.business_trip_rate_with_meal} giornalieri</li>
-                <li>• <strong>Senza buono pasto:</strong> €{settings.business_trip_rate_without_meal} giornalieri</li>
-              </ul>
-            </div>
           </CardContent>
         </Card>
-
-        {/* Saturday Hourly Rate - Show when Saturday is handled as business trip */}
-        {settings.saturday_handling === 'trasferta' && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Tariffa Oraria Sabato
-              </CardTitle>
-              <CardDescription>
-                Configura la tariffa oraria predefinita per i sabati pagati in trasferte
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="saturday_hourly_rate">Tariffa Oraria Sabato (€/ora)</Label>
-                  <Input
-                    id="saturday_hourly_rate"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={settings.saturday_hourly_rate}
-                    onChange={(e) => updateSetting('saturday_hourly_rate', parseFloat(e.target.value) || 10.00)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Tariffa oraria predefinita per le ore lavorate nei sabati pagati in trasferte. 
-                    I dipendenti possono avere tariffe personalizzate che sovrascrivono questa impostazione.
-                  </p>
-                </div>
-              </div>
-              <div className="p-3 bg-muted/50 rounded-lg">
-                <p className="text-sm font-medium mb-2">Come funziona:</p>
-                <ul className="text-xs text-muted-foreground space-y-1">
-                  <li>• <strong>Tipologia A:</strong> Sabati pagati in trasferte con tariffa oraria personalizzabile per dipendente</li>
-                  <li>• <strong>Calcolo:</strong> Ore lavorate × Tariffa oraria del sabato</li>
-                  <li>• <strong>Personalizzazione:</strong> Ogni dipendente può avere una tariffa diversa (es. €10/h, €12/h, €15/h)</li>
-                  <li>• <strong>Export separato:</strong> Le ore del sabato vengono esportate separatamente dalle ore ordinarie/straordinarie</li>
-                </ul>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* Footer con pulsante salva */}
-      <div className="flex justify-end">
-        <Button 
-          onClick={handleSave} 
-          disabled={!hasChanges || saving}
-          size="lg"
-          className="flex items-center gap-2"
-        >
-          <Save className="h-4 w-4" />
-          {saving ? 'Salvando...' : 'Salva Tutte le Modifiche'}
-        </Button>
       </div>
     </div>
   );
