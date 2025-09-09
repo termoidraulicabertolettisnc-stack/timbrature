@@ -243,7 +243,8 @@ const BusinessTripsDashboard = () => {
       const { data: employeeSettings, error: settingsError } = await supabase
         .from('employee_settings')
         .select('*')
-        .in('user_id', userIds);
+        .in('user_id', userIds)
+        .order('updated_at', { ascending: false });
 
       if (settingsError) throw settingsError;
 
@@ -259,7 +260,8 @@ const BusinessTripsDashboard = () => {
       const processedData: BusinessTripData[] = profiles.map(profile => {
         const employeeTimesheets = (timesheets || []).filter(t => t.user_id === profile.user_id);
         const employeeAbsences = (absences || []).filter(a => a.user_id === profile.user_id);
-        const settings = employeeSettings?.find(s => s.user_id === profile.user_id);
+        const settings = employeeSettings?.find(s => s.user_id === profile.user_id && s.company_id === profile.company_id) || 
+                        employeeSettings?.find(s => s.user_id === profile.user_id);
         const companySettingsForEmployee = companySettings?.find(cs => cs.company_id === profile.company_id);
         
         const dailyData: { [day: string]: { ordinary: number; overtime: number; absence: string | null; business_trip: boolean } } = {};

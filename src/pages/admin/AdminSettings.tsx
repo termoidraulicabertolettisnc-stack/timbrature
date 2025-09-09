@@ -24,6 +24,7 @@ interface CompanySettings {
   business_trip_rate_without_meal: number;
   saturday_hourly_rate: number;
   meal_voucher_amount: number;
+  meal_voucher_min_hours: number;
   default_daily_allowance_amount: number;
   default_daily_allowance_min_hours: number;
   created_at: string;
@@ -98,6 +99,7 @@ export default function AdminSettings() {
         business_trip_rate_without_meal: 46.48,
         saturday_hourly_rate: 10.00,
         meal_voucher_amount: 8.00,
+        meal_voucher_min_hours: 6,
         default_daily_allowance_amount: 10.00,
         default_daily_allowance_min_hours: 6,
       };
@@ -140,6 +142,7 @@ export default function AdminSettings() {
           business_trip_rate_without_meal: settings.business_trip_rate_without_meal,
           saturday_hourly_rate: settings.saturday_hourly_rate,
           meal_voucher_amount: settings.meal_voucher_amount,
+          meal_voucher_min_hours: settings.meal_voucher_min_hours,
           default_daily_allowance_amount: settings.default_daily_allowance_amount,
           default_daily_allowance_min_hours: settings.default_daily_allowance_min_hours,
         })
@@ -405,17 +408,41 @@ export default function AdminSettings() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="disabled">Disabilitato</SelectItem>
-                  <SelectItem value="meal_vouchers_only">Solo Buoni Pasto ({'>'}6h)</SelectItem>
+                  <SelectItem value="meal_vouchers_only">Solo Buoni Pasto</SelectItem>
                   <SelectItem value="meal_vouchers_always">Buoni Pasto Sempre</SelectItem>
-                  <SelectItem value="daily_allowance">Indennità Giornaliera ({'>'}6h)</SelectItem>
+                  <SelectItem value="daily_allowance">Indennità Giornaliera</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
                 {settings.meal_allowance_policy === 'disabled' && 'Né buoni pasto né indennità giornaliere vengono assegnati'}
-                {settings.meal_allowance_policy === 'meal_vouchers_only' && 'Buoni pasto assegnati solo se si lavora più di 6 ore effettive'}
+                {settings.meal_allowance_policy === 'meal_vouchers_only' && 'Buoni pasto assegnati in base alle ore minime configurate'}
                 {settings.meal_allowance_policy === 'meal_vouchers_always' && 'Buoni pasto sempre assegnati per ogni giorno lavorativo'}
-                {settings.meal_allowance_policy === 'daily_allowance' && 'Indennità giornaliera assegnata se si lavora più di 6 ore (nessun buono pasto)'}
+                {settings.meal_allowance_policy === 'daily_allowance' && 'Indennità giornaliera assegnata in base alle ore minime configurate (nessun buono pasto)'}
               </p>
+          {/* Meal Voucher Minimum Hours - Only show if meal_allowance_policy is meal_vouchers_only */}
+          {settings.meal_allowance_policy === 'meal_vouchers_only' && (
+            <div className="space-y-2">
+              <Label htmlFor="meal_voucher_min_hours">Ore minime per buoni pasto</Label>
+              <Select 
+                value={String(settings.meal_voucher_min_hours || 6)} 
+                onValueChange={(value) => updateSetting('meal_voucher_min_hours', parseInt(value))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="4">4 ore</SelectItem>
+                  <SelectItem value="5">5 ore</SelectItem>
+                  <SelectItem value="6">6 ore</SelectItem>
+                  <SelectItem value="7">7 ore</SelectItem>
+                  <SelectItem value="8">8 ore</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Ore minime necessarie per assegnare i buoni pasto
+              </p>
+            </div>
+          )}
             </div>
           </CardContent>
         </Card>

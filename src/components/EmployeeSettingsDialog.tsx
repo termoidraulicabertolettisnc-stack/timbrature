@@ -511,7 +511,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                     <SelectContent>
                       <SelectItem value="company_default">Usa Default Aziendale</SelectItem>
                       <SelectItem value="disabled">Tutto disabilitato</SelectItem>
-                      <SelectItem value="meal_vouchers_only">Solo buoni pasto (oltre 6 ore)</SelectItem>
+                      <SelectItem value="meal_vouchers_only">Solo buoni pasto</SelectItem>
                       <SelectItem value="meal_vouchers_always">Buoni pasto sempre</SelectItem>
                       <SelectItem value="daily_allowance">Indennità giornaliera</SelectItem>
                     </SelectContent>
@@ -569,22 +569,52 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                 {((settings as any).meal_allowance_policy === 'meal_vouchers_only' || (settings as any).meal_allowance_policy === 'meal_vouchers_always' || 
                   (!(settings as any).meal_allowance_policy && ((companySettings as any)?.meal_allowance_policy === 'meal_vouchers_only' || (companySettings as any)?.meal_allowance_policy === 'meal_vouchers_always'))) && (
                   <div className="p-4 border rounded-lg bg-muted/20">
-                    <div>
-                      <Label htmlFor="meal_voucher_amount">
-                        Importo buono pasto (€)
-                      </Label>
-                      <Input
-                        id="meal_voucher_amount"
-                        type="number"
-                        step="0.01"
-                        value={settings.meal_voucher_amount || ''}
-                        onChange={(e) => updateSetting('meal_voucher_amount', e.target.value ? parseFloat(e.target.value) : null)}
-                        placeholder={`Default: €${companySettings?.meal_voucher_amount || 8.00}`}
-                        className="mt-1"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Valore effettivo: €{settings.meal_voucher_amount || companySettings?.meal_voucher_amount || 8.00}
-                      </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="meal_voucher_amount">
+                          Importo buono pasto (€)
+                        </Label>
+                        <Input
+                          id="meal_voucher_amount"
+                          type="number"
+                          step="0.01"
+                          value={settings.meal_voucher_amount || ''}
+                          onChange={(e) => updateSetting('meal_voucher_amount', e.target.value ? parseFloat(e.target.value) : null)}
+                          placeholder={`Default: €${companySettings?.meal_voucher_amount || 8.00}`}
+                          className="mt-1"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Valore effettivo: €{settings.meal_voucher_amount || companySettings?.meal_voucher_amount || 8.00}
+                        </p>
+                      </div>
+                      
+                      {/* Meal Voucher Minimum Hours - Only for meal_vouchers_only policy */}
+                      {((settings as any).meal_allowance_policy === 'meal_vouchers_only' || 
+                        (!(settings as any).meal_allowance_policy && (companySettings as any)?.meal_allowance_policy === 'meal_vouchers_only')) && (
+                        <div>
+                          <Label htmlFor="meal_voucher_min_hours">
+                            Ore minime per buoni pasto
+                          </Label>
+                          <Select
+                            value={String((settings as any).meal_voucher_min_hours || (companySettings as any)?.meal_voucher_min_hours || 6)}
+                            onValueChange={(value) => updateSetting('meal_voucher_min_hours' as any, parseInt(value))}
+                          >
+                            <SelectTrigger className="mt-1">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="4">4 ore</SelectItem>
+                              <SelectItem value="5">5 ore</SelectItem>
+                              <SelectItem value="6">6 ore</SelectItem>
+                              <SelectItem value="7">7 ore</SelectItem>
+                              <SelectItem value="8">8 ore</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Valore effettivo: {(settings as any).meal_voucher_min_hours || (companySettings as any)?.meal_voucher_min_hours || 6} ore
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

@@ -181,6 +181,7 @@ export type Database = {
             | null
           meal_voucher_amount: number | null
           meal_voucher_denominations: Json | null
+          meal_voucher_min_hours: number | null
           meal_voucher_policy: Database["public"]["Enums"]["meal_voucher_type"]
           night_shift_end: string
           night_shift_start: string
@@ -207,6 +208,7 @@ export type Database = {
             | null
           meal_voucher_amount?: number | null
           meal_voucher_denominations?: Json | null
+          meal_voucher_min_hours?: number | null
           meal_voucher_policy?: Database["public"]["Enums"]["meal_voucher_type"]
           night_shift_end?: string
           night_shift_start?: string
@@ -233,6 +235,7 @@ export type Database = {
             | null
           meal_voucher_amount?: number | null
           meal_voucher_denominations?: Json | null
+          meal_voucher_min_hours?: number | null
           meal_voucher_policy?: Database["public"]["Enums"]["meal_voucher_type"]
           night_shift_end?: string
           night_shift_start?: string
@@ -313,6 +316,7 @@ export type Database = {
             | Database["public"]["Enums"]["meal_allowance_policy"]
             | null
           meal_voucher_amount: number | null
+          meal_voucher_min_hours: number | null
           meal_voucher_policy:
             | Database["public"]["Enums"]["meal_voucher_type"]
             | null
@@ -347,6 +351,7 @@ export type Database = {
             | Database["public"]["Enums"]["meal_allowance_policy"]
             | null
           meal_voucher_amount?: number | null
+          meal_voucher_min_hours?: number | null
           meal_voucher_policy?:
             | Database["public"]["Enums"]["meal_voucher_type"]
             | null
@@ -383,6 +388,7 @@ export type Database = {
             | Database["public"]["Enums"]["meal_allowance_policy"]
             | null
           meal_voucher_amount?: number | null
+          meal_voucher_min_hours?: number | null
           meal_voucher_policy?:
             | Database["public"]["Enums"]["meal_voucher_type"]
             | null
