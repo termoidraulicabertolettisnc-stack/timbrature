@@ -13,7 +13,7 @@ interface PayrollData {
   employee_id: string;
   employee_name: string;
   daily_data: { [day: string]: { ordinary: number; overtime: number; absence: string | null } };
-  totals: { ordinary: number; overtime: number; absence: number };
+  totals: { ordinary: number; overtime: number; absence_totals: { [absenceType: string]: number } };
   meal_vouchers: number;
   meal_voucher_amount: number;
 }
@@ -153,7 +153,7 @@ export default function PayrollDashboard() {
         const dailyData: { [day: string]: { ordinary: number; overtime: number; absence: string | null } } = {};
         let totalOrdinary = 0;
         let totalOvertime = 0;
-        let totalAbsence = 0;
+        let absenceTotals: { [absenceType: string]: number } = {};
         let mealVoucherDays = 0;
         
         // Get meal voucher amount (employee settings take precedence over company settings)
@@ -193,14 +193,20 @@ export default function PayrollDashboard() {
           const dayKey = String(day).padStart(2, '0');
           
           dailyData[dayKey].absence = abs.absence_type;
-          totalAbsence += abs.hours || 8;
+          
+          // Track hours by absence type
+          const absenceType = abs.absence_type;
+          if (!absenceTotals[absenceType]) {
+            absenceTotals[absenceType] = 0;
+          }
+          absenceTotals[absenceType] += abs.hours || 8;
         });
 
         return {
           employee_id: profile.user_id,
           employee_name: `${profile.first_name} ${profile.last_name}`,
           daily_data: dailyData,
-          totals: { ordinary: totalOrdinary, overtime: totalOvertime, absence: totalAbsence },
+          totals: { ordinary: totalOrdinary, overtime: totalOvertime, absence_totals: absenceTotals },
           meal_vouchers: mealVoucherDays,
           meal_voucher_amount: mealVoucherAmount
         };
@@ -284,12 +290,13 @@ export default function PayrollDashboard() {
     
     let currentRowIndex = 2;
     
-    // Add data rows (3 rows per employee)
+    // Add data rows (2 basic rows + dynamic absence rows per employee)
     payrollData.forEach((employee, empIndex) => {
-      const rowTypes = ['O', 'S', 'N'];
-      const rowColors = ['FFE6F7E6', 'FFE6F2FF', 'FFFFE6E6']; // Light green, light blue, light red
+      const baseRowTypes = ['O', 'S'];
+      const baseRowColors = ['FFE6F7E6', 'FFE6F2FF']; // Light green, light blue
       
-      rowTypes.forEach((type, typeIndex) => {
+      // First add ordinary and overtime rows
+      baseRowTypes.forEach((type, typeIndex) => {
         const rowData = [`${type} - ${employee.employee_name}`];
         
         // Add daily data
@@ -306,9 +313,6 @@ export default function PayrollDashboard() {
           } else if (type === 'S') {
             const overtime = employee.daily_data[dayKey]?.overtime || 0;
             value = overtime > 0 ? overtime.toFixed(1) : '';
-          } else if (type === 'N') {
-            const absence = employee.daily_data[dayKey]?.absence;
-            value = absence ? getAbsenceTypeLabel(absence) : '';
           }
           
           rowData.push(value);
@@ -322,9 +326,6 @@ export default function PayrollDashboard() {
         } else if (type === 'S') {
           rowData.push(employee.totals.overtime.toFixed(1));
           rowData.push('-');
-        } else {
-          rowData.push(employee.totals.absence.toFixed(1));
-          rowData.push('-');
         }
         
         const row = worksheet.addRow(rowData);
@@ -332,7 +333,7 @@ export default function PayrollDashboard() {
         // Style row
         row.eachCell((cell, colNumber) => {
           // Background color for row type
-          let bgColor = rowColors[typeIndex];
+          let bgColor = baseRowColors[typeIndex];
           
           // Check if it's a weekend/holiday cell (columns 2 to daysInMonth+1)
           if (colNumber >= 2 && colNumber <= daysInMonth + 1) {
@@ -377,6 +378,69 @@ export default function PayrollDashboard() {
         });
         
         currentRowIndex++;
+      });
+
+      // Then add dynamic absence rows
+      Object.entries(employee.totals.absence_totals).forEach(([absenceType, hours]) => {
+        if (hours > 0) {
+          const rowData = [`${getAbsenceTypeLabel(absenceType)} - ${employee.employee_name}`];
+          
+          // Add daily data
+          for (let day = 1; day <= daysInMonth; day++) {
+            const dayKey = String(day).padStart(2, '0');
+            const absence = employee.daily_data[dayKey]?.absence;
+            const value = absence === absenceType ? getAbsenceTypeLabel(absence) : '';
+            rowData.push(value);
+          }
+          
+          // Add totals
+          rowData.push(hours.toFixed(1));
+          rowData.push('-');
+          
+          const row = worksheet.addRow(rowData);
+          
+          // Style row
+          row.eachCell((cell, colNumber) => {
+            // Background color for absence rows
+            let bgColor = 'FFFFE6E6'; // Light red
+            
+            // Check if it's a weekend/holiday cell (columns 2 to daysInMonth+1)
+            if (colNumber >= 2 && colNumber <= daysInMonth + 1) {
+              const dayNum = colNumber - 1;
+              const date = new Date(parseInt(year), parseInt(month) - 1, dayNum);
+              const isWeekend = date.getDay() === 0;
+              const isHolidayDay = isHoliday(dayNum);
+              
+              if (isWeekend || isHolidayDay) {
+                bgColor = 'FFFFCCCC'; // Light red for holidays/Sundays
+              }
+            }
+            
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: bgColor }
+            };
+            
+            cell.font = { 
+              size: 10
+            };
+            
+            cell.alignment = { 
+              vertical: 'middle', 
+              horizontal: colNumber === 1 ? 'left' : 'center'
+            };
+            
+            cell.border = {
+              top: { style: 'thin' },
+              left: { style: 'thin' },
+              bottom: { style: 'thin' },
+              right: { style: 'thin' }
+            };
+          });
+          
+          currentRowIndex++;
+        }
       });
     });
     
@@ -613,38 +677,45 @@ export default function PayrollDashboard() {
                       <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
                     </TableRow>
 
-                    {/* Riga Assenze */}
-                    <TableRow className="hover:bg-red-50/50">
-                      <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
-                        <span className="text-red-700 font-bold">N</span> - {employee.employee_name}
-                      </TableCell>
-                      {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                        const day = i + 1;
-                        const dayKey = String(day).padStart(2, '0');
-                        const absence = employee.daily_data[dayKey]?.absence;
-                        const isHol = isHoliday(day);
-                        const isSun = isSunday(day);
-                        
+                    {/* Righe Assenze Dinamiche */}
+                    {Object.entries(employee.totals.absence_totals).map(([absenceType, hours]) => {
+                      if (hours > 0) {
                         return (
-                          <TableCell 
-                            key={day} 
-                            className={`text-center p-1 text-xs ${
-                              isHol || isSun ? 'bg-red-50' : ''
-                            }`}
-                          >
-                            {absence ? (
-                              <span className="text-red-700 font-bold text-xs">
-                                {getAbsenceTypeLabel(absence)}
-                              </span>
-                            ) : ''}
-                          </TableCell>
+                          <TableRow key={`${employee.employee_id}-${absenceType}`} className="hover:bg-red-50/50">
+                            <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                              <span className="text-red-700 font-bold">{getAbsenceTypeLabel(absenceType)}</span> - {employee.employee_name}
+                            </TableCell>
+                            {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                              const day = i + 1;
+                              const dayKey = String(day).padStart(2, '0');
+                              const absence = employee.daily_data[dayKey]?.absence;
+                              const isHol = isHoliday(day);
+                              const isSun = isSunday(day);
+                              
+                              return (
+                                <TableCell 
+                                  key={day} 
+                                  className={`text-center p-1 text-xs ${
+                                    isHol || isSun ? 'bg-red-50' : ''
+                                  }`}
+                                >
+                                  {absence === absenceType ? (
+                                    <span className="text-red-700 font-bold text-xs">
+                                      {getAbsenceTypeLabel(absence)}
+                                    </span>
+                                  ) : ''}
+                                </TableCell>
+                              );
+                            })}
+                            <TableCell className="text-center font-bold text-red-700 text-xs p-1 bg-gray-50 border-l">
+                              {hours.toFixed(1)}
+                            </TableCell>
+                            <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                          </TableRow>
                         );
-                      })}
-                      <TableCell className="text-center font-bold text-red-700 text-xs p-1 bg-gray-50 border-l">
-                        {employee.totals.absence.toFixed(1)}
-                      </TableCell>
-                      <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
-                    </TableRow>
+                      }
+                      return null;
+                    })}
                   </React.Fragment>
                 ))}
               </TableBody>
