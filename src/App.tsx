@@ -19,6 +19,8 @@ import AdminConsolidation from "./pages/admin/AdminConsolidation";
 import AdminExport from "./pages/admin/AdminExport";
 import AdminAudit from "./pages/admin/AdminAudit";
 
+import AdminBusinessTrips from "./pages/admin/AdminBusinessTrips";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -44,6 +46,7 @@ const App = () => (
               <Route path="companies" element={<AdminCompanies />} />
               <Route path="clients" element={<AdminClients />} />
               <Route path="consolidation" element={<AdminConsolidation />} />
+              <Route path="business-trips" element={<AdminBusinessTrips />} />
               <Route path="export" element={<AdminExport />} />
               <Route path="audit" element={<AdminAudit />} />
               <Route path="settings" element={<AdminSettings />} />
