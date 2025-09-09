@@ -1861,6 +1861,37 @@ function TimesheetDetailsTable({
     return '1 ora'; // Fallback
   };
 
+  const getBenefitDisplay = (timesheet: TimesheetWithProfile) => {
+    const employeeSetting = employeeSettings.get(timesheet.user_id);
+    
+    // Determina la policy effettiva (employee settings hanno priorità su company settings)
+    let effectivePolicy = employeeSetting?.meal_allowance_policy || companySettings?.meal_allowance_policy || 'disabled';
+    
+    // Se meal_voucher_earned è true, significa che nel database è stato calcolato un buono pasto
+    // Ma dobbiamo verificare se la policy corrente prevede buoni pasto o indennità
+    switch (effectivePolicy) {
+      case 'meal_vouchers_only':
+      case 'meal_vouchers_always':
+        return timesheet.meal_voucher_earned ? 'Buono: Sì' : 'Buono: No';
+        
+      case 'daily_allowance':
+        // Per indennità, mostra l'importo se il dipendente ha lavorato abbastanza ore
+        const dailyAllowanceAmount = employeeSetting?.daily_allowance_amount || companySettings?.daily_allowance_amount || 10.00;
+        const minHours = employeeSetting?.daily_allowance_min_hours || companySettings?.daily_allowance_min_hours || 6;
+        const totalHours = timesheet.total_hours || 0;
+        
+        if (totalHours >= minHours) {
+          return `Indennità: €${dailyAllowanceAmount.toFixed(2)}`;
+        } else {
+          return `Indennità: No (< ${minHours}h)`;
+        }
+        
+      case 'disabled':
+      default:
+        return 'Nessuno';
+    }
+  };
+
   return (
     <div className="bg-card border rounded-lg p-4">
       <div className="overflow-x-auto">
@@ -1877,7 +1908,7 @@ function TimesheetDetailsTable({
               <TableHead>Straordinari</TableHead>
               <TableHead>Notturno</TableHead>
               <TableHead>Posizioni GPS</TableHead>
-              <TableHead>Buono Pasto</TableHead>
+              <TableHead>Benefit</TableHead>
               <TableHead>Azioni</TableHead>
             </TableRow>
           </TableHeader>
@@ -1913,7 +1944,7 @@ function TimesheetDetailsTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  {timesheet.meal_voucher_earned ? 'Sì' : 'No'}
+                  {getBenefitDisplay(timesheet)}
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">

@@ -595,21 +595,15 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                           <Label htmlFor="meal_voucher_min_hours">
                             Ore minime per buoni pasto
                           </Label>
-                          <Select
+                          <Input
+                            type="number"
+                            min="1"
+                            max="24"
                             value={String((settings as any).meal_voucher_min_hours || (companySettings as any)?.meal_voucher_min_hours || 6)}
-                            onValueChange={(value) => updateSetting('meal_voucher_min_hours' as any, parseInt(value))}
-                          >
-                            <SelectTrigger className="mt-1">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="4">4 ore</SelectItem>
-                              <SelectItem value="5">5 ore</SelectItem>
-                              <SelectItem value="6">6 ore</SelectItem>
-                              <SelectItem value="7">7 ore</SelectItem>
-                              <SelectItem value="8">8 ore</SelectItem>
-                            </SelectContent>
-                          </Select>
+                            onChange={(e) => updateSetting('meal_voucher_min_hours' as any, parseInt(e.target.value) || 6)}
+                            className="mt-1"
+                            placeholder="6"
+                          />
                           <p className="text-xs text-muted-foreground mt-1">
                             Valore effettivo: {(settings as any).meal_voucher_min_hours || (companySettings as any)?.meal_voucher_min_hours || 6} ore
                           </p>
