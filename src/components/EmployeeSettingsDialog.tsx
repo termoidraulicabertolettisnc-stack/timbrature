@@ -508,21 +508,21 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                     <SelectTrigger>
                       <SelectValue placeholder={companySettings ? `Default: ${(companySettings as any).meal_allowance_policy || 'disabled'}` : 'Seleziona politica'} />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="company_default">Usa Default Aziendale</SelectItem>
-                      <SelectItem value="disabled">Tutto disabilitato</SelectItem>
-                      <SelectItem value="meal_vouchers_only">Solo buoni pasto</SelectItem>
-                      <SelectItem value="meal_vouchers_always">Buoni pasto sempre</SelectItem>
-                      <SelectItem value="daily_allowance">Indennità giornaliera</SelectItem>
-                    </SelectContent>
+                     <SelectContent>
+                       <SelectItem value="company_default">Usa Default Aziendale</SelectItem>
+                       <SelectItem value="disabled">Tutto disabilitato</SelectItem>
+                       <SelectItem value="meal_vouchers_only">Solo buoni pasto</SelectItem>
+                       <SelectItem value="daily_allowance">Indennità giornaliera</SelectItem>
+                       <SelectItem value="both">Buoni pasto e indennità</SelectItem>
+                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
                     Valore effettivo: {getEffectiveValue((settings as any).meal_allowance_policy, (companySettings as any)?.meal_allowance_policy || 'disabled')}
                   </p>
                 </div>
 
-                {/* Conditional Fields for Daily Allowance */}
-                {((settings as any).meal_allowance_policy === 'daily_allowance' || (!(settings as any).meal_allowance_policy && (companySettings as any)?.meal_allowance_policy === 'daily_allowance')) && (
+                 {/* Conditional Fields for Daily Allowance */}
+                 {((settings as any).meal_allowance_policy === 'daily_allowance' || (settings as any).meal_allowance_policy === 'both' || (!(settings as any).meal_allowance_policy && ((companySettings as any)?.meal_allowance_policy === 'daily_allowance' || (companySettings as any)?.meal_allowance_policy === 'both'))) && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border rounded-lg bg-muted/20">
                     <div>
                       <Label htmlFor="daily_allowance_amount">
@@ -565,9 +565,9 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                   </div>
                 )}
 
-                {/* Conditional Fields for Meal Vouchers */}
-                {((settings as any).meal_allowance_policy === 'meal_vouchers_only' || (settings as any).meal_allowance_policy === 'meal_vouchers_always' || 
-                  (!(settings as any).meal_allowance_policy && ((companySettings as any)?.meal_allowance_policy === 'meal_vouchers_only' || (companySettings as any)?.meal_allowance_policy === 'meal_vouchers_always'))) && (
+                 {/* Conditional Fields for Meal Vouchers */}
+                 {((settings as any).meal_allowance_policy === 'meal_vouchers_only' || (settings as any).meal_allowance_policy === 'both' || 
+                   (!(settings as any).meal_allowance_policy && ((companySettings as any)?.meal_allowance_policy === 'meal_vouchers_only' || (companySettings as any)?.meal_allowance_policy === 'both'))) && (
                   <div className="p-4 border rounded-lg bg-muted/20">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
@@ -588,9 +588,9 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                         </p>
                       </div>
                       
-                      {/* Meal Voucher Minimum Hours - Only for meal_vouchers_only policy */}
-                      {((settings as any).meal_allowance_policy === 'meal_vouchers_only' || 
-                        (!(settings as any).meal_allowance_policy && (companySettings as any)?.meal_allowance_policy === 'meal_vouchers_only')) && (
+                       {/* Meal Voucher Minimum Hours - Only for meal_vouchers_only policy */}
+                       {((settings as any).meal_allowance_policy === 'meal_vouchers_only' || (settings as any).meal_allowance_policy === 'both' || 
+                         (!(settings as any).meal_allowance_policy && ((companySettings as any)?.meal_allowance_policy === 'meal_vouchers_only' || (companySettings as any)?.meal_allowance_policy === 'both'))) && (
                         <div>
                           <Label htmlFor="meal_voucher_min_hours">
                             Ore minime per buoni pasto
