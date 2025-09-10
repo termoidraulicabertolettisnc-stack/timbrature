@@ -9,9 +9,15 @@ export const useAdmin = () => {
 
   useEffect(() => {
     const checkAdminRole = async () => {
-      if (authLoading) return;
+      console.log('🔍 CheckAdminRole - authLoading:', authLoading, 'user:', user?.email || 'NO USER');
+      
+      if (authLoading) {
+        console.log('🕐 Still loading auth...');
+        return;
+      }
       
       if (!user) {
+        console.log('❌ No user authenticated - setting isAdmin to false');
         setIsAdmin(false);
         setLoading(false);
         return;
@@ -25,10 +31,12 @@ export const useAdmin = () => {
           .single();
 
         if (error) {
-          console.error('Error checking admin role:', error);
+          console.error('❌ Error checking admin role:', error);
           setIsAdmin(false);
         } else {
-          setIsAdmin(data?.role === 'amministratore');
+          const isAdminResult = data?.role === 'amministratore';
+          console.log('✅ Admin check result:', { role: data?.role, isAdmin: isAdminResult });
+          setIsAdmin(isAdminResult);
         }
       } catch (error) {
         console.error('Error checking admin role:', error);

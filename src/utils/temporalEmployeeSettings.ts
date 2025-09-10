@@ -81,8 +81,19 @@ export async function saveTemporalEmployeeSettings(
   fromDate?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    console.log('💾 saveTemporalEmployeeSettings called with:', { 
+      userId, 
+      companyId, 
+      applicationType, 
+      fromDate,
+      settingsKeys: Object.keys(settings)
+    });
+    
     const currentUser = await supabase.auth.getUser();
+    console.log('👤 Current auth user:', currentUser.data.user?.id || 'NO USER');
+    
     if (!currentUser.data.user) {
+      console.log('❌ User not authenticated');
       return { success: false, error: 'User not authenticated' };
     }
 
@@ -137,21 +148,27 @@ export async function saveTemporalEmployeeSettings(
     }
 
     // Inserisci le nuove impostazioni
+    const insertData = {
+      user_id: userId,
+      company_id: companyId,
+      valid_from: validFrom,
+      valid_to: null,
+      created_by: createdBy,
+      ...settings
+    };
+    
+    console.log('📝 Inserting employee settings:', insertData);
+    
     const { error: insertError } = await supabase
       .from('employee_settings')
-      .insert({
-        user_id: userId,
-        company_id: companyId,
-        valid_from: validFrom,
-        valid_to: null,
-        created_by: createdBy,
-        ...settings
-      });
+      .insert(insertData);
 
     if (insertError) {
+      console.log('❌ Insert error:', insertError);
       return { success: false, error: insertError.message };
     }
 
+    console.log('✅ Employee settings saved successfully');
     return { success: true };
     
   } catch (error) {
