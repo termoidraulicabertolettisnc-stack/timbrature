@@ -178,14 +178,24 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
 
     try {
       setSaving(true);
+      
+      // STEP 1: Ensure we have a valid session before starting
+      console.log('🔐 Ensuring valid authentication session...');
+      const { data: sessionCheck } = await supabase.auth.getSession();
+      if (!sessionCheck.session) {
+        toast.error('Sessione scaduta. Ricarica la pagina e riprova.');
+        return;
+      }
 
       // First update the employee's company assignment
+      console.log('🏢 Updating company assignment...');
       const { error: profileError } = await supabase
         .from('profiles')
         .update({ company_id: selectedCompanyId })
         .eq('user_id', employee.id);
 
       if (profileError) throw profileError;
+      console.log('✅ Company assignment updated');
 
       // Prepare settings data (excluding temporal fields)
       const settingsData = {
@@ -206,6 +216,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
         fromDate = selectedDate.toISOString().split('T')[0];
       }
 
+      console.log('💾 Saving employee settings...');
       // Save using temporal logic
       const result = await saveTemporalEmployeeSettings(
         employee.id,
@@ -218,6 +229,8 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
       if (!result.success) {
         throw new Error(result.error || 'Errore nel salvataggio');
       }
+      
+      console.log('✅ All operations completed successfully');
 
       // If retroactive change, trigger recalculation
       if (applicationType === 'retroactive') {

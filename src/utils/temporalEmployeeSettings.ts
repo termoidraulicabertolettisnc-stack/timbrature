@@ -128,7 +128,7 @@ export async function saveTemporalEmployeeSettings(
     
     console.log('✅ Auth test passed, auth.uid() should work now');
 
-    const createdBy = currentUser.data.user.id;
+    const createdBy = sessionData.session.user.id;
     const today = new Date().toISOString().split('T')[0];
     
     let validFrom: string;
@@ -152,16 +152,20 @@ export async function saveTemporalEmployeeSettings(
 
     if (applicationType === 'retroactive') {
       // Elimina tutti i record precedenti per questo utente
+      console.log('🗑️ Deleting previous retroactive settings...');
       const { error: deleteError } = await supabase
         .from('employee_settings')
         .delete()
         .eq('user_id', userId);
 
       if (deleteError) {
+        console.error('❌ Delete error:', deleteError);
         return { success: false, error: deleteError.message };
       }
+      console.log('✅ Previous settings deleted');
     } else {
       // Chiudi le impostazioni precedenti che si sovrappongono
+      console.log('📅 Closing overlapping settings...');
       const dayBefore = new Date(validFrom);
       dayBefore.setDate(dayBefore.getDate() - 1);
       const validToDate = dayBefore.toISOString().split('T')[0];
@@ -174,11 +178,13 @@ export async function saveTemporalEmployeeSettings(
         .lte('valid_from', validToDate);
 
       if (updateError) {
+        console.error('❌ Update error:', updateError);
         return { success: false, error: updateError.message };
       }
+      console.log('✅ Previous settings closed');
     }
 
-    // Inserisci le nuove impostazioni
+    // STEP 4: Inserisci le nuove impostazioni con retry logic
     const insertData = {
       user_id: userId,
       company_id: companyId,
@@ -188,19 +194,39 @@ export async function saveTemporalEmployeeSettings(
       ...settings
     };
     
-    console.log('📝 Inserting employee settings:', insertData);
+    console.log('📝 Inserting employee settings with retry logic:', insertData);
     
-    const { error: insertError } = await supabase
-      .from('employee_settings')
-      .insert(insertData);
+    // Try insert with retry logic for temporary auth issues
+    let insertError: any = null;
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      const { error } = await supabase
+        .from('employee_settings')
+        .insert(insertData);
 
-    if (insertError) {
-      console.log('❌ Insert error:', insertError);
-      return { success: false, error: insertError.message };
+      if (!error) {
+        console.log('✅ Employee settings saved successfully on attempt', retryCount + 1);
+        return { success: true };
+      }
+      
+      insertError = error;
+      console.log(`❌ Insert attempt ${retryCount + 1} failed:`, error);
+      
+      // If it's an auth-related error, try refreshing session again
+      if (error.message.includes('policy') || error.message.includes('RLS') || error.message.includes('permission')) {
+        console.log('🔄 Auth error detected, refreshing session and retrying...');
+        await supabase.auth.refreshSession();
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+      }
+      
+      retryCount++;
     }
-
-    console.log('✅ Employee settings saved successfully');
-    return { success: true };
+    
+    // If all retries failed, return the last error
+    console.log('❌ All retry attempts failed');
+    return { success: false, error: insertError.message };
     
   } catch (error) {
     console.error('Error saving temporal employee settings:', error);
