@@ -8,6 +8,7 @@ import { Clock, Zap, Moon, Utensils, Euro } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { supabase } from '@/integrations/supabase/client';
+import { calculateMealBenefits } from '@/utils/mealBenefitsCalculator';
 
 interface TimeBlock {
   timesheet: TimesheetWithProfile;
@@ -998,11 +999,11 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
                                 <div className="flex gap-1 flex-wrap mt-1">
                                   {block.timesheet.is_saturday && <Badge variant="secondary" className="text-xs">Sab</Badge>}
                                   {block.timesheet.is_holiday && <Badge variant="secondary" className="text-xs">Fest</Badge>}
-                                  {calculateMealVoucherEarned(block.timesheet) && <Badge variant="default" className="text-xs flex items-center gap-1">
+                                  {getMealBenefits(block.timesheet).mealVoucher && <Badge variant="default" className="text-xs flex items-center gap-1">
                                     <Utensils className="h-2.5 w-2.5" />
                                     Buono
                                   </Badge>}
-                                  {calculateDailyAllowanceEarned(block.timesheet) && <Badge variant="outline" className="text-xs flex items-center gap-1">
+                                  {getMealBenefits(block.timesheet).dailyAllowance && <Badge variant="outline" className="text-xs flex items-center gap-1">
                                     <Euro className="h-2.5 w-2.5" />
                                     Indennità
                                   </Badge>}
