@@ -1619,44 +1619,29 @@ function MonthlyView({
   const getBenefitDisplay = (employee: EmployeeMonthlyData, dayData: DailyHours) => {
     const employeeSetting = employeeSettings.get(employee.user_id);
     
-    // Determina la policy effettiva (employee settings hanno priorità su company settings)
-    let effectivePolicy = employeeSetting?.meal_allowance_policy || companySettings?.meal_allowance_policy || 'disabled';
-    
-    if (effectivePolicy === 'both') {
-      // Per policy "both", verifica entrambi i benefici
-      const dailyAllowanceMinHours = employeeSetting?.daily_allowance_min_hours || companySettings?.default_daily_allowance_min_hours || 6;
-      const dailyAllowanceAmount = employeeSetting?.daily_allowance_amount || companySettings?.default_daily_allowance_amount || 10.00;
-      
-      const hasMealVoucher = dayData.meal_vouchers > 0;
-      const hasDailyAllowance = dayData.total_hours >= dailyAllowanceMinHours;
-      
-      if (hasMealVoucher && hasDailyAllowance) {
-        return { show: true, icon: '🍽️💰', tooltip: `Buono Pasto + Indennità: €${dailyAllowanceAmount.toFixed(2)}` };
-      } else if (hasMealVoucher) {
-        return { show: true, icon: '🍽️', tooltip: 'Buono Pasto Maturato' };
-      } else if (hasDailyAllowance) {
-        return { show: true, icon: '💰', tooltip: `Indennità: €${dailyAllowanceAmount.toFixed(2)}` };
-      }
-      
+    // Usa il primo timesheet della giornata per calcolare i benefici
+    // Se non ci sono timesheet, non mostrare nulla
+    if (!dayData.timesheets || dayData.timesheets.length === 0) {
       return { show: false, icon: '', tooltip: '' };
     }
     
-    // Se meal_vouchers > 0, significa che nel database è stato calcolato un buono pasto/benefit
-    // Ma dobbiamo verificare se la policy corrente prevede buoni pasto o indennità
-    if (dayData.meal_vouchers > 0) {
-      switch (effectivePolicy) {
-        case 'meal_vouchers_only':
-          return { show: true, icon: '🍽️', tooltip: 'Buono Pasto Maturato' };
-          
-        case 'daily_allowance':
-          // Per indennità, calcola l'importo
-          const dailyAllowanceAmount = employeeSetting?.daily_allowance_amount || companySettings?.daily_allowance_amount || 10.00;
-          return { show: true, icon: '💰', tooltip: `Indennità: €${dailyAllowanceAmount.toFixed(2)}` };
-          
-        case 'disabled':
-        default:
-          return { show: false, icon: '', tooltip: '' };
-      }
+    // Usa la funzione centralizzata per calcolare i benefici
+    const mealBenefits = calculateMealBenefits(
+      dayData.timesheets[0], // Usa il primo timesheet della giornata
+      employeeSetting,
+      companySettings
+    );
+    
+    const hasMealVoucher = mealBenefits.mealVoucher;
+    const hasDailyAllowance = mealBenefits.dailyAllowance;
+    const dailyAllowanceAmount = employeeSetting?.daily_allowance_amount || companySettings?.default_daily_allowance_amount || 10.00;
+    
+    if (hasMealVoucher && hasDailyAllowance) {
+      return { show: true, icon: '🍽️💰', tooltip: `Buono Pasto + Indennità: €${dailyAllowanceAmount.toFixed(2)}` };
+    } else if (hasMealVoucher) {
+      return { show: true, icon: '🍽️', tooltip: 'Buono Pasto Maturato' };
+    } else if (hasDailyAllowance) {
+      return { show: true, icon: '💰', tooltip: `Indennità: €${dailyAllowanceAmount.toFixed(2)}` };
     }
     
     return { show: false, icon: '', tooltip: '' };
@@ -1774,23 +1759,45 @@ function MonthlyView({
                       {employee.meal_vouchers > 0 && (
                         <div className="flex gap-4 text-sm ml-7">
                           <span className="text-muted-foreground">
-                            {(() => {
-                              const employeeSetting = employeeSettings.get(employee.user_id);
-                              const effectivePolicy = employeeSetting?.meal_allowance_policy || companySettings?.meal_allowance_policy || 'disabled';
-                              
-                              switch (effectivePolicy) {
-                                case 'meal_vouchers_only':
-                                case 'meal_vouchers_always':
-                                  return `Buoni pasto: ${employee.meal_vouchers}`;
-                                case 'daily_allowance':
-                                  const dailyAllowanceAmount = employeeSetting?.daily_allowance_amount || companySettings?.daily_allowance_amount || 10.00;
-                                  const totalAmount = (employee.meal_vouchers * dailyAllowanceAmount).toFixed(2);
-                                  return `Indennità giornaliera: €${totalAmount} (${employee.meal_vouchers} giorni)`;
-                                case 'disabled':
-                                default:
-                                  return `Benefits: ${employee.meal_vouchers}`;
-                              }
-                            })()}
+                      {(() => {
+                        const employeeSetting = employeeSettings.get(employee.user_id);
+                        
+                        // Calcola i benefici totali usando i timesheet effettivi
+                        let totalMealVouchers = 0;
+                        let totalDailyAllowances = 0;
+                        let totalAmount = 0;
+                        
+                        employee.days.forEach(day => {
+                          if (day.timesheets && day.timesheets.length > 0) {
+                            const mealBenefits = calculateMealBenefits(
+                              day.timesheets[0], // Usa il primo timesheet della giornata
+                              employeeSetting,
+                              companySettings
+                            );
+                            
+                            if (mealBenefits.mealVoucher) {
+                              totalMealVouchers++;
+                            }
+                            if (mealBenefits.dailyAllowance) {
+                              totalDailyAllowances++;
+                              const dailyAllowanceAmount = employeeSetting?.daily_allowance_amount || companySettings?.default_daily_allowance_amount || 10.00;
+                              totalAmount += dailyAllowanceAmount;
+                            }
+                          }
+                        });
+                        
+                        const effectivePolicy = employeeSetting?.meal_allowance_policy || companySettings?.meal_allowance_policy || 'disabled';
+                        
+                        if (totalMealVouchers > 0 && totalDailyAllowances > 0) {
+                          return `Buoni pasto: ${totalMealVouchers} + Indennità: €${totalAmount.toFixed(2)} (${totalDailyAllowances} giorni)`;
+                        } else if (totalMealVouchers > 0) {
+                          return `Buoni pasto: ${totalMealVouchers}`;
+                        } else if (totalDailyAllowances > 0) {
+                          return `Indennità giornaliera: €${totalAmount.toFixed(2)} (${totalDailyAllowances} giorni)`;
+                        } else {
+                          return 'Nessun beneficio maturato';
+                        }
+                      })()}
                           </span>
                         </div>
                       )}
@@ -2059,31 +2066,25 @@ function TimesheetDetailsTable({
   const getBenefitDisplay = (timesheet: TimesheetWithProfile) => {
     const employeeSetting = employeeSettings.get(timesheet.user_id);
     
-    // Determina la policy effettiva (employee settings hanno priorità su company settings)
-    let effectivePolicy = employeeSetting?.meal_allowance_policy || companySettings?.meal_allowance_policy || 'disabled';
+    // Usa la funzione centralizzata per calcolare i benefici
+    const mealBenefits = calculateMealBenefits(
+      timesheet,
+      employeeSetting,
+      companySettings
+    );
     
-    // Se meal_voucher_earned è true, significa che nel database è stato calcolato un buono pasto
-    // Ma dobbiamo verificare se la policy corrente prevede buoni pasto o indennità
-    switch (effectivePolicy) {
-      case 'meal_vouchers_only':
-      case 'meal_vouchers_always':
-        return timesheet.meal_voucher_earned ? 'Buono: Sì' : 'Buono: No';
-        
-      case 'daily_allowance':
-        // Per indennità, mostra l'importo se il dipendente ha lavorato abbastanza ore
-        const dailyAllowanceAmount = employeeSetting?.daily_allowance_amount || companySettings?.daily_allowance_amount || 10.00;
-        const minHours = employeeSetting?.daily_allowance_min_hours || companySettings?.daily_allowance_min_hours || 6;
-        const totalHours = timesheet.total_hours || 0;
-        
-        if (totalHours >= minHours) {
-          return `Indennità: €${dailyAllowanceAmount.toFixed(2)}`;
-        } else {
-          return `Indennità: No (< ${minHours}h)`;
-        }
-        
-      case 'disabled':
-      default:
-        return 'Nessuno';
+    const hasMealVoucher = mealBenefits.mealVoucher;
+    const hasDailyAllowance = mealBenefits.dailyAllowance;
+    const dailyAllowanceAmount = employeeSetting?.daily_allowance_amount || companySettings?.default_daily_allowance_amount || 10.00;
+    
+    if (hasMealVoucher && hasDailyAllowance) {
+      return `Buono: Sì + Indennità: €${dailyAllowanceAmount.toFixed(2)}`;
+    } else if (hasMealVoucher) {
+      return 'Buono: Sì';
+    } else if (hasDailyAllowance) {
+      return `Indennità: €${dailyAllowanceAmount.toFixed(2)}`;
+    } else {
+      return 'Nessuno';
     }
   };
 
