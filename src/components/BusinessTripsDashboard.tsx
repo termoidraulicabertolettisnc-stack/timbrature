@@ -9,6 +9,7 @@ import { Calendar, Download, Users, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import * as ExcelJS from 'exceljs';
+import { calculateMealBenefits } from '@/utils/mealBenefitsCalculator';
 
 interface BusinessTripData {
   employee_id: string;
@@ -335,22 +336,10 @@ const BusinessTripsDashboard = () => {
           totalOrdinary += ordinary;
           totalOvertime += overtime;
           
-          // Calculate meal vouchers based on unified policy
-          if (effectiveMealAllowancePolicy === 'disabled') {
-            // No meal vouchers earned if disabled
-          } else if (effectiveMealAllowancePolicy === 'daily_allowance') {
-            // Daily allowance policy means no meal vouchers (they're mutually exclusive)
-          } else if (effectiveMealAllowancePolicy === 'meal_vouchers_only') {
-            if ((ts.total_hours || 0) > 6) {
-              mealVoucherDays++;
-            }
-          } else if (effectiveMealAllowancePolicy === 'meal_vouchers_always') {
+          // Use centralized meal benefit calculation
+          const mealBenefits = calculateMealBenefits(ts, settings, companySettingsForEmployee);
+          if (mealBenefits.mealVoucher) {
             mealVoucherDays++;
-          } else if (effectiveMealAllowancePolicy === 'both') {
-            // With 'both' policy, meal vouchers are earned based on hours worked
-            if ((ts.total_hours || 0) >= effectiveMealVoucherMinHours) {
-              mealVoucherDays++;
-            }
           }
         });
 

@@ -28,6 +28,7 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { calculateMealBenefits } from '@/utils/mealBenefitsCalculator';
 
 // Componente per mostrare ore con calcolo in tempo reale
 function HoursDisplay({ timesheet }: { timesheet: TimesheetWithProfile }) {
@@ -122,6 +123,10 @@ export default function AdminTimesheets() {
 
   // State per l'aggiornamento in tempo reale
   const [realtimeUpdateTrigger, setRealtimeUpdateTrigger] = useState(0);
+  
+  // States for company and employee settings (needed for meal benefit calculations)
+  const [companySettings, setCompanySettings] = useState<any>(null);
+  const [employeeSettings, setEmployeeSettings] = useState<{[key: string]: any}>({});
 
   // Aggiorna ogni minuto per mostrare le ore in tempo reale
   useEffect(() => {
@@ -158,6 +163,7 @@ export default function AdminTimesheets() {
 
   useEffect(() => {
     loadInitialData();
+    loadSettings();
   }, []);
 
   useEffect(() => {
@@ -194,6 +200,42 @@ export default function AdminTimesheets() {
         variant: "destructive",
       });
     }
+  };
+
+  const loadSettings = async () => {
+    try {
+      // Load company settings
+      const { data: companyData, error: companyError } = await supabase
+        .from('company_settings')
+        .select('*')
+        .limit(1)
+        .single();
+      
+      if (!companyError && companyData) {
+        setCompanySettings(companyData);
+      }
+
+      // Load employee settings for all employees
+      const { data: employeeData, error: employeeError } = await supabase
+        .from('employee_settings')
+        .select('*');
+      
+      if (!employeeError && employeeData) {
+        const settingsMap = employeeData.reduce((acc, setting) => {
+          acc[setting.user_id] = setting;
+          return acc;
+        }, {} as {[key: string]: any});
+        setEmployeeSettings(settingsMap);
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  };
+
+  // Get meal benefits for a timesheet using centralized calculation
+  const getMealBenefits = (timesheet: TimesheetWithProfile) => {
+    const employeeSettingsForUser = employeeSettings[timesheet.user_id];
+    return calculateMealBenefits(timesheet, employeeSettingsForUser, companySettings);
   };
 
   const deleteTimesheet = async (id: string) => {
@@ -451,7 +493,9 @@ export default function AdminTimesheets() {
       employee.overtime_hours += calculatedOvertimeHours;
       employee.night_hours += calculatedNightHours;
       
-      if (timesheet.meal_voucher_earned) employee.meal_vouchers += 1;
+      // Use centralized meal benefit calculation
+      const mealBenefits = getMealBenefits(timesheet);
+      if (mealBenefits.mealVoucher) employee.meal_vouchers += 1;
       if (timesheet.is_saturday) employee.saturday_hours += calculatedHours;
       if (timesheet.is_holiday) employee.holiday_hours += calculatedHours;
     });
@@ -534,7 +578,10 @@ export default function AdminTimesheets() {
         dayData.total_hours += hoursToAdd;
         dayData.overtime_hours += overtimeToAdd;
         dayData.night_hours += nightToAdd;
-        if (timesheet.meal_voucher_earned) dayData.meal_vouchers += 1;
+        
+        // Use centralized meal benefit calculation
+        const mealBenefits = getMealBenefits(timesheet);
+        if (mealBenefits.mealVoucher) dayData.meal_vouchers += 1;
         dayData.timesheets.push(timesheet);
         console.log(`🔍 DAY ${dayData.date} NOW HAS ${dayData.timesheets.length} TIMESHEETS`);
       } else {

@@ -11,6 +11,7 @@ import { Calendar, Users, Clock, BarChart3, Download, TrendingUp, TrendingDown }
 import { format, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, startOfWeek, endOfWeek } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+import { calculateMealBenefits } from '@/utils/mealBenefitsCalculator';
 
 interface ConsolidatedData {
   user_id: string;
@@ -37,6 +38,8 @@ export default function AdminConsolidation() {
   const [consolidatedData, setConsolidatedData] = useState<ConsolidatedData[]>([]);
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [companySettings, setCompanySettings] = useState<any>(null);
+  const [employeeSettings, setEmployeeSettings] = useState<{[key: string]: any}>({});
   
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'custom'>('month');
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
@@ -45,6 +48,7 @@ export default function AdminConsolidation() {
 
   useEffect(() => {
     loadEmployees();
+    loadSettings();
   }, []);
 
   useEffect(() => {
@@ -80,6 +84,36 @@ export default function AdminConsolidation() {
       setEmployees(data || []);
     } catch (error) {
       console.error('Error loading employees:', error);
+    }
+  };
+
+  const loadSettings = async () => {
+    try {
+      // Load company settings
+      const { data: companyData, error: companyError } = await supabase
+        .from('company_settings')
+        .select('*')
+        .limit(1)
+        .single();
+      
+      if (!companyError && companyData) {
+        setCompanySettings(companyData);
+      }
+
+      // Load employee settings for all employees
+      const { data: employeeData, error: employeeError } = await supabase
+        .from('employee_settings')
+        .select('*');
+      
+      if (!employeeError && employeeData) {
+        const settingsMap = employeeData.reduce((acc, setting) => {
+          acc[setting.user_id] = setting;
+          return acc;
+        }, {} as {[key: string]: any});
+        setEmployeeSettings(settingsMap);
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
     }
   };
 
@@ -162,7 +196,11 @@ export default function AdminConsolidation() {
         user.saturday_hours += record.total_hours || 0;
       }
       user.worked_days += 1;
-      if (record.meal_voucher_earned) {
+      
+      // Use centralized meal benefit calculation
+      const employeeSettingsForUser = employeeSettings[userId];
+      const mealBenefits = calculateMealBenefits(record, employeeSettingsForUser, companySettings);
+      if (mealBenefits.mealVoucher) {
         user.meal_vouchers += 1;
       }
     });

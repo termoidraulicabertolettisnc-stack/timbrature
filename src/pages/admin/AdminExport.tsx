@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import * as ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { calculateMealBenefits } from '@/utils/mealBenefitsCalculator';
 
 declare module 'jspdf' {
   interface jsPDF {
@@ -324,7 +325,17 @@ export default function AdminExport() {
             totalOrdinary += ordinary;
             totalOvertime += overtime;
             
-            if (dayRecord.meal_voucher_earned) {
+            // Use centralized meal benefit calculation - need to simulate timesheet format
+            const timesheetData = {
+              start_time: dayRecord.start_time,
+              end_time: dayRecord.end_time,
+              lunch_start_time: dayRecord.lunch_start_time,
+              lunch_end_time: dayRecord.lunch_end_time,
+              lunch_duration_minutes: dayRecord.lunch_duration_minutes,
+              total_hours: dayRecord.total_hours
+            };
+            const mealBenefits = calculateMealBenefits(timesheetData, settings, null);
+            if (mealBenefits.mealVoucher) {
               workingDays++;
             }
           }
