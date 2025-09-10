@@ -98,7 +98,7 @@ export const useAdaptiveLocationTracking = ({
           accuracy: locationData.accuracy,
           timestamp: locationData.timestamp.toISOString(),
           movement_detected: locationData.movement_detected,
-          ping_interval_used: locationData.ping_interval_used / (60 * 1000) // Convert to minutes
+          ping_interval_used: Math.round(locationData.ping_interval_used / (60 * 1000)) // Convert to minutes as integer
         });
 
       if (error) {
