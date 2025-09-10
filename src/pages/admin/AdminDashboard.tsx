@@ -2,6 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, Clock, FolderKanban, Calendar, TrendingUp, AlertCircle } from "lucide-react";
 import PayrollDashboard from "@/components/PayrollDashboard";
+import BusinessTripsDashboard from "@/components/BusinessTripsDashboard";
 
 export default function AdminDashboard() {
   return (
@@ -14,9 +15,10 @@ export default function AdminDashboard() {
       </div>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="overview">Panoramica</TabsTrigger>
           <TabsTrigger value="payroll">Vista Buste Paga</TabsTrigger>
+          <TabsTrigger value="business-trips">Trasferte</TabsTrigger>
         </TabsList>
         
         <TabsContent value="overview" className="space-y-6 mt-6">
@@ -25,6 +27,10 @@ export default function AdminDashboard() {
         
         <TabsContent value="payroll" className="mt-6">
           <PayrollDashboard />
+        </TabsContent>
+        
+        <TabsContent value="business-trips" className="mt-6">
+          <BusinessTripsDashboard />
         </TabsContent>
       </Tabs>
     </div>
