@@ -89,13 +89,44 @@ export async function saveTemporalEmployeeSettings(
       settingsKeys: Object.keys(settings)
     });
     
-    const currentUser = await supabase.auth.getUser();
-    console.log('👤 Current auth user:', currentUser.data.user?.id || 'NO USER');
-    
-    if (!currentUser.data.user) {
-      console.log('❌ User not authenticated');
-      return { success: false, error: 'User not authenticated' };
+    // STEP 1: Force session refresh to ensure JWT token is valid
+    console.log('🔄 Forcing session refresh...');
+    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError) {
+      console.error('❌ Session refresh failed:', refreshError);
+      return { success: false, error: 'Session refresh failed: ' + refreshError.message };
     }
+    
+    console.log('✅ Session refreshed successfully');
+    
+    // STEP 2: Get current session (not just user)
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    console.log('👤 Current session check:', { 
+      hasSession: !!sessionData.session,
+      hasUser: !!sessionData.session?.user,
+      userId: sessionData.session?.user?.id || 'NO USER',
+      accessToken: sessionData.session?.access_token ? 'Present' : 'Missing'
+    });
+    
+    if (sessionError || !sessionData.session || !sessionData.session.user) {
+      console.log('❌ No valid session found');
+      return { success: false, error: 'User session not found' };
+    }
+    
+    // STEP 3: Verify auth.uid() works by testing with a simple query
+    console.log('🔍 Testing auth.uid() with simple query...');
+    const { data: testData, error: testError } = await supabase
+      .from('profiles')
+      .select('user_id')
+      .eq('user_id', sessionData.session.user.id)
+      .limit(1);
+    
+    if (testError) {
+      console.error('❌ Test query failed:', testError);
+      return { success: false, error: 'Authentication test failed: ' + testError.message };
+    }
+    
+    console.log('✅ Auth test passed, auth.uid() should work now');
 
     const createdBy = currentUser.data.user.id;
     const today = new Date().toISOString().split('T')[0];
