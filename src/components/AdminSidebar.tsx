@@ -9,7 +9,6 @@ import {
   FileText,
   BarChart3,
   Building,
-  MapPin,
 } from "lucide-react";
 
 import {
@@ -32,7 +31,6 @@ const adminMenuItems = [
   { title: "Aziende", url: "/admin/companies", icon: Building },
   { title: "Clienti", url: "/admin/clients", icon: UserCheck },
   { title: "Consolidato", url: "/admin/consolidation", icon: Calendar },
-  { title: "Trasferte", url: "/admin/business-trips", icon: MapPin },
   { title: "Export", url: "/admin/export", icon: FileDown },
   { title: "Audit Log", url: "/admin/audit", icon: FileText },
   { title: "Configurazioni", url: "/admin/settings", icon: Settings },
