@@ -898,33 +898,37 @@ export default function AdminTimesheets() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold text-foreground">Gestione Timesheets</h2>
           <p className="text-muted-foreground">
             Visualizza e modifica i timesheet di tutti i dipendenti
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             onClick={() => handleAddTimesheet()}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 flex-shrink-0"
             variant="default"
+            size="sm"
           >
             <Plus className="h-4 w-4" />
-            Nuova Timbratura
+            <span className="hidden sm:inline">Nuova Timbratura</span>
+            <span className="sm:hidden">Nuovo</span>
           </Button>
           <Button
             onClick={() => handleAddAbsence()}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 flex-shrink-0"
             variant="secondary"
+            size="sm"
           >
             <UserPlus className="h-4 w-4" />
-            Inserisci Assenza
+            <span className="hidden sm:inline">Inserisci Assenza</span>
+            <span className="sm:hidden">Assenza</span>
           </Button>
-          <Button onClick={exportData} className="flex items-center gap-2" variant="outline">
+          <Button onClick={exportData} className="flex items-center gap-2 flex-shrink-0" variant="outline" size="sm">
             <Download className="h-4 w-4" />
-            Esporta
+            <span className="hidden sm:inline">Esporta</span>
           </Button>
         </div>
       </div>
@@ -946,8 +950,8 @@ export default function AdminTimesheets() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-              <div className="space-y-2">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              <div className="space-y-2 sm:col-span-2 lg:col-span-1">
                 <label className="text-sm font-medium">Data</label>
                 <div className="flex items-center gap-1">
                   <Button
@@ -955,7 +959,7 @@ export default function AdminTimesheets() {
                     size="icon"
                     onClick={() => navigateDate('prev')}
                     title={getNavigationTooltip('prev')}
-                    className="h-10 w-10"
+                    className="h-10 w-10 flex-shrink-0"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
@@ -965,15 +969,15 @@ export default function AdminTimesheets() {
                       <Button
                         variant="outline"
                         className={cn(
-                          "flex-1 justify-start text-left font-normal h-10",
+                          "flex-1 justify-start text-left font-normal h-10 min-w-0",
                           !dateFilter && "text-muted-foreground"
                         )}
                       >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {getDateRangeText()}
+                        <CalendarIcon className="mr-2 h-4 w-4 flex-shrink-0" />
+                        <span className="truncate">{getDateRangeText()}</span>
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
+                    <PopoverContent className="w-auto p-0 z-50 bg-popover" align="start">
                       <CalendarComponent
                         mode="single"
                         selected={parseISO(dateFilter)}
@@ -993,7 +997,7 @@ export default function AdminTimesheets() {
                     size="icon"
                     onClick={() => navigateDate('next')}
                     title={getNavigationTooltip('next')}
-                    className="h-10 w-10"
+                    className="h-10 w-10 flex-shrink-0"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -1006,7 +1010,7 @@ export default function AdminTimesheets() {
                   <SelectTrigger>
                     <SelectValue placeholder="Tutti i dipendenti" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-50 bg-popover">
                     <SelectItem value="all">Tutti i dipendenti</SelectItem>
                     {employees.map((employee) => (
                       <SelectItem key={employee.user_id} value={employee.user_id}>
@@ -1023,7 +1027,7 @@ export default function AdminTimesheets() {
                   <SelectTrigger>
                     <SelectValue placeholder="Tutte le commesse" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-50 bg-popover">
                     <SelectItem value="all">Tutte le commesse</SelectItem>
                     {projects.map((project) => (
                       <SelectItem key={project.id} value={project.id}>
@@ -1043,12 +1047,13 @@ export default function AdminTimesheets() {
                 />
               </div>
 
-              <div className="flex items-end gap-2">
-                <Button variant="outline" onClick={loadTimesheets} className="flex-1">
+              <div className="flex flex-col sm:flex-row items-end gap-2 sm:col-span-2 lg:col-span-1">
+                <Button variant="outline" onClick={loadTimesheets} className="w-full sm:flex-1" size="sm">
                   Aggiorna
                 </Button>
-                <Button variant="default" onClick={goToToday} className="flex-1">
-                  {getTodayButtonText()}
+                <Button variant="default" onClick={goToToday} className="w-full sm:flex-1" size="sm">
+                  <span className="hidden sm:inline">{getTodayButtonText()}</span>
+                  <span className="sm:hidden">Oggi</span>
                 </Button>
               </div>
             </div>

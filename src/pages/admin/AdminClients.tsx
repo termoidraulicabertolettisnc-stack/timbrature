@@ -299,16 +299,17 @@ export default function AdminClients() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Gestione Clienti</h1>
           <p className="text-muted-foreground">
             Gestisci i clienti e i loro indirizzi per il calcolo delle trasferte
           </p>
         </div>
-        <Button onClick={openCreateDialog}>
+        <Button onClick={openCreateDialog} className="flex-shrink-0" size="sm">
           <Plus className="h-4 w-4 mr-2" />
-          Nuovo Cliente
+          <span className="hidden sm:inline">Nuovo Cliente</span>
+          <span className="sm:hidden">Nuovo</span>
         </Button>
       </div>
 

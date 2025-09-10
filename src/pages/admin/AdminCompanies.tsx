@@ -184,7 +184,7 @@ export default function AdminCompanies() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Gestione Aziende</h1>
           <p className="text-muted-foreground">
@@ -194,9 +194,10 @@ export default function AdminCompanies() {
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={handleNew}>
+            <Button onClick={handleNew} className="flex-shrink-0" size="sm">
               <Plus className="h-4 w-4 mr-2" />
-              Nuova Azienda
+              <span className="hidden sm:inline">Nuova Azienda</span>
+              <span className="sm:hidden">Nuova</span>
             </Button>
           </DialogTrigger>
           <DialogContent>

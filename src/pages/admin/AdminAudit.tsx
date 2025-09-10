@@ -195,16 +195,16 @@ export default function AdminAudit() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold text-foreground">Audit Log</h2>
           <p className="text-muted-foreground">
             Tracciamento di tutte le modifiche ai dati del sistema
           </p>
         </div>
-        <Button onClick={loadAuditLogs} className="flex items-center gap-2">
+        <Button onClick={loadAuditLogs} className="flex items-center gap-2 flex-shrink-0" size="sm">
           <RefreshCw className="h-4 w-4" />
-          Aggiorna
+          <span className="hidden sm:inline">Aggiorna</span>
         </Button>
       </div>
 

@@ -276,16 +276,17 @@ export default function AdminConsolidation() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold text-foreground">Consolidato Presenze</h2>
           <p className="text-muted-foreground">
             Analisi consolidata delle ore lavorate e delle presenze
           </p>
         </div>
-        <Button onClick={exportData} className="flex items-center gap-2">
+        <Button onClick={exportData} className="flex items-center gap-2 flex-shrink-0" size="sm">
           <Download className="h-4 w-4" />
-          Esporta Dati
+          <span className="hidden sm:inline">Esporta Dati</span>
+          <span className="sm:hidden">Esporta</span>
         </Button>
       </div>
 

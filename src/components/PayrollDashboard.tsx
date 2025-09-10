@@ -523,28 +523,29 @@ export default function PayrollDashboard() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h3 className="text-xl font-bold text-foreground">Vista Buste Paga</h3>
           <p className="text-sm text-muted-foreground">
             Riepilogo mensile per ufficio buste paga
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Button
             onClick={exportToExcel}
             variant="outline"
             size="sm"
-            className="gap-2"
+            className="gap-2 flex-shrink-0"
           >
             <Download className="h-4 w-4" />
-            Esporta Excel
+            <span className="hidden sm:inline">Esporta Excel</span>
+            <span className="sm:hidden">Excel</span>
           </Button>
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-32 sm:w-40">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-50 bg-popover">
               {Array.from({ length: 12 }, (_, i) => {
                 const date = new Date();
                 date.setMonth(date.getMonth() - i);
