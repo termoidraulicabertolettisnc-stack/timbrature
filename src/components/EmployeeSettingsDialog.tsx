@@ -8,8 +8,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { AlertTriangle, Save, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Save, RotateCcw, CalendarIcon } from 'lucide-react';
+import { format } from 'date-fns';
+import { it } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
+import { saveTemporalEmployeeSettings, recalculateTimesheetsFromDate } from '@/utils/temporalEmployeeSettings';
 
 interface EmployeeSettings {
   id?: string;
@@ -89,6 +96,11 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  
+  // Temporal settings state
+  const [applicationType, setApplicationType] = useState<'from_today' | 'from_date' | 'retroactive'>('from_today');
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -175,30 +187,64 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
 
       if (profileError) throw profileError;
 
+      // Prepare settings data (excluding temporal fields)
       const settingsData = {
         ...settings,
-        user_id: employee.id,
-        company_id: selectedCompanyId,
-        created_by: user.id,
-        updated_by: user.id,
-      } as any; // Cast to any to handle Supabase type compatibility
+        // Remove fields that shouldn't be included in the save
+        id: undefined,
+        user_id: undefined,
+        company_id: undefined,
+        created_at: undefined,
+        updated_at: undefined,
+        created_by: undefined,
+        updated_by: undefined,
+      };
 
-      // Use upsert to handle both insert and update cases
-      const { error } = await supabase
-        .from('employee_settings')
-        .upsert(settingsData, {
-          onConflict: 'user_id,company_id'
-        });
+      // Get from date for temporal save
+      let fromDate: string | undefined;
+      if (applicationType === 'from_date' && selectedDate) {
+        fromDate = selectedDate.toISOString().split('T')[0];
+      }
 
-      if (error) throw error;
+      // Save using temporal logic
+      const result = await saveTemporalEmployeeSettings(
+        employee.id,
+        selectedCompanyId,
+        settingsData,
+        applicationType,
+        fromDate
+      );
 
-      toast.success('Impostazioni salvate con successo');
+      if (!result.success) {
+        throw new Error(result.error || 'Errore nel salvataggio');
+      }
+
+      // If retroactive change, trigger recalculation
+      if (applicationType === 'retroactive') {
+        const recalcResult = await recalculateTimesheetsFromDate(employee.id, '1900-01-01');
+        if (!recalcResult.success) {
+          console.warn('Warning: Failed to recalculate timesheets:', recalcResult.error);
+          toast.success('Impostazioni salvate con successo. Avviso: alcuni calcoli potrebbero richiedere un aggiornamento manuale.');
+        } else {
+          toast.success('Impostazioni salvate con successo e calcoli aggiornati retroattivamente.');
+        }
+      } else if (applicationType === 'from_date' && fromDate) {
+        // For date-specific changes, recalculate from that date
+        const recalcResult = await recalculateTimesheetsFromDate(employee.id, fromDate);
+        if (!recalcResult.success) {
+          console.warn('Warning: Failed to recalculate timesheets:', recalcResult.error);
+        }
+        toast.success('Impostazioni salvate con successo. Le modifiche si applicano dal ' + format(selectedDate!, 'dd/MM/yyyy', { locale: it }));
+      } else {
+        toast.success('Impostazioni salvate con successo. Le modifiche si applicano da oggi.');
+      }
+
       setHasChanges(false);
       onEmployeeUpdate?.(); // Refresh the parent component
       onOpenChange(false);
     } catch (error) {
       console.error('Error saving settings:', error);
-      toast.error('Errore nel salvataggio delle impostazioni');
+      toast.error('Errore nel salvataggio delle impostazioni: ' + (error instanceof Error ? error.message : 'Errore sconosciuto'));
     } finally {
       setSaving(false);
     }
@@ -734,6 +780,106 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
             </Card>
           )}
         </div>
+
+        {/* Data di Applicazione Modifiche */}
+        <Card className="border-orange-200 bg-orange-50/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CalendarIcon className="h-5 w-5" />
+              Data di Applicazione Modifiche
+            </CardTitle>
+            <CardDescription>
+              Scegli quando le modifiche alle impostazioni entreranno in vigore
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <RadioGroup
+                value={applicationType}
+                onValueChange={(value: 'from_today' | 'from_date' | 'retroactive') => setApplicationType(value)}
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="from_today" id="from_today" />
+                  <Label htmlFor="from_today" className="cursor-pointer">
+                    <div>
+                      <div className="font-medium">Applica da oggi</div>
+                      <div className="text-sm text-muted-foreground">
+                        Le modifiche si applicano da oggi in avanti. I calcoli passati rimangono invariati.
+                      </div>
+                    </div>
+                  </Label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="from_date" id="from_date" />
+                  <Label htmlFor="from_date" className="cursor-pointer">
+                    <div>
+                      <div className="font-medium">Applica da data specifica</div>
+                      <div className="text-sm text-muted-foreground">
+                        Le modifiche si applicano dalla data selezionata in avanti.
+                      </div>
+                    </div>
+                  </Label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="retroactive" id="retroactive" />
+                  <Label htmlFor="retroactive" className="cursor-pointer">
+                    <div>
+                      <div className="font-medium text-orange-700">Modifica retroattiva totale</div>
+                      <div className="text-sm text-orange-600">
+                        ⚠️ Le modifiche si applicano a tutto lo storico. Tutti i calcoli passati verranno aggiornati.
+                      </div>
+                    </div>
+                  </Label>
+                </div>
+              </RadioGroup>
+
+              {applicationType === 'from_date' && (
+                <div className="ml-6 mt-4">
+                  <Label>Seleziona la data di inizio</Label>
+                  <Popover open={showDatePicker} onOpenChange={setShowDatePicker}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal mt-2",
+                          !selectedDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {selectedDate ? format(selectedDate, "dd MMMM yyyy", { locale: it }) : "Seleziona una data"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={(date) => {
+                          setSelectedDate(date);
+                          setShowDatePicker(false);
+                        }}
+                        disabled={(date) => date > new Date()}
+                        initialFocus
+                        className={cn("p-3 pointer-events-auto")}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
+
+              {applicationType === 'retroactive' && (
+                <Alert className="bg-orange-100 border-orange-300">
+                  <AlertTriangle className="h-4 w-4 text-orange-600" />
+                  <AlertDescription className="text-orange-800">
+                    <strong>Attenzione:</strong> La modifica retroattiva aggiornerà tutti i calcoli esistenti per questo dipendente. 
+                    Questa operazione potrebbe richiedere alcuni minuti e influenzerà report e export già generati.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

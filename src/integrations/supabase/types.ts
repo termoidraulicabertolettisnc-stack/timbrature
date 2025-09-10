@@ -332,6 +332,8 @@ export type Database = {
           updated_at: string
           updated_by: string | null
           user_id: string
+          valid_from: string
+          valid_to: string | null
         }
         Insert: {
           business_trip_rate_with_meal?: number | null
@@ -369,6 +371,8 @@ export type Database = {
           updated_at?: string
           updated_by?: string | null
           user_id: string
+          valid_from?: string
+          valid_to?: string | null
         }
         Update: {
           business_trip_rate_with_meal?: number | null
@@ -406,6 +410,8 @@ export type Database = {
           updated_at?: string
           updated_by?: string | null
           user_id?: string
+          valid_from?: string
+          valid_to?: string | null
         }
         Relationships: []
       }

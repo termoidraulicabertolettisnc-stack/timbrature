@@ -1,3 +1,5 @@
+import { getEmployeeSettingsForDate, TemporalEmployeeSettings } from './temporalEmployeeSettings';
+
 interface TimesheetData {
   start_time: string | null;
   end_time: string | null;
@@ -5,6 +7,8 @@ interface TimesheetData {
   lunch_end_time: string | null;
   lunch_duration_minutes: number | null;
   total_hours: number | null;
+  user_id?: string;
+  date?: string;
 }
 
 interface EmployeeSettings {
@@ -28,8 +32,9 @@ interface MealBenefits {
 }
 
 /**
- * Centralized calculation for meal benefits (vouchers and daily allowances)
+ * Centralized calculation for meal benefits (vouchers and daily allowances)  
  * This is the single source of truth for meal benefit calculations
+ * This is the synchronous version for backward compatibility
  */
 export function calculateMealBenefits(
   timesheet: TimesheetData,
@@ -70,6 +75,44 @@ export function calculateMealBenefits(
   const dailyAllowance = (policy === 'daily_allowance' || policy === 'both') && meetsDailyAllowanceMinimum;
 
   return { mealVoucher, dailyAllowance, workedHours };
+}
+
+/**
+ * Temporal version of meal benefits calculation
+ * This version fetches employee settings for a specific date
+ */
+export async function calculateMealBenefitsTemporal(
+  timesheet: TimesheetData,
+  employeeSettings?: EmployeeSettings,
+  companySettings?: CompanySettings,
+  targetDate?: string
+): Promise<MealBenefits> {
+  // If we have user_id and date, fetch temporal settings
+  let effectiveEmployeeSettings = employeeSettings;
+  
+  if (timesheet.user_id && (targetDate || timesheet.date)) {
+    const date = targetDate || timesheet.date!;
+    const temporalSettings = await getEmployeeSettingsForDate(timesheet.user_id, date);
+    
+    if (temporalSettings) {
+      effectiveEmployeeSettings = mapTemporalToEmployeeSettings(temporalSettings);
+    }
+  }
+
+  // Use the synchronous calculation with temporal settings
+  return calculateMealBenefits(timesheet, effectiveEmployeeSettings, companySettings);
+}
+
+/**
+ * Helper function to convert temporal settings to employee settings format
+ */
+function mapTemporalToEmployeeSettings(temporal: TemporalEmployeeSettings): EmployeeSettings {
+  return {
+    meal_allowance_policy: temporal.meal_allowance_policy,
+    meal_voucher_min_hours: temporal.meal_voucher_min_hours,
+    daily_allowance_min_hours: temporal.daily_allowance_min_hours,
+    lunch_break_type: temporal.lunch_break_type
+  };
 }
 
 /**
@@ -139,4 +182,27 @@ export function calculateDailyAllowanceEarned(
   companySettings?: CompanySettings
 ): boolean {
   return calculateMealBenefits(timesheet, employeeSettings, companySettings).dailyAllowance;
+}
+
+/**
+ * Temporal versions of legacy functions
+ */
+export async function calculateMealVoucherEarnedTemporal(
+  timesheet: TimesheetData,
+  employeeSettings?: EmployeeSettings,
+  companySettings?: CompanySettings,
+  targetDate?: string
+): Promise<boolean> {
+  const result = await calculateMealBenefitsTemporal(timesheet, employeeSettings, companySettings, targetDate);
+  return result.mealVoucher;
+}
+
+export async function calculateDailyAllowanceEarnedTemporal(
+  timesheet: TimesheetData,
+  employeeSettings?: EmployeeSettings,
+  companySettings?: CompanySettings,
+  targetDate?: string
+): Promise<boolean> {
+  const result = await calculateMealBenefitsTemporal(timesheet, employeeSettings, companySettings, targetDate);
+  return result.dailyAllowance;
 }
