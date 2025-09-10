@@ -119,6 +119,12 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
     loadEmployeeSettings();
   }, [employeeUserIds.join(',')]);
 
+  // Get meal benefits for a timesheet using centralized calculation
+  const getMealBenefits = (timesheet: TimesheetWithProfile) => {
+    const employeeSettings_for_user = employeeSettings[timesheet.user_id];
+    return calculateMealBenefits(timesheet, employeeSettings_for_user, companySettings);
+  };
+
   // Calcola le ore lavorate per un timesheet (anche se in corso)
   const calculateWorkedHours = (timesheet: TimesheetWithProfile): number => {
     if (!timesheet.start_time) return 0;
