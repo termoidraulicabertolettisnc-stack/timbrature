@@ -20,7 +20,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -57,8 +56,6 @@ export function AdminSidebar() {
       className={isCollapsed ? "w-14" : "w-60"}
       collapsible="icon"
     >
-      <SidebarTrigger className="m-2 self-end" />
-
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Amministrazione</SidebarGroupLabel>
