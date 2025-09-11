@@ -4,7 +4,7 @@ import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Clock, Zap, Moon, Utensils, Euro, Palmtree, HeartPulse, Car, User, Baby, BookOpen, PauseCircle } from 'lucide-react';
+import { Clock, Zap, Moon, Utensils, Euro, TreePalm, HeartPulse, Car, User, Baby, BookOpen, PauseCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { supabase } from '@/integrations/supabase/client';
@@ -874,7 +874,7 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
                   {absences.filter(absence => absence.date === currentDayStr).map((absence, absenceIndex) => {
                     const getAbsenceTypeLabel = (type: string) => {
                       const absenceTypes: Record<string, { label: string; icon: any; color: string; bgColor: string }> = {
-                        'vacation': { label: 'Ferie', icon: Palmtree, color: 'text-emerald-600', bgColor: 'bg-emerald-100' },
+                        'vacation': { label: 'Ferie', icon: TreePalm, color: 'text-emerald-600', bgColor: 'bg-emerald-100' },
                         'sick_leave': { label: 'Malattia', icon: HeartPulse, color: 'text-red-600', bgColor: 'bg-red-100' },
                         'business_trip': { label: 'Trasferta', icon: Car, color: 'text-blue-600', bgColor: 'bg-blue-100' },
                         'personal': { label: 'Personale', icon: User, color: 'text-purple-600', bgColor: 'bg-purple-100' },
