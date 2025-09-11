@@ -4,7 +4,7 @@ import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Clock, Zap, Moon, Utensils, Euro } from 'lucide-react';
+import { Clock, Zap, Moon, Utensils, Euro, Palmtree, HeartPulse, Car, User, Baby, BookOpen, PauseCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { supabase } from '@/integrations/supabase/client';
@@ -22,11 +22,12 @@ interface TimeBlock {
 
 interface TimesheetTimelineProps {
   timesheets: TimesheetWithProfile[];
+  absences: any[];
   weekDays: Date[];
   onTimesheetClick?: (timesheet: TimesheetWithProfile) => void;
 }
 
-export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: TimesheetTimelineProps) {
+export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetClick }: TimesheetTimelineProps) {
   const [selectedTimesheet, setSelectedTimesheet] = useState<string | null>(null);
   const [employeeSettings, setEmployeeSettings] = useState<any>({});
   const [companySettings, setCompanySettings] = useState<any>(null);
@@ -866,6 +867,74 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
                         className="absolute left-0 right-0 border-t border-border/30"
                         style={{ top: adjustedTop }}
                       />
+                    );
+                  })}
+
+                  {/* Assenze del giorno */}
+                  {absences.filter(absence => absence.date === currentDayStr).map((absence, absenceIndex) => {
+                    const getAbsenceTypeLabel = (type: string) => {
+                      const absenceTypes: Record<string, { label: string; icon: any; color: string; bgColor: string }> = {
+                        'vacation': { label: 'Ferie', icon: Palmtree, color: 'text-emerald-600', bgColor: 'bg-emerald-100' },
+                        'sick_leave': { label: 'Malattia', icon: HeartPulse, color: 'text-red-600', bgColor: 'bg-red-100' },
+                        'business_trip': { label: 'Trasferta', icon: Car, color: 'text-blue-600', bgColor: 'bg-blue-100' },
+                        'personal': { label: 'Personale', icon: User, color: 'text-purple-600', bgColor: 'bg-purple-100' },
+                        'maternity': { label: 'Maternità', icon: Baby, color: 'text-pink-600', bgColor: 'bg-pink-100' },
+                        'paternity': { label: 'Paternità', icon: Baby, color: 'text-blue-500', bgColor: 'bg-blue-100' },
+                        'study': { label: 'Studio', icon: BookOpen, color: 'text-indigo-600', bgColor: 'bg-indigo-100' },
+                        'unpaid_leave': { label: 'Aspettativa', icon: PauseCircle, color: 'text-gray-600', bgColor: 'bg-gray-100' }
+                      };
+                      return absenceTypes[type] || { label: type, icon: User, color: 'text-gray-600', bgColor: 'bg-gray-100' };
+                    };
+
+                    const absenceInfo = getAbsenceTypeLabel(absence.type);
+                    const IconComponent = absenceInfo.icon;
+
+                    return (
+                      <TooltipProvider key={`absence-${absenceIndex}`}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div
+                              className={cn(
+                                "absolute left-2 right-2 rounded border-2 border-dashed flex items-center justify-center",
+                                absenceInfo.bgColor,
+                                absenceInfo.color,
+                                "hover:opacity-80 transition-opacity"
+                              )}
+                              style={{
+                                top: 10,
+                                height: Math.max(40, TIMELINE_HEIGHT - 20),
+                                minHeight: '40px'
+                              }}
+                            >
+                              <div className="flex flex-col items-center gap-2">
+                                <IconComponent className="h-6 w-6" />
+                                <span className="text-xs font-medium text-center">
+                                  {absenceInfo.label}
+                                </span>
+                              </div>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs">
+                            <div className="space-y-2">
+                              <div className="font-medium">
+                                {absence.profiles?.first_name} {absence.profiles?.last_name}
+                              </div>
+                              <div className="flex items-center gap-2 text-sm">
+                                <IconComponent className="h-3 w-3" />
+                                <span className="font-medium">{absenceInfo.label}</span>
+                              </div>
+                              <div className="text-sm">
+                                <span className="font-medium">Data:</span> {format(parseISO(absence.date), 'dd/MM/yyyy', { locale: it })}
+                              </div>
+                              {absence.reason && (
+                                <div className="text-sm">
+                                  <span className="font-medium">Motivo:</span> {absence.reason}
+                                </div>
+                              )}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     );
                   })}
 

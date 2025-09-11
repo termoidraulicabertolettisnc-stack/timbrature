@@ -4,7 +4,7 @@ import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clock, Plane, HeartPulse, MapPin } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clock, Palmtree, HeartPulse, Car, User, Baby, BookOpen, PauseCircle } from 'lucide-react';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { BenefitsService } from '@/services/BenefitsService';
 import { useWeeklyRealtimeHours } from '@/hooks/use-weekly-realtime-hours';
@@ -78,16 +78,16 @@ export function WeeklyTimelineView({
   // Funzione per mappare i tipi di assenze in italiano
   const getAbsenceTypeLabel = (type: string) => {
     const absenceTypes: Record<string, { label: string; icon: any }> = {
-      'vacation': { label: 'Ferie', icon: Plane },
+      'vacation': { label: 'Ferie', icon: Palmtree },
       'sick_leave': { label: 'Malattia', icon: HeartPulse },
-      'business_trip': { label: 'Trasferta', icon: MapPin },
-      'personal': { label: 'Personale', icon: Clock },
-      'maternity': { label: 'Maternità', icon: HeartPulse },
-      'paternity': { label: 'Paternità', icon: HeartPulse },
-      'study': { label: 'Studio', icon: Clock },
-      'unpaid_leave': { label: 'Aspettativa', icon: Clock }
+      'business_trip': { label: 'Trasferta', icon: Car },
+      'personal': { label: 'Personale', icon: User },
+      'maternity': { label: 'Maternità', icon: Baby },
+      'paternity': { label: 'Paternità', icon: Baby },
+      'study': { label: 'Studio', icon: BookOpen },
+      'unpaid_leave': { label: 'Aspettativa', icon: PauseCircle }
     };
-    return absenceTypes[type] || { label: type, icon: Clock };
+    return absenceTypes[type] || { label: type, icon: User };
   };
   const employeeData = useMemo(() => {
     console.log('🔍 WeeklyTimelineView - Processing data:', {
@@ -443,7 +443,7 @@ export function WeeklyTimelineView({
                               onClick={() => onAddAbsence(day.date, employee.user_id)}
                               title="Aggiungi assenza"
                             >
-                              <Plane className="h-3 w-3" />
+                              <PauseCircle className="h-3 w-3" />
                             </Button>
                           </div>
                         </div>
