@@ -16,6 +16,9 @@ interface MonthlyCalendarViewProps {
   companySettings: any;
   onEditTimesheet: (timesheet: TimesheetWithProfile) => void;
   onDeleteTimesheet: (id: string) => void;
+  onNavigatePrevious: () => void;
+  onNavigateNext: () => void;
+  onNavigateToday: () => void;
 }
 
 interface DayData {
@@ -48,12 +51,12 @@ export function MonthlyCalendarView({
   employeeSettings,
   companySettings,
   onEditTimesheet,
-  onDeleteTimesheet
+  onDeleteTimesheet,
+  onNavigatePrevious,
+  onNavigateNext,
+  onNavigateToday
 }: MonthlyCalendarViewProps) {
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    return dateFilter ? parseISO(dateFilter) : new Date();
-  });
-
+  const currentMonth = parseISO(dateFilter);
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
   const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 });
@@ -170,10 +173,6 @@ export function MonthlyCalendarView({
     return Array.from(employeesMap.values());
   }, [timesheets, absences, employeeSettings, companySettings]);
 
-  const navigatePrevMonth = () => setCurrentMonth(prev => subMonths(prev, 1));
-  const navigateNextMonth = () => setCurrentMonth(prev => addMonths(prev, 1));
-  const navigateToday = () => setCurrentMonth(new Date());
-
   const getWeeks = () => {
     const weeks = [];
     for (let i = 0; i < calendarDays.length; i += 7) {
@@ -269,13 +268,13 @@ export function MonthlyCalendarView({
             Vista Mensile - {format(currentMonth, 'MMMM yyyy', { locale: it })}
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={navigatePrevMonth}>
+            <Button variant="outline" size="sm" onClick={onNavigatePrevious}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="sm" onClick={navigateToday}>
+            <Button variant="outline" size="sm" onClick={onNavigateToday}>
               Oggi
             </Button>
-            <Button variant="outline" size="sm" onClick={navigateNextMonth}>
+            <Button variant="outline" size="sm" onClick={onNavigateNext}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>

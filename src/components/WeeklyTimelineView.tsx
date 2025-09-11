@@ -1,12 +1,13 @@
-import React, { useMemo, useState } from 'react';
-import { format, startOfWeek, endOfWeek, eachDayOfInterval, parseISO, addWeeks, subWeeks, isSameDay } from 'date-fns';
+import React, { useMemo } from 'react';
+import { format, startOfWeek, endOfWeek, eachDayOfInterval, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, Clock, UtensilsCrossed } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clock, Plane, HeartPulse, MapPin } from 'lucide-react';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { BenefitsService } from '@/services/BenefitsService';
+import { useWeeklyRealtimeHours } from '@/hooks/use-weekly-realtime-hours';
 
 interface WeeklyTimelineViewProps {
   timesheets: TimesheetWithProfile[];
@@ -16,15 +17,22 @@ interface WeeklyTimelineViewProps {
   companySettings: any;
   onEditTimesheet: (timesheet: TimesheetWithProfile) => void;
   onDeleteTimesheet: (id: string) => void;
+  onNavigatePrevious: () => void;
+  onNavigateNext: () => void;
+  onNavigateToday: () => void;
 }
 
 interface TimelineEntry {
   timesheet: TimesheetWithProfile;
-  startHour: number;
-  endHour: number;
+  start_time: string;
+  end_time: string | null;
   duration: number;
-  isActive: boolean;
+  regular_duration: number;
+  overtime_duration: number;
+  position: number;
+  width: number;
   mealVoucher: boolean;
+  isActive: boolean;
 }
 
 interface DayTimeline {
@@ -53,17 +61,17 @@ export function WeeklyTimelineView({
   employeeSettings,
   companySettings,
   onEditTimesheet,
-  onDeleteTimesheet
+  onDeleteTimesheet,
+  onNavigatePrevious,
+  onNavigateNext,
+  onNavigateToday
 }: WeeklyTimelineViewProps) {
-  const [currentWeek, setCurrentWeek] = useState(() => {
-    return dateFilter ? parseISO(dateFilter) : new Date();
-  });
-
-  const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
+  const baseDate = parseISO(dateFilter);
+  const weekStart = startOfWeek(baseDate, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(baseDate, { weekStartsOn: 1 });
   const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
-  // Organizza i dati per dipendente e giorno
+  // Organizza i dati per dipendente
   const employeeData = useMemo(() => {
     const employeesMap = new Map<string, EmployeeWeekData>();
 
@@ -73,163 +81,200 @@ export function WeeklyTimelineView({
 
       const key = timesheet.user_id;
       if (!employeesMap.has(key)) {
+        const weekDayTimelines = weekDays.map(day => ({
+          date: format(day, 'yyyy-MM-dd'),
+          entries: [],
+          absences: []
+        }));
+
         employeesMap.set(key, {
           user_id: timesheet.user_id,
           first_name: timesheet.profiles.first_name,
           last_name: timesheet.profiles.last_name,
           email: timesheet.profiles.email,
-          days: weekDays.map(day => ({
-            date: format(day, 'yyyy-MM-dd'),
-            entries: [],
-            absences: []
-          })),
+          days: weekDayTimelines,
           totals: { total_hours: 0, overtime_hours: 0, night_hours: 0 }
         });
       }
-
-      const employee = employeesMap.get(key)!;
-      const dayIndex = weekDays.findIndex(day => isSameDay(day, parseISO(timesheet.date)));
-      
-      if (dayIndex !== -1) {
-        const day = employee.days[dayIndex];
-        
-        // Calcola ore timeline
-        let startHour = 0;
-        let endHour = 0;
-        let duration = 0;
-        let isActive = false;
-        
-        if (timesheet.start_time) {
-          const startTime = parseISO(timesheet.start_time);
-          startHour = startTime.getHours() + startTime.getMinutes() / 60;
-          
-          if (timesheet.end_time) {
-            const endTime = parseISO(timesheet.end_time);
-            endHour = endTime.getHours() + endTime.getMinutes() / 60;
-            duration = timesheet.total_hours || 0;
-          } else {
-            // Timesheet attivo
-            const currentTime = new Date();
-            endHour = currentTime.getHours() + currentTime.getMinutes() / 60;
-            const diffMs = currentTime.getTime() - startTime.getTime();
-            duration = Math.max(0, diffMs / (1000 * 60 * 60));
-            isActive = true;
-          }
-        }
-
-        // Calcola buoni pasto
-        const employeeSettingsForUser = employeeSettings[timesheet.user_id];
-        BenefitsService.validateTemporalUsage('WeeklyTimelineView.getMealBenefits');
-        const mealBenefits = BenefitsService.calculateMealBenefitsSync(
-          timesheet, 
-          employeeSettingsForUser, 
-          companySettings
-        );
-
-        day.entries.push({
-          timesheet,
-          startHour,
-          endHour,
-          duration,
-          isActive,
-          mealVoucher: mealBenefits.mealVoucher
-        });
-
-        employee.totals.total_hours += duration;
-        employee.totals.overtime_hours += timesheet.overtime_hours || 0;
-        employee.totals.night_hours += timesheet.night_hours || 0;
-      }
     });
 
-    // Aggiungi assenze
+    // Aggiungi le assenze
     absences.forEach(absence => {
       if (!absence.profiles) return;
 
-      const key = absence.user_id;
-      if (!employeesMap.has(key)) {
-        employeesMap.set(key, {
+      const employeeId = absence.user_id;
+      let employee = employeesMap.get(employeeId);
+      
+      if (!employee && absence.profiles) {
+        // Crea il dipendente se non esiste
+        const weekDayTimelines = weekDays.map(day => ({
+          date: format(day, 'yyyy-MM-dd'),
+          entries: [],
+          absences: []
+        }));
+
+        employee = {
           user_id: absence.user_id,
           first_name: absence.profiles.first_name,
           last_name: absence.profiles.last_name,
           email: absence.profiles.email,
-          days: weekDays.map(day => ({
-            date: format(day, 'yyyy-MM-dd'),
-            entries: [],
-            absences: []
-          })),
+          days: weekDayTimelines,
           totals: { total_hours: 0, overtime_hours: 0, night_hours: 0 }
-        });
+        };
+        employeesMap.set(employeeId, employee);
       }
 
-      const employee = employeesMap.get(key)!;
-      const dayIndex = weekDays.findIndex(day => isSameDay(day, parseISO(absence.date)));
-      
-      if (dayIndex !== -1) {
-        employee.days[dayIndex].absences.push(absence);
+      if (employee) {
+        const dayIndex = employee.days.findIndex(day => day.date === absence.date);
+        if (dayIndex !== -1) {
+          employee.days[dayIndex].absences.push(absence);
+        }
+      }
+    });
+
+    // Processa i timesheet per ogni dipendente
+    timesheets.forEach(timesheet => {
+      const employee = employeesMap.get(timesheet.user_id);
+      if (!employee) return;
+
+      const dayIndex = employee.days.findIndex(day => day.date === timesheet.date);
+      if (dayIndex === -1) return;
+
+      const day = employee.days[dayIndex];
+
+      // Calcola durata e posizione per timeline
+      if (timesheet.start_time) {
+        const startTime = new Date(`${timesheet.date}T${timesheet.start_time}`);
+        let endTime: Date;
+        let duration: number;
+        let isActive = false;
+
+        if (timesheet.end_time) {
+          endTime = new Date(`${timesheet.date}T${timesheet.end_time}`);
+          duration = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+        } else {
+          // Timesheet aperto - calcola in tempo reale
+          endTime = new Date();
+          duration = Math.max(0, (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60));
+          isActive = true;
+        }
+
+        // Calcola durate separate per orario normale e straordinario
+        const regularHours = Math.min(duration, 8);
+        const overtimeHours = Math.max(0, duration - 8);
+
+        // Posizione sulla timeline (0-24 ore)
+        const startHour = startTime.getHours() + startTime.getMinutes() / 60;
+        const endHour = Math.min(24, startHour + duration);
+        const position = (startHour / 24) * 100;
+        const width = ((endHour - startHour) / 24) * 100;
+
+        // Calcola meal voucher
+        const employeeSetting = employeeSettings[timesheet.user_id];
+        BenefitsService.validateTemporalUsage('WeeklyTimelineView');
+        const mealBenefits = BenefitsService.calculateMealBenefitsSync(
+          timesheet,
+          employeeSetting,
+          companySettings
+        );
+
+        const entry: TimelineEntry = {
+          timesheet,
+          start_time: timesheet.start_time,
+          end_time: timesheet.end_time,
+          duration,
+          regular_duration: regularHours,
+          overtime_duration: overtimeHours,
+          position,
+          width,
+          mealVoucher: mealBenefits.mealVoucher,
+          isActive
+        };
+
+        day.entries.push(entry);
+
+        // Aggiorna i totali
+        employee.totals.total_hours += duration;
+        employee.totals.overtime_hours += overtimeHours;
+        employee.totals.night_hours += timesheet.night_hours || 0;
       }
     });
 
     return Array.from(employeesMap.values());
   }, [timesheets, absences, weekDays, employeeSettings, companySettings]);
 
-  const navigatePrevWeek = () => setCurrentWeek(prev => subWeeks(prev, 1));
-  const navigateNextWeek = () => setCurrentWeek(prev => addWeeks(prev, 1));
-  const navigateToday = () => setCurrentWeek(new Date());
+  // Usa hook per aggiornamenti real-time
+  const realtimeData = useWeeklyRealtimeHours(timesheets);
 
-  const renderTimelineBar = (entry: TimelineEntry) => {
-    const startPercent = (entry.startHour / 24) * 100;
-    const durationPercent = (entry.duration / 24) * 100;
+  const renderTimelineEntry = (entry: TimelineEntry) => {
+    const regularWidth = (entry.regular_duration / entry.duration) * entry.width;
+    const overtimeWidth = (entry.overtime_duration / entry.duration) * entry.width;
     
     return (
       <div
         key={entry.timesheet.id}
-        className={`absolute h-6 rounded flex items-center justify-between px-2 text-xs text-white transition-all ${
-          entry.isActive 
-            ? 'bg-green-500 animate-pulse' 
-            : 'bg-primary hover:bg-primary/80'
-        }`}
-        style={{
-          left: `${startPercent}%`,
-          width: `${Math.max(durationPercent, 5)}%`
-        }}
-        title={`${format(parseISO(entry.timesheet.start_time!), 'HH:mm')} - ${
-          entry.timesheet.end_time 
-            ? format(parseISO(entry.timesheet.end_time), 'HH:mm')
-            : 'In corso'
-        } (${entry.duration.toFixed(1)}h)`}
+        className="absolute flex h-6 z-10"
+        style={{ left: `${entry.position}%`, width: `${entry.width}%` }}
       >
-        <div className="flex items-center gap-1">
-          <Clock className="h-3 w-3" />
-          <span>{entry.duration.toFixed(1)}h</span>
-        </div>
-        
-        <div className="flex items-center gap-1">
-          {entry.mealVoucher && <UtensilsCrossed className="h-3 w-3" />}
-          <div className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-4 w-4 p-0 text-white hover:text-white hover:bg-white/20"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEditTimesheet(entry.timesheet);
-              }}
-            >
-              <Edit className="h-3 w-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-4 w-4 p-0 text-white hover:text-red-200 hover:bg-red-500/20"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDeleteTimesheet(entry.timesheet.id);
-              }}
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
+        {/* Fascia orario normale */}
+        {entry.regular_duration > 0 && (
+          <div
+            className={`h-full bg-primary rounded-l-sm ${entry.overtime_duration === 0 ? 'rounded-r-sm' : ''} 
+              ${entry.isActive ? 'animate-pulse' : ''} 
+              cursor-pointer hover:bg-primary/80 transition-colors 
+              flex items-center justify-between px-2 text-white text-xs`}
+            style={{ width: `${(regularWidth / entry.width) * 100}%` }}
+            onClick={() => onEditTimesheet(entry.timesheet)}
+          >
+            <div className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              <span>{entry.regular_duration.toFixed(1)}h</span>
+            </div>
+            
+            <div className="flex items-center gap-1">
+              {entry.mealVoucher && <UtensilsCrossed className="h-3 w-3" />}
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-4 w-4 p-0 text-white hover:text-white hover:bg-white/20"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditTimesheet(entry.timesheet);
+                  }}
+                >
+                  <Edit className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-4 w-4 p-0 text-white hover:text-red-200 hover:bg-red-500/20"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteTimesheet(entry.timesheet.id);
+                  }}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
+        
+        {/* Fascia straordinari */}
+        {entry.overtime_duration > 0 && (
+          <div
+            className={`h-full bg-orange-500 rounded-r-sm 
+              ${entry.isActive ? 'animate-pulse' : ''} 
+              cursor-pointer hover:bg-orange-600 transition-colors 
+              flex items-center justify-center text-white text-xs font-medium`}
+            style={{ width: `${(overtimeWidth / entry.width) * 100}%` }}
+            onClick={() => onEditTimesheet(entry.timesheet)}
+            title={`Straordinari: ${entry.overtime_duration.toFixed(1)}h`}
+          >
+            +{entry.overtime_duration.toFixed(1)}h
+          </div>
+        )}
       </div>
     );
   };
@@ -245,13 +290,13 @@ export function WeeklyTimelineView({
             Vista Settimanale Timeline
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={navigatePrevWeek}>
+            <Button variant="outline" size="sm" onClick={onNavigatePrevious}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="sm" onClick={navigateToday}>
+            <Button variant="outline" size="sm" onClick={onNavigateToday}>
               Oggi
             </Button>
-            <Button variant="outline" size="sm" onClick={navigateNextWeek}>
+            <Button variant="outline" size="sm" onClick={onNavigateNext}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -298,54 +343,61 @@ export function WeeklyTimelineView({
                   <div className="space-y-4">
                     {/* Time markers header */}
                     <div className="relative h-6 border-b">
-                      {timeMarkers.map(hour => (
-                        <div
-                          key={hour}
-                          className="absolute text-xs text-muted-foreground"
-                          style={{ left: `${(hour / 24) * 100}%` }}
-                        >
-                          {hour < 24 && format(new Date().setHours(hour, 0, 0, 0), 'HH:mm')}
-                        </div>
-                      ))}
+                      <div className="absolute inset-0 flex">
+                        {timeMarkers.map(hour => (
+                          <div
+                            key={hour}
+                            className="flex-1 text-xs text-muted-foreground border-r border-muted-foreground/20 pl-1"
+                            style={{ width: '4.166%' }}
+                          >
+                            {hour < 24 && hour % 4 === 0 && `${hour}:00`}
+                          </div>
+                        ))}
+                      </div>
                     </div>
 
                     {/* Days timeline */}
-                    <div className="space-y-3">
-                      {employee.days.map((day, dayIndex) => (
-                        <div key={day.date} className="space-y-2">
-                          <div className="flex items-center gap-3">
-                            <div className="w-24 text-sm font-medium">
-                              {format(weekDays[dayIndex], 'EEE dd', { locale: it })}
-                            </div>
-                            <div className="flex-1 relative h-8 bg-muted/20 rounded border">
-                              {/* Time grid lines */}
-                              {timeMarkers.slice(0, 24).filter(h => h % 3 === 0).map(hour => (
-                                <div
-                                  key={hour}
-                                  className="absolute top-0 bottom-0 w-px bg-border"
-                                  style={{ left: `${(hour / 24) * 100}%` }}
-                                />
-                              ))}
-                              
-                              {/* Absences */}
-                              {day.absences.map(absence => (
-                                <div
-                                  key={absence.id}
-                                  className="absolute inset-0 bg-red-200 rounded flex items-center justify-center text-xs text-red-700"
-                                >
-                                  {absence.type === 'vacation' ? 'Ferie' : 
-                                   absence.type === 'sick' ? 'Malattia' : 
-                                   absence.type}
-                                </div>
-                              ))}
-                              
-                              {/* Timeline entries */}
-                              {day.entries.map(entry => renderTimelineBar(entry))}
-                            </div>
+                    {employee.days.map(day => (
+                      <div key={day.date} className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-medium min-w-[100px]">
+                            {format(parseISO(day.date), 'EEE dd/MM', { locale: it })}
+                          </h4>
+                          
+                          {/* Absences */}
+                          <div className="flex gap-1">
+                            {day.absences.map((absence, idx) => (
+                              <Badge
+                                key={idx}
+                                variant="secondary"
+                                className="text-xs gap-1"
+                              >
+                                {absence.type === 'sick_leave' && <HeartPulse className="h-3 w-3" />}
+                                {absence.type === 'vacation' && <Plane className="h-3 w-3" />}
+                                {absence.type === 'business_trip' && <MapPin className="h-3 w-3" />}
+                                {absence.type}
+                              </Badge>
+                            ))}
                           </div>
                         </div>
-                      ))}
-                    </div>
+
+                        <div className="relative h-8 bg-muted/30 rounded">
+                          {/* Hour grid lines */}
+                          <div className="absolute inset-0 flex">
+                            {timeMarkers.slice(0, 24).map(hour => (
+                              <div
+                                key={hour}
+                                className="border-r border-muted-foreground/10 h-full"
+                                style={{ width: '4.166%' }}
+                              />
+                            ))}
+                          </div>
+
+                          {/* Timeline entries */}
+                          {day.entries.map(renderTimelineEntry)}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>

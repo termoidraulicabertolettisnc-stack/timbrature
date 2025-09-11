@@ -114,6 +114,43 @@ export default function AdminTimesheets() {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
+  // Funzioni per navigazione date
+  const navigateToToday = () => {
+    setDateFilter(format(new Date(), 'yyyy-MM-dd'));
+  };
+
+  const navigatePrevious = () => {
+    const currentDate = parseISO(dateFilter);
+    let newDate: Date;
+    switch (activeView) {
+      case 'weekly':
+        newDate = subWeeks(currentDate, 1);
+        break;
+      case 'monthly':
+        newDate = subMonths(currentDate, 1);
+        break;
+      default: // daily
+        newDate = subDays(currentDate, 1);
+    }
+    setDateFilter(format(newDate, 'yyyy-MM-dd'));
+  };
+
+  const navigateNext = () => {
+    const currentDate = parseISO(dateFilter);
+    let newDate: Date;
+    switch (activeView) {
+      case 'weekly':
+        newDate = addWeeks(currentDate, 1);
+        break;
+      case 'monthly':
+        newDate = addMonths(currentDate, 1);
+        break;
+      default: // daily
+        newDate = addDays(currentDate, 1);
+    }
+    setDateFilter(format(newDate, 'yyyy-MM-dd'));
+  };
+
   // Stati per i dialog
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [insertDialogOpen, setInsertDialogOpen] = useState(false);
@@ -689,6 +726,9 @@ export default function AdminTimesheets() {
               setEditDialogOpen(true);
             }}
             onDeleteTimesheet={deleteTimesheet}
+            onNavigatePrevious={navigatePrevious}
+            onNavigateNext={navigateNext}
+            onNavigateToday={navigateToToday}
           />
         </TabsContent>
 
@@ -704,6 +744,9 @@ export default function AdminTimesheets() {
               setEditDialogOpen(true);
             }}
             onDeleteTimesheet={deleteTimesheet}
+            onNavigatePrevious={navigatePrevious}
+            onNavigateNext={navigateNext}
+            onNavigateToday={navigateToToday}
           />
         </TabsContent>
       </Tabs>
