@@ -80,11 +80,15 @@ export function MonthlyCalendarView({
   const employeeData = useMemo(() => {
     console.log('🔍 MonthlyCalendarView - Processing data:', {
       timesheets_count: timesheets.length,
+      absences_count: absences.length,
       dateFilter,
       currentMonth: format(currentMonth, 'yyyy-MM-dd'),
       monthStart: format(monthStart, 'yyyy-MM-dd'),
-      monthEnd: format(monthEnd, 'yyyy-MM-dd')
+      monthEnd: format(monthEnd, 'yyyy-MM-dd'),
+      sample_absence: absences[0]
     });
+    
+    console.log('🔍 MonthlyCalendarView - All absences:', absences);
 
     const employeesMap = new Map<string, EmployeeMonthData>();
 
@@ -164,10 +168,17 @@ export function MonthlyCalendarView({
     });
 
     // Aggiungi assenze
-    absences.forEach(absence => {
-      if (!absence.profiles) return;
+    console.log('🔍 MonthlyCalendarView - Adding absences, count:', absences.length);
+    absences.forEach((absence, index) => {
+      console.log(`🔍 MonthlyCalendarView - Processing absence ${index}:`, absence);
+      
+      if (!absence.profiles) {
+        console.log('🔍 MonthlyCalendarView - No profiles in absence, skipping');
+        return;
+      }
 
       const key = absence.user_id;
+      console.log('🔍 MonthlyCalendarView - Employee key:', key);
       if (!employeesMap.has(key)) {
         employeesMap.set(key, {
           user_id: absence.user_id,
@@ -181,8 +192,10 @@ export function MonthlyCalendarView({
 
       const employee = employeesMap.get(key)!;
       const date = absence.date;
+      console.log('🔍 MonthlyCalendarView - Adding absence to date:', date);
 
       if (!employee.days[date]) {
+        console.log('🔍 MonthlyCalendarView - Creating day entry for:', date);
         employee.days[date] = {
           date,
           timesheets: [],
@@ -194,6 +207,7 @@ export function MonthlyCalendarView({
         };
       }
 
+      console.log('🔍 MonthlyCalendarView - Adding absence to employee day');
       employee.days[date].absences.push(absence);
     });
 

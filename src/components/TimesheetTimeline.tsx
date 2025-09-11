@@ -871,7 +871,11 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
                   })}
 
                   {/* Assenze del giorno */}
-                  {absences.filter(absence => absence.date === currentDayStr).map((absence, absenceIndex) => {
+                  {(() => {
+                    const dayAbsences = absences.filter(absence => absence.date === currentDayStr);
+                    console.log(`🔍 TimesheetTimeline - Day ${currentDayStr} absences:`, dayAbsences);
+                    return dayAbsences;
+                  })().map((absence, absenceIndex) => {
                     const getAbsenceTypeLabel = (type: string) => {
                       const absenceTypes: Record<string, { label: string; icon: any; color: string; bgColor: string }> = {
                         'F': { label: 'Ferie/Permesso', icon: TreePalm, color: 'text-emerald-600', bgColor: 'bg-emerald-100' },

@@ -90,8 +90,11 @@ export function WeeklyTimelineView({
       timesheets_count: timesheets.length,
       absences_count: absences.length,
       dateFilter,
-      sample_timesheet: timesheets[0]
+      sample_timesheet: timesheets[0],
+      sample_absence: absences[0]
     });
+    
+    console.log('🔍 WeeklyTimelineView - All absences:', absences);
     
     const employeesMap = new Map<string, EmployeeWeekData>();
 
@@ -119,11 +122,19 @@ export function WeeklyTimelineView({
     });
 
     // Aggiungi le assenze
-    absences.forEach(absence => {
-      if (!absence.profiles) return;
+    console.log('🔍 WeeklyTimelineView - Adding absences, count:', absences.length);
+    absences.forEach((absence, index) => {
+      console.log(`🔍 WeeklyTimelineView - Processing absence ${index}:`, absence);
+      
+      if (!absence.profiles) {
+        console.log('🔍 WeeklyTimelineView - No profiles in absence, skipping');
+        return;
+      }
 
       const employeeId = absence.user_id;
       let employee = employeesMap.get(employeeId);
+      
+      console.log('🔍 WeeklyTimelineView - Employee found:', !!employee, 'for user_id:', employeeId);
       
       if (!employee && absence.profiles) {
         // Crea il dipendente se non esiste
@@ -147,7 +158,10 @@ export function WeeklyTimelineView({
       if (employee) {
         const dayIndex = employee.days.findIndex(day => day.date === absence.date);
         if (dayIndex !== -1) {
+          console.log('🔍 WeeklyTimelineView - Adding absence to day:', dayIndex, 'absence:', absence);
           employee.days[dayIndex].absences.push(absence);
+        } else {
+          console.log('🔍 WeeklyTimelineView - Day not found for absence date:', absence.date);
         }
       }
     });
