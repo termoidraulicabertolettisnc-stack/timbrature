@@ -65,10 +65,24 @@ export function MonthlyCalendarView({
 
   // Organizza i dati per dipendente
   const employeeData = useMemo(() => {
+    console.log('🔍 MonthlyCalendarView - Processing data:', {
+      timesheets_count: timesheets.length,
+      dateFilter,
+      currentMonth: format(currentMonth, 'yyyy-MM-dd'),
+      monthStart: format(monthStart, 'yyyy-MM-dd'),
+      monthEnd: format(monthEnd, 'yyyy-MM-dd')
+    });
+
     const employeesMap = new Map<string, EmployeeMonthData>();
 
     // Inizializza i dipendenti dai timesheet
     timesheets.forEach(timesheet => {
+      console.log('📋 Processing timesheet:', {
+        date: timesheet.date,
+        user: timesheet.profiles?.first_name,
+        start_time: timesheet.start_time
+      });
+      
       if (!timesheet.profiles) return;
 
       const key = timesheet.user_id;
@@ -170,8 +184,9 @@ export function MonthlyCalendarView({
       employee.days[date].absences.push(absence);
     });
 
+    console.log('📊 Final employee data:', Array.from(employeesMap.values()));
     return Array.from(employeesMap.values());
-  }, [timesheets, absences, employeeSettings, companySettings]);
+  }, [timesheets, absences, employeeSettings, companySettings, currentMonth]);
 
   const getWeeks = () => {
     const weeks = [];
