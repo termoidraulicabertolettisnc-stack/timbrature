@@ -534,145 +534,145 @@ export default function AdminTimesheets() {
         </div>
       </div>
 
-      {/* Filtri e controlli */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Filtri e Controlli
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Vista</label>
-              <Tabs value={activeView} onValueChange={(value) => setActiveView(value as any)}>
+      <Tabs value={activeView} onValueChange={(value) => setActiveView(value as any)} className="w-full">
+        {/* Filtri e controlli */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="h-5 w-5" />
+              Filtri e Controlli
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Vista</label>
                 <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="daily">Giornaliera</TabsTrigger>
                   <TabsTrigger value="weekly">Settimanale</TabsTrigger>
                   <TabsTrigger value="monthly">Mensile</TabsTrigger>
                 </TabsList>
-              </Tabs>
-            </div>
+              </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Data di riferimento</label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !dateFilter && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateFilter ? format(parseISO(dateFilter), 'PPP', { locale: it }) : <span>Seleziona data</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <CalendarComponent
-                    mode="single"
-                    selected={dateFilter ? parseISO(dateFilter) : undefined}
-                    onSelect={(date) => {
-                      if (date) {
-                        setDateFilter(format(date, 'yyyy-MM-dd'));
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Data di riferimento</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !dateFilter && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateFilter ? format(parseISO(dateFilter), 'PPP', { locale: it }) : <span>Seleziona data</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={dateFilter ? parseISO(dateFilter) : undefined}
+                      onSelect={(date) => {
+                        if (date) {
+                          setDateFilter(format(date, 'yyyy-MM-dd'));
+                        }
+                      }}
+                      disabled={(date) =>
+                        date > new Date() || date < new Date("1900-01-01")
                       }
-                    }}
-                    disabled={(date) =>
-                      date > new Date() || date < new Date("1900-01-01")
-                    }
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Dipendente</label>
+                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona dipendente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tutti i dipendenti</SelectItem>
+                    {employees.map((employee) => (
+                      <SelectItem key={employee.user_id} value={employee.user_id}>
+                        {employee.first_name} {employee.last_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Progetto</label>
+                <Select value={selectedProject} onValueChange={setSelectedProject}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona progetto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tutti i progetti</SelectItem>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Ricerca</label>
+                <Input
+                  type="text"
+                  placeholder="Cerca per nome o progetto..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              <div className="flex items-end space-x-2">
+                <Button onClick={loadTimesheets} className="flex-1">
+                  Aggiorna
+                </Button>
+              </div>
             </div>
+          </CardContent>
+        </Card>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Dipendente</label>
-              <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleziona dipendente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tutti i dipendenti</SelectItem>
-                  {employees.map((employee) => (
-                    <SelectItem key={employee.user_id} value={employee.user_id}>
-                      {employee.first_name} {employee.last_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        {/* Contenuto delle viste */}
+        <TabsContent value="daily" className="mt-6">
+          <DailyView 
+            timesheets={filteredTimesheets}
+            absences={absences}
+            onEditTimesheet={(timesheet) => {
+              setEditingTimesheet(timesheet);
+              setEditDialogOpen(true);
+            }}
+            onDeleteTimesheet={deleteTimesheet}
+          />
+        </TabsContent>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Progetto</label>
-              <Select value={selectedProject} onValueChange={setSelectedProject}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleziona progetto" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tutti i progetti</SelectItem>
-                  {projects.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        <TabsContent value="weekly" className="mt-6">
+          <WeeklyView 
+            timesheets={filteredTimesheets}
+            absences={absences}
+            dateFilter={dateFilter}
+            employeeSettings={employeeSettings}
+            companySettings={companySettings}
+          />
+        </TabsContent>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Ricerca</label>
-              <Input
-                type="text"
-                placeholder="Cerca per nome o progetto..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-
-            <div className="flex items-end space-x-2">
-              <Button onClick={loadTimesheets} className="flex-1">
-                Aggiorna
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Contenuto principale */}
-      {activeView === 'daily' && (
-        <DailyView 
-          timesheets={filteredTimesheets}
-          absences={absences}
-          onEditTimesheet={(timesheet) => {
-            setEditingTimesheet(timesheet);
-            setEditDialogOpen(true);
-          }}
-          onDeleteTimesheet={deleteTimesheet}
-        />
-      )}
-
-      {activeView === 'weekly' && (
-        <WeeklyView 
-          timesheets={filteredTimesheets}
-          absences={absences}
-          dateFilter={dateFilter}
-          employeeSettings={employeeSettings}
-          companySettings={companySettings}
-        />
-      )}
-
-      {activeView === 'monthly' && (
-        <MonthlyView 
-          timesheets={filteredTimesheets}
-          absences={absences}
-          dateFilter={dateFilter}
-          employeeSettings={employeeSettings}
-          companySettings={companySettings}
-        />
-      )}
+        <TabsContent value="monthly" className="mt-6">
+          <MonthlyView 
+            timesheets={filteredTimesheets}
+            absences={absences}
+            dateFilter={dateFilter}
+            employeeSettings={employeeSettings}
+            companySettings={companySettings}
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Dialog per modifica */}
       <TimesheetEditDialog
