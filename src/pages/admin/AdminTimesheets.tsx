@@ -28,6 +28,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { BenefitsService } from '@/services/BenefitsService';
+import { MonthlyCalendarView } from '@/components/MonthlyCalendarView';
+import { WeeklyTimelineView } from '@/components/WeeklyTimelineView';
 
 // Componente per mostrare ore con calcolo in tempo reale
 function HoursDisplay({ timesheet }: { timesheet: TimesheetWithProfile }) {
@@ -653,7 +655,7 @@ export default function AdminTimesheets() {
         </TabsContent>
 
         <TabsContent value="weekly" className="mt-6">
-          <WeeklyView 
+          <WeeklyTimelineView 
             timesheets={filteredTimesheets}
             absences={absences}
             dateFilter={dateFilter}
@@ -668,7 +670,7 @@ export default function AdminTimesheets() {
         </TabsContent>
 
         <TabsContent value="monthly" className="mt-6">
-          <MonthlyView 
+          <MonthlyCalendarView 
             timesheets={filteredTimesheets}
             absences={absences}
             dateFilter={dateFilter}
@@ -805,99 +807,6 @@ function DailyView({
   );
 }
 
-// Vista settimanale completa
-function WeeklyView({ 
-  timesheets, 
-  absences, 
-  dateFilter, 
-  employeeSettings, 
-  companySettings,
-  onEditTimesheet,
-  onDeleteTimesheet 
-}: {
-  timesheets: TimesheetWithProfile[];
-  absences: any[];
-  dateFilter: string;
-  employeeSettings: any;
-  companySettings: any;
-  onEditTimesheet: (timesheet: TimesheetWithProfile) => void;
-  onDeleteTimesheet: (id: string) => void;
-}) {
-  const [currentWeek, setCurrentWeek] = useState(() => {
-    return dateFilter ? parseISO(dateFilter) : new Date();
-  });
-
-  const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
-  const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
-
-  // Filtra i timesheet per la settimana corrente
-  const weekTimesheets = timesheets.filter(timesheet => {
-    const timesheetDate = parseISO(timesheet.date);
-    return timesheetDate >= weekStart && timesheetDate <= weekEnd;
-  });
-
-  // Aggrega i dati per dipendente e giorno
-  const weeklyData = useMemo(() => {
-    const employeesMap = new Map<string, EmployeeWeeklyData>();
-
-    weekTimesheets.forEach(timesheet => {
-      if (!timesheet.profiles) return;
-
-      const key = timesheet.user_id;
-      if (!employeesMap.has(key)) {
-        employeesMap.set(key, {
-          user_id: timesheet.user_id,
-          first_name: timesheet.profiles.first_name,
-          last_name: timesheet.profiles.last_name,
-          email: timesheet.profiles.email,
-          days: weekDays.map(day => ({
-            date: format(day, 'yyyy-MM-dd'),
-            total_hours: 0,
-            overtime_hours: 0,
-            night_hours: 0,
-            meal_vouchers: 0,
-            timesheets: [],
-            absences: []
-          })),
-          total_hours: 0,
-          overtime_hours: 0,
-          night_hours: 0,
-          meal_vouchers: 0
-        });
-      }
-
-      const employee = employeesMap.get(key)!;
-      const dayIndex = weekDays.findIndex(day => 
-        isSameDay(day, parseISO(timesheet.date))
-      );
-
-      if (dayIndex !== -1) {
-        employee.days[dayIndex].timesheets.push(timesheet);
-
-        // Calcola ore (con tempo reale per timesheet aperti)
-        let hours = 0;
-        if (timesheet.end_time) {
-          hours = timesheet.total_hours || 0;
-        } else if (timesheet.start_time) {
-          const startTime = new Date(timesheet.start_time);
-          const currentTime = new Date();
-          const diffMs = currentTime.getTime() - startTime.getTime();
-          hours = Math.max(0, diffMs / (1000 * 60 * 60));
-        }
-
-        employee.days[dayIndex].total_hours += hours;
-        employee.days[dayIndex].overtime_hours += timesheet.overtime_hours || 0;
-        employee.days[dayIndex].night_hours += timesheet.night_hours || 0;
-        employee.total_hours += hours;
-        employee.overtime_hours += timesheet.overtime_hours || 0;
-        employee.night_hours += timesheet.night_hours || 0;
-      }
-    });
-
-    return Array.from(employeesMap.values());
-  }, [weekTimesheets, weekDays]);
-
   const navigatePrevWeek = () => setCurrentWeek(prev => subWeeks(prev, 1));
   const navigateNextWeek = () => setCurrentWeek(prev => addWeeks(prev, 1));
   const navigateToday = () => setCurrentWeek(new Date());
@@ -1022,13 +931,6 @@ function WeeklyView({
   );
 }
 
-// Vista mensile completa  
-function MonthlyView({ 
-  timesheets, 
-  absences, 
-  dateFilter, 
-  employeeSettings, 
-  companySettings,
   onEditTimesheet,
   onDeleteTimesheet 
 }: {
