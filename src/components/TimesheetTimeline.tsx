@@ -4,7 +4,7 @@ import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Clock, Zap, Moon, Utensils, Euro, TreePalm, HeartPulse, Car, User, Baby, BookOpen, PauseCircle } from 'lucide-react';
+import { Clock, Zap, Moon, Utensils, Euro, TreePalm, Stethoscope, AlertTriangle, CircleSlash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { supabase } from '@/integrations/supabase/client';
@@ -874,16 +874,12 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
                   {absences.filter(absence => absence.date === currentDayStr).map((absence, absenceIndex) => {
                     const getAbsenceTypeLabel = (type: string) => {
                       const absenceTypes: Record<string, { label: string; icon: any; color: string; bgColor: string }> = {
-                        'vacation': { label: 'Ferie', icon: TreePalm, color: 'text-emerald-600', bgColor: 'bg-emerald-100' },
-                        'sick_leave': { label: 'Malattia', icon: HeartPulse, color: 'text-red-600', bgColor: 'bg-red-100' },
-                        'business_trip': { label: 'Trasferta', icon: Car, color: 'text-blue-600', bgColor: 'bg-blue-100' },
-                        'personal': { label: 'Personale', icon: User, color: 'text-purple-600', bgColor: 'bg-purple-100' },
-                        'maternity': { label: 'Maternità', icon: Baby, color: 'text-pink-600', bgColor: 'bg-pink-100' },
-                        'paternity': { label: 'Paternità', icon: Baby, color: 'text-blue-500', bgColor: 'bg-blue-100' },
-                        'study': { label: 'Studio', icon: BookOpen, color: 'text-indigo-600', bgColor: 'bg-indigo-100' },
-                        'unpaid_leave': { label: 'Aspettativa', icon: PauseCircle, color: 'text-gray-600', bgColor: 'bg-gray-100' }
+                        'F': { label: 'Ferie/Permesso', icon: TreePalm, color: 'text-emerald-600', bgColor: 'bg-emerald-100' },
+                        'M': { label: 'Malattia', icon: Stethoscope, color: 'text-red-600', bgColor: 'bg-red-100' },
+                        'I': { label: 'Infortunio', icon: AlertTriangle, color: 'text-orange-600', bgColor: 'bg-orange-100' },
+                        'PNR': { label: 'Permesso non retribuito', icon: CircleSlash, color: 'text-gray-600', bgColor: 'bg-gray-100' }
                       };
-                      return absenceTypes[type] || { label: type, icon: User, color: 'text-gray-600', bgColor: 'bg-gray-100' };
+                      return absenceTypes[type] || { label: type, icon: Clock, color: 'text-blue-600', bgColor: 'bg-blue-100' };
                     };
 
                     const absenceInfo = getAbsenceTypeLabel(absence.type);

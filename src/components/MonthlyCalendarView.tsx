@@ -4,7 +4,7 @@ import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clock, TreePalm, HeartPulse, Car, User, Baby, BookOpen, PauseCircle, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clock, TreePalm, Stethoscope, AlertTriangle, CircleSlash, Plus } from 'lucide-react';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { BenefitsService } from '@/services/BenefitsService';
 
@@ -70,16 +70,12 @@ export function MonthlyCalendarView({
   // Funzione per mappare i tipi di assenze in italiano
   const getAbsenceTypeLabel = (type: string) => {
       const absenceTypes: Record<string, { label: string; icon: any; color: string }> = {
-        'vacation': { label: 'Ferie', icon: TreePalm, color: 'text-emerald-600' },
-      'sick_leave': { label: 'Malattia', icon: HeartPulse, color: 'text-red-600' },
-      'business_trip': { label: 'Trasferta', icon: Car, color: 'text-blue-600' },
-      'personal': { label: 'Personale', icon: User, color: 'text-purple-600' },
-      'maternity': { label: 'Maternità', icon: Baby, color: 'text-pink-600' },
-      'paternity': { label: 'Paternità', icon: Baby, color: 'text-blue-500' },
-      'study': { label: 'Studio', icon: BookOpen, color: 'text-indigo-600' },
-      'unpaid_leave': { label: 'Aspettativa', icon: PauseCircle, color: 'text-gray-600' }
+        'F': { label: 'Ferie/Permesso', icon: TreePalm, color: 'text-emerald-600' },
+      'M': { label: 'Malattia', icon: Stethoscope, color: 'text-red-600' },
+      'I': { label: 'Infortunio', icon: AlertTriangle, color: 'text-orange-600' },
+      'PNR': { label: 'Permesso non retribuito', icon: CircleSlash, color: 'text-gray-600' }
     };
-    return absenceTypes[type] || { label: type, icon: User, color: 'text-gray-600' };
+    return absenceTypes[type] || { label: type, icon: Calendar, color: 'text-blue-600' };
   };
   const employeeData = useMemo(() => {
     console.log('🔍 MonthlyCalendarView - Processing data:', {

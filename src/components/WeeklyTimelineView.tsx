@@ -4,7 +4,7 @@ import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clock, TreePalm, HeartPulse, Car, User, Baby, BookOpen, PauseCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clock, TreePalm, Stethoscope, AlertTriangle, CircleSlash, Plus } from 'lucide-react';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { BenefitsService } from '@/services/BenefitsService';
 import { useWeeklyRealtimeHours } from '@/hooks/use-weekly-realtime-hours';
@@ -77,17 +77,13 @@ export function WeeklyTimelineView({
 
   // Funzione per mappare i tipi di assenze in italiano
   const getAbsenceTypeLabel = (type: string) => {
-    const absenceTypes: Record<string, { label: string; icon: any }> = {
-      'vacation': { label: 'Ferie', icon: TreePalm },
-      'sick_leave': { label: 'Malattia', icon: HeartPulse },
-      'business_trip': { label: 'Trasferta', icon: Car },
-      'personal': { label: 'Personale', icon: User },
-      'maternity': { label: 'Maternità', icon: Baby },
-      'paternity': { label: 'Paternità', icon: Baby },
-      'study': { label: 'Studio', icon: BookOpen },
-      'unpaid_leave': { label: 'Aspettativa', icon: PauseCircle }
+    const absenceTypes: Record<string, { label: string; icon: any; color: string }> = {
+      'F': { label: 'Ferie/Permesso', icon: TreePalm, color: 'text-emerald-600' },
+      'M': { label: 'Malattia', icon: Stethoscope, color: 'text-red-600' },
+      'I': { label: 'Infortunio', icon: AlertTriangle, color: 'text-orange-600' },
+      'PNR': { label: 'Permesso non retribuito', icon: CircleSlash, color: 'text-gray-600' }
     };
-    return absenceTypes[type] || { label: type, icon: User };
+    return absenceTypes[type] || { label: type, icon: Calendar, color: 'text-blue-600' };
   };
   const employeeData = useMemo(() => {
     console.log('🔍 WeeklyTimelineView - Processing data:', {
@@ -443,7 +439,7 @@ export function WeeklyTimelineView({
                               onClick={() => onAddAbsence(day.date, employee.user_id)}
                               title="Aggiungi assenza"
                             >
-                              <PauseCircle className="h-3 w-3" />
+                              <Plus className="h-3 w-3" />
                             </Button>
                           </div>
                         </div>
