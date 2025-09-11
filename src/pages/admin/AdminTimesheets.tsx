@@ -659,6 +659,11 @@ export default function AdminTimesheets() {
             dateFilter={dateFilter}
             employeeSettings={employeeSettings}
             companySettings={companySettings}
+            onEditTimesheet={(timesheet) => {
+              setEditingTimesheet(timesheet);
+              setEditDialogOpen(true);
+            }}
+            onDeleteTimesheet={deleteTimesheet}
           />
         </TabsContent>
 
@@ -669,6 +674,11 @@ export default function AdminTimesheets() {
             dateFilter={dateFilter}
             employeeSettings={employeeSettings}
             companySettings={companySettings}
+            onEditTimesheet={(timesheet) => {
+              setEditingTimesheet(timesheet);
+              setEditDialogOpen(true);
+            }}
+            onDeleteTimesheet={deleteTimesheet}
           />
         </TabsContent>
       </Tabs>
@@ -795,59 +805,458 @@ function DailyView({
   );
 }
 
-// Vista settimanale semplificata
+// Vista settimanale completa
 function WeeklyView({ 
   timesheets, 
   absences, 
   dateFilter, 
   employeeSettings, 
-  companySettings 
+  companySettings,
+  onEditTimesheet,
+  onDeleteTimesheet 
 }: {
   timesheets: TimesheetWithProfile[];
   absences: any[];
   dateFilter: string;
   employeeSettings: any;
   companySettings: any;
+  onEditTimesheet: (timesheet: TimesheetWithProfile) => void;
+  onDeleteTimesheet: (id: string) => void;
 }) {
-  // Implementazione base della vista settimanale
+  const [currentWeek, setCurrentWeek] = useState(() => {
+    return dateFilter ? parseISO(dateFilter) : new Date();
+  });
+
+  const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
+  const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
+
+  // Filtra i timesheet per la settimana corrente
+  const weekTimesheets = timesheets.filter(timesheet => {
+    const timesheetDate = parseISO(timesheet.date);
+    return timesheetDate >= weekStart && timesheetDate <= weekEnd;
+  });
+
+  // Aggrega i dati per dipendente e giorno
+  const weeklyData = useMemo(() => {
+    const employeesMap = new Map<string, EmployeeWeeklyData>();
+
+    weekTimesheets.forEach(timesheet => {
+      if (!timesheet.profiles) return;
+
+      const key = timesheet.user_id;
+      if (!employeesMap.has(key)) {
+        employeesMap.set(key, {
+          user_id: timesheet.user_id,
+          first_name: timesheet.profiles.first_name,
+          last_name: timesheet.profiles.last_name,
+          email: timesheet.profiles.email,
+          days: weekDays.map(day => ({
+            date: format(day, 'yyyy-MM-dd'),
+            total_hours: 0,
+            overtime_hours: 0,
+            night_hours: 0,
+            meal_vouchers: 0,
+            timesheets: [],
+            absences: []
+          })),
+          total_hours: 0,
+          overtime_hours: 0,
+          night_hours: 0,
+          meal_vouchers: 0
+        });
+      }
+
+      const employee = employeesMap.get(key)!;
+      const dayIndex = weekDays.findIndex(day => 
+        isSameDay(day, parseISO(timesheet.date))
+      );
+
+      if (dayIndex !== -1) {
+        employee.days[dayIndex].timesheets.push(timesheet);
+
+        // Calcola ore (con tempo reale per timesheet aperti)
+        let hours = 0;
+        if (timesheet.end_time) {
+          hours = timesheet.total_hours || 0;
+        } else if (timesheet.start_time) {
+          const startTime = new Date(timesheet.start_time);
+          const currentTime = new Date();
+          const diffMs = currentTime.getTime() - startTime.getTime();
+          hours = Math.max(0, diffMs / (1000 * 60 * 60));
+        }
+
+        employee.days[dayIndex].total_hours += hours;
+        employee.days[dayIndex].overtime_hours += timesheet.overtime_hours || 0;
+        employee.days[dayIndex].night_hours += timesheet.night_hours || 0;
+        employee.total_hours += hours;
+        employee.overtime_hours += timesheet.overtime_hours || 0;
+        employee.night_hours += timesheet.night_hours || 0;
+      }
+    });
+
+    return Array.from(employeesMap.values());
+  }, [weekTimesheets, weekDays]);
+
+  const navigatePrevWeek = () => setCurrentWeek(prev => subWeeks(prev, 1));
+  const navigateNextWeek = () => setCurrentWeek(prev => addWeeks(prev, 1));
+  const navigateToday = () => setCurrentWeek(new Date());
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Vista Settimanale</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Vista Settimanale
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={navigatePrevWeek}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={navigateToday}>
+              Oggi
+            </Button>
+            <Button variant="outline" size="sm" onClick={navigateNextWeek}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <CardDescription>
+          {format(weekStart, 'dd MMM', { locale: it })} - {format(weekEnd, 'dd MMM yyyy', { locale: it })}
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="text-center py-8 text-muted-foreground">
-          Vista settimanale semplificata - {timesheets.length} timesheet trovati
-        </div>
+        {weeklyData.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            Nessun timesheet trovato per questa settimana
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {weeklyData.map(employee => (
+              <Card key={employee.user_id} className="border-l-4 border-l-primary">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">
+                      {employee.first_name} {employee.last_name}
+                    </CardTitle>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>Totale: {employee.total_hours.toFixed(1)}h</span>
+                      {employee.overtime_hours > 0 && (
+                        <span className="text-orange-600">
+                          Straord: {employee.overtime_hours.toFixed(1)}h
+                        </span>
+                      )}
+                      {employee.night_hours > 0 && (
+                        <span className="text-blue-600">
+                          Notte: {employee.night_hours.toFixed(1)}h
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-7 gap-2">
+                    {employee.days.map((day, dayIndex) => (
+                      <div key={day.date} className="space-y-2">
+                        <div className="text-center text-xs font-medium text-muted-foreground">
+                          {format(weekDays[dayIndex], 'EEE dd', { locale: it })}
+                        </div>
+                        <div className="min-h-[80px] p-2 rounded border bg-muted/20">
+                          {day.timesheets.length > 0 ? (
+                            <div className="space-y-1">
+                              {day.timesheets.map(timesheet => (
+                                <div key={timesheet.id} className="text-xs space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-medium">
+                                      <HoursDisplay timesheet={timesheet} />
+                                    </span>
+                                    <div className="flex gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0"
+                                        onClick={() => onEditTimesheet(timesheet)}
+                                      >
+                                        <Edit className="h-3 w-3" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                                        onClick={() => onDeleteTimesheet(timesheet.id)}
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    {timesheet.start_time && format(parseISO(timesheet.start_time), 'HH:mm')}
+                                    {timesheet.end_time && ` - ${format(parseISO(timesheet.end_time), 'HH:mm')}`}
+                                    {!timesheet.end_time && timesheet.start_time && ' - In corso'}
+                                  </div>
+                                  {timesheet.projects && (
+                                    <div className="text-muted-foreground truncate">
+                                      {timesheet.projects.name}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center text-muted-foreground text-xs">
+                              Nessun timesheet
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-// Vista mensile semplificata  
+// Vista mensile completa  
 function MonthlyView({ 
   timesheets, 
   absences, 
   dateFilter, 
   employeeSettings, 
-  companySettings 
+  companySettings,
+  onEditTimesheet,
+  onDeleteTimesheet 
 }: {
   timesheets: TimesheetWithProfile[];
   absences: any[];
   dateFilter: string;
   employeeSettings: any;
   companySettings: any;
+  onEditTimesheet: (timesheet: TimesheetWithProfile) => void;
+  onDeleteTimesheet: (id: string) => void;
 }) {
-  // Implementazione base della vista mensile
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    return dateFilter ? parseISO(dateFilter) : new Date();
+  });
+
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(currentMonth);
+
+  // Filtra i timesheet per il mese corrente
+  const monthTimesheets = timesheets.filter(timesheet => {
+    const timesheetDate = parseISO(timesheet.date);
+    return timesheetDate >= monthStart && timesheetDate <= monthEnd;
+  });
+
+  // Aggrega i dati per dipendente
+  const monthlyData = useMemo(() => {
+    const employeesMap = new Map<string, EmployeeMonthlyData>();
+
+    monthTimesheets.forEach(timesheet => {
+      if (!timesheet.profiles) return;
+
+      const key = timesheet.user_id;
+      if (!employeesMap.has(key)) {
+        employeesMap.set(key, {
+          user_id: timesheet.user_id,
+          first_name: timesheet.profiles.first_name,
+          last_name: timesheet.profiles.last_name,
+          email: timesheet.profiles.email,
+          days: [],
+          total_hours: 0,
+          overtime_hours: 0,
+          night_hours: 0,
+          meal_vouchers: 0
+        });
+      }
+
+      const employee = employeesMap.get(key)!;
+      
+      // Calcola ore (con tempo reale per timesheet aperti)
+      let hours = 0;
+      if (timesheet.end_time) {
+        hours = timesheet.total_hours || 0;
+      } else if (timesheet.start_time) {
+        const startTime = new Date(timesheet.start_time);
+        const currentTime = new Date();
+        const diffMs = currentTime.getTime() - startTime.getTime();
+        hours = Math.max(0, diffMs / (1000 * 60 * 60));
+      }
+
+      employee.total_hours += hours;
+      employee.overtime_hours += timesheet.overtime_hours || 0;
+      employee.night_hours += timesheet.night_hours || 0;
+
+      // Aggrega per giorno
+      const existingDay = employee.days.find(d => d.date === timesheet.date);
+      if (existingDay) {
+        existingDay.timesheets.push(timesheet);
+        existingDay.total_hours += hours;
+        existingDay.overtime_hours += timesheet.overtime_hours || 0;
+        existingDay.night_hours += timesheet.night_hours || 0;
+      } else {
+        employee.days.push({
+          date: timesheet.date,
+          total_hours: hours,
+          overtime_hours: timesheet.overtime_hours || 0,
+          night_hours: timesheet.night_hours || 0,
+          meal_vouchers: 0,
+          timesheets: [timesheet],
+          absences: []
+        });
+      }
+    });
+
+    return Array.from(employeesMap.values());
+  }, [monthTimesheets]);
+
+  const navigatePrevMonth = () => setCurrentMonth(prev => subMonths(prev, 1));
+  const navigateNextMonth = () => setCurrentMonth(prev => addMonths(prev, 1));
+  const navigateToday = () => setCurrentMonth(new Date());
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Vista Mensile</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Vista Mensile
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={navigatePrevMonth}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={navigateToday}>
+              Oggi
+            </Button>
+            <Button variant="outline" size="sm" onClick={navigateNextMonth}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <CardDescription>
+          {format(currentMonth, 'MMMM yyyy', { locale: it })}
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="text-center py-8 text-muted-foreground">
-          Vista mensile semplificata - {timesheets.length} timesheet trovati
-        </div>
+        {monthlyData.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            Nessun timesheet trovato per questo mese
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {monthlyData.map(employee => (
+              <Card key={employee.user_id} className="border-l-4 border-l-primary">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">
+                      {employee.first_name} {employee.last_name}
+                    </CardTitle>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>Totale: {employee.total_hours.toFixed(1)}h</span>
+                      {employee.overtime_hours > 0 && (
+                        <span className="text-orange-600">
+                          Straord: {employee.overtime_hours.toFixed(1)}h
+                        </span>
+                      )}
+                      {employee.night_hours > 0 && (
+                        <span className="text-blue-600">
+                          Notte: {employee.night_hours.toFixed(1)}h
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Collapsible>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" className="w-full justify-between">
+                        <span>Dettagli giorni lavorati ({employee.days.length} giorni)</span>
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="space-y-2 mt-4">
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Data</TableHead>
+                              <TableHead>Ore Totali</TableHead>
+                              <TableHead>Straordinari</TableHead>
+                              <TableHead>Progetti</TableHead>
+                              <TableHead>Azioni</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {employee.days
+                              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                              .map(day => (
+                                <TableRow key={day.date}>
+                                  <TableCell className="font-medium">
+                                    {format(parseISO(day.date), 'dd/MM/yyyy')}
+                                  </TableCell>
+                                  <TableCell>
+                                    {day.timesheets.length > 0 ? (
+                                      <div className="space-y-1">
+                                        {day.timesheets.map(timesheet => (
+                                          <HoursDisplay key={timesheet.id} timesheet={timesheet} />
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      `${day.total_hours.toFixed(1)}h`
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    {day.overtime_hours > 0 ? `${day.overtime_hours.toFixed(1)}h` : '-'}
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="space-y-1">
+                                      {day.timesheets.map(timesheet => (
+                                        <div key={timesheet.id} className="text-xs">
+                                          {timesheet.projects?.name || 'Nessun progetto'}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center gap-2">
+                                      {day.timesheets.map(timesheet => (
+                                        <div key={timesheet.id} className="flex gap-1">
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => onEditTimesheet(timesheet)}
+                                          >
+                                            <Edit className="h-4 w-4" />
+                                          </Button>
+                                          <Button
+                                            variant="destructive"
+                                            size="sm"
+                                            onClick={() => onDeleteTimesheet(timesheet.id)}
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
