@@ -1,6 +1,6 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, Stethoscope, Shield, DollarSign } from 'lucide-react';
+import { TreePalm, Stethoscope, AlertTriangle, CircleSlash } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface AbsenceIndicatorProps {
@@ -13,21 +13,21 @@ export function AbsenceIndicator({ absences, className = "" }: AbsenceIndicatorP
 
   const getAbsenceIcon = (type: string) => {
     switch (type) {
-      case 'F': return <Calendar className="h-3 w-3" />;
-      case 'M': return <Stethoscope className="h-3 w-3" />;
-      case 'I': return <Shield className="h-3 w-3" />;
-      case 'PNR': return <DollarSign className="h-3 w-3" />;
-      default: return <Calendar className="h-3 w-3" />;
+      case 'F': return <TreePalm className="h-4 w-4" />;
+      case 'M': return <Stethoscope className="h-4 w-4" />;
+      case 'I': return <AlertTriangle className="h-4 w-4" />;
+      case 'PNR': return <CircleSlash className="h-4 w-4" />;
+      default: return <TreePalm className="h-4 w-4" />;
     }
   };
 
   const getAbsenceColor = (type: string) => {
     switch (type) {
-      case 'F': return 'bg-blue-100 text-blue-800 hover:bg-blue-200';
+      case 'F': return 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200';
       case 'M': return 'bg-red-100 text-red-800 hover:bg-red-200';
       case 'I': return 'bg-orange-100 text-orange-800 hover:bg-orange-200';
       case 'PNR': return 'bg-gray-100 text-gray-800 hover:bg-gray-200';
-      default: return 'bg-blue-100 text-blue-800 hover:bg-blue-200';
+      default: return 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200';
     }
   };
 
@@ -47,7 +47,7 @@ export function AbsenceIndicator({ absences, className = "" }: AbsenceIndicatorP
         <Tooltip key={index}>
           <TooltipTrigger asChild>
             <Badge 
-              className={`${getAbsenceColor(absence.absence_type)} cursor-pointer flex items-center gap-1 text-xs px-1 py-0.5`}
+              className={`${getAbsenceColor(absence.absence_type)} cursor-pointer flex items-center gap-1 text-xs px-2 py-1`}
             >
               {getAbsenceIcon(absence.absence_type)}
               <span className="hidden sm:inline">{getAbsenceLabel(absence.absence_type)}</span>

@@ -4,10 +4,11 @@ import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clock, TreePalm, Stethoscope, AlertTriangle, CircleSlash, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clock, Plus } from 'lucide-react';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { BenefitsService } from '@/services/BenefitsService';
 import { useWeeklyRealtimeHours } from '@/hooks/use-weekly-realtime-hours';
+import { AbsenceIndicator } from '@/components/AbsenceIndicator';
 
 interface WeeklyTimelineViewProps {
   timesheets: TimesheetWithProfile[];
@@ -75,16 +76,6 @@ export function WeeklyTimelineView({
   const weekEnd = endOfWeek(baseDate, { weekStartsOn: 1 });
   const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
-  // Funzione per mappare i tipi di assenze in italiano
-  const getAbsenceTypeLabel = (type: string) => {
-    const absenceTypes: Record<string, { label: string; icon: any; color: string }> = {
-      'F': { label: 'Ferie/Permesso', icon: TreePalm, color: 'text-emerald-600' },
-      'M': { label: 'Malattia', icon: Stethoscope, color: 'text-red-600' },
-      'I': { label: 'Infortunio', icon: AlertTriangle, color: 'text-orange-600' },
-      'PNR': { label: 'Permesso non retribuito', icon: CircleSlash, color: 'text-gray-600' }
-    };
-    return absenceTypes[type] || { label: type, icon: Calendar, color: 'text-blue-600' };
-  };
   const employeeData = useMemo(() => {
     console.log('🔍 WeeklyTimelineView - Processing data:', {
       timesheets_count: timesheets.length,
@@ -419,20 +410,7 @@ export function WeeklyTimelineView({
                           
                           {/* Absences */}
                           <div className="flex gap-1">
-                            {day.absences.map((absence, idx) => {
-                              const absenceInfo = getAbsenceTypeLabel(absence.absence_type);
-                              const IconComponent = absenceInfo.icon;
-                              return (
-                                <Badge
-                                  key={idx}
-                                  variant="destructive"
-                                  className="text-xs gap-1 bg-red-100 text-red-800 border-red-200"
-                                >
-                                  <IconComponent className="h-3 w-3" />
-                                  {absenceInfo.label}
-                                </Badge>
-                              );
-                            })}
+                            <AbsenceIndicator absences={day.absences} />
                           </div>
                           
                           {/* Pulsanti per aggiungere timbrature/assenze */}
