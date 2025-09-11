@@ -882,7 +882,7 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
                       return absenceTypes[type] || { label: type, icon: Clock, color: 'text-blue-600', bgColor: 'bg-blue-100' };
                     };
 
-                    const absenceInfo = getAbsenceTypeLabel(absence.type);
+                    const absenceInfo = getAbsenceTypeLabel(absence.absence_type);
                     const IconComponent = absenceInfo.icon;
 
                     return (

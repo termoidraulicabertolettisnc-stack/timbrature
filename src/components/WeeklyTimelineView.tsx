@@ -406,7 +406,7 @@ export function WeeklyTimelineView({
                           {/* Absences */}
                           <div className="flex gap-1">
                             {day.absences.map((absence, idx) => {
-                              const absenceInfo = getAbsenceTypeLabel(absence.type);
+                              const absenceInfo = getAbsenceTypeLabel(absence.absence_type);
                               const IconComponent = absenceInfo.icon;
                               return (
                                 <Badge

@@ -254,7 +254,7 @@ export function MonthlyCalendarView({
         {hasAbsence ? (
           <div className="space-y-1">
             {dayData.absences.map((absence, idx) => {
-              const absenceInfo = getAbsenceTypeLabel(absence.type);
+              const absenceInfo = getAbsenceTypeLabel(absence.absence_type);
               const IconComponent = absenceInfo.icon;
               return (
                 <div key={idx} className="flex items-center gap-1">
