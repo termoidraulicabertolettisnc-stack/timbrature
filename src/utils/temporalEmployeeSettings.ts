@@ -164,8 +164,8 @@ export async function saveTemporalEmployeeSettings(
       }
       console.log('✅ Previous settings deleted');
     } else {
-      // Chiudi le impostazioni precedenti che si sovrappongono
-      console.log('📅 Closing overlapping settings...');
+      // Chiudi TUTTI i record attivi precedenti per questo utente
+      console.log('📅 Closing all active settings...');
       const dayBefore = new Date(validFrom);
       dayBefore.setDate(dayBefore.getDate() - 1);
       const validToDate = dayBefore.toISOString().split('T')[0];
@@ -174,14 +174,13 @@ export async function saveTemporalEmployeeSettings(
         .from('employee_settings')
         .update({ valid_to: validToDate })
         .eq('user_id', userId)
-        .is('valid_to', null)
-        .lte('valid_from', validToDate);
+        .is('valid_to', null); // Chiudi tutti i record attivi, indipendentemente dalla data di inizio
 
       if (updateError) {
         console.error('❌ Update error:', updateError);
         return { success: false, error: updateError.message };
       }
-      console.log('✅ Previous settings closed');
+      console.log('✅ All active settings closed');
     }
 
     // STEP 4: Inserisci le nuove impostazioni con retry logic
