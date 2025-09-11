@@ -679,7 +679,7 @@ export default function AdminTimesheets() {
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         timesheet={editingTimesheet}
-        onSave={() => {
+        onSuccess={() => {
           loadTimesheets();
           setEditDialogOpen(false);
           setEditingTimesheet(null);
