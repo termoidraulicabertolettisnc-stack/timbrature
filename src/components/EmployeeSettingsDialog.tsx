@@ -197,18 +197,13 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
       if (profileError) throw profileError;
       console.log('✅ Company assignment updated');
 
-      // Prepare settings data (excluding temporal fields)
-      const settingsData = {
-        ...settings,
-        // Remove fields that shouldn't be included in the save
-        id: undefined,
-        user_id: undefined,
-        company_id: undefined,
-        created_at: undefined,
-        updated_at: undefined,
-        created_by: undefined,
-        updated_by: undefined,
-      };
+      // Prepare settings data (excluding system fields)
+      const {
+        id,
+        user_id,
+        company_id,
+        ...settingsData
+      } = settings;
 
       // Get from date for temporal save
       let fromDate: string | undefined;

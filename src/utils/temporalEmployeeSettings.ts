@@ -186,12 +186,12 @@ export async function saveTemporalEmployeeSettings(
 
     // STEP 4: Inserisci le nuove impostazioni con retry logic
     const insertData = {
+      ...settings,
       user_id: userId,
       company_id: companyId,
       valid_from: validFrom,
       valid_to: null,
-      created_by: createdBy,
-      ...settings
+      created_by: createdBy
     };
     
     console.log('📝 Inserting employee settings with retry logic:', insertData);
