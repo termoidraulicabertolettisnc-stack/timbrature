@@ -107,29 +107,28 @@ export default function AdminTimesheets() {
   const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   
-  // Edit dialog state
-  const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  
-  // Insert dialog states
-  const [timesheetInsertDialogOpen, setTimesheetInsertDialogOpen] = useState(false);
-  const [absenceInsertDialogOpen, setAbsenceInsertDialogOpen] = useState(false);
-  const [selectedDateForDialog, setSelectedDateForDialog] = useState<Date | undefined>(undefined);
-  
-  // Filtri
+  // Stati per i filtri
   const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
-  // State per l'aggiornamento in tempo reale
-  const [realtimeUpdateTrigger, setRealtimeUpdateTrigger] = useState(0);
-  
-  // States for company and employee settings (needed for meal benefit calculations)
+  // Stati per i dialog
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [insertDialogOpen, setInsertDialogOpen] = useState(false);
+  const [absenceDialogOpen, setAbsenceDialogOpen] = useState(false);
+  const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
+  const [selectedTimesheetDate, setSelectedTimesheetDate] = useState<string>('');
+
+  // Stati per le impostazioni
   const [companySettings, setCompanySettings] = useState<any>(null);
   const [employeeSettings, setEmployeeSettings] = useState<{[key: string]: any}>({});
 
-  // Aggiorna ogni minuto per mostrare le ore in tempo reale
+  // Trigger per aggiornamenti in tempo reale
+  const [realtimeUpdateTrigger, setRealtimeUpdateTrigger] = useState(0);
+
+  // Aggiorna automaticamente ogni minuto per mantenere il calcolo ore in tempo reale
   useEffect(() => {
     const interval = setInterval(() => {
       setRealtimeUpdateTrigger(prev => prev + 1);
@@ -141,7 +140,7 @@ export default function AdminTimesheets() {
   // Setup realtime subscription for timesheets
   useEffect(() => {
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel('admin-timesheets-realtime')
       .on(
         'postgres_changes',
         {
@@ -149,9 +148,8 @@ export default function AdminTimesheets() {
           schema: 'public',
           table: 'timesheets'
         },
-        (payload) => {
-          console.log('💫 Timesheet realtime update:', payload);
-          // Ricarica i dati quando ci sono cambiamenti
+        () => {
+          console.log('🔄 Ricaricamento timesheets per cambio real-time');
           loadTimesheets();
         }
       )
@@ -163,41 +161,52 @@ export default function AdminTimesheets() {
   }, []);
 
   useEffect(() => {
-    loadInitialData();
-    loadSettings();
-  }, []);
+    if (user) {
+      loadEmployees();
+      loadProjects();
+      loadSettings();
+      loadTimesheets();
+    }
+  }, [user, selectedEmployee, selectedProject, dateFilter, activeView]);
 
+  // Forza il re-render per aggiornare le ore in tempo reale
   useEffect(() => {
-    loadTimesheets();
-  }, [selectedEmployee, selectedProject, dateFilter, activeView, realtimeUpdateTrigger]);
+    // Questo effect viene triggerato ogni minuto per aggiornare le ore in tempo reale
+  }, [realtimeUpdateTrigger]);
 
-  const loadInitialData = async () => {
+  const loadEmployees = async () => {
     try {
-      // Carica dipendenti
-      const { data: employeesData, error: employeesError } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
-        .select('user_id, first_name, last_name, email')
-        .eq('is_active', true)
+        .select('*')
         .order('first_name');
 
-      if (employeesError) throw employeesError;
-      setEmployees(employeesData || []);
-
-      // Carica progetti
-      const { data: projectsData, error: projectsError } = await supabase
-        .from('projects')
-        .select('id, name')
-        .eq('is_active', true)
-        .order('name');
-
-      if (projectsError) throw projectsError;
-      setProjects(projectsData || []);
-
+      if (error) throw error;
+      setEmployees(data || []);
     } catch (error) {
-      console.error('Error loading initial data:', error);
+      console.error('Error loading employees:', error);
       toast({
         title: "Errore",
-        description: "Errore nel caricamento dei dati iniziali",
+        description: "Errore nel caricamento dei dipendenti",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const loadProjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      setProjects(data || []);
+    } catch (error) {
+      console.error('Error loading projects:', error);
+      toast({
+        title: "Errore",
+        description: "Errore nel caricamento dei progetti",
         variant: "destructive",
       });
     }
@@ -429,7 +438,7 @@ export default function AdminTimesheets() {
            projectName.includes(searchTerm.toLowerCase());
   });
 
-  // Aggrega i timesheet per dipendente
+  // Aggrega i dati per dipendente per la vista giornaliera
   const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
     const employeesMap = new Map<string, EmployeeSummary>();
 
@@ -455,35 +464,33 @@ export default function AdminTimesheets() {
 
       const employee = employeesMap.get(key)!;
       employee.timesheets.push(timesheet);
-      
-      // CORREZIONE: Calcola le ore in tempo reale per timesheet in corso
+
+      // Calcola le ore (con tempo reale per timesheet aperti)
       let calculatedHours = 0;
       let calculatedOvertimeHours = 0;
       let calculatedNightHours = 0;
-      
+
       if (timesheet.end_time) {
-        // Timesheet chiuso: usa i valori calcolati
+        // Timesheet chiuso - usa i valori salvati
         calculatedHours = timesheet.total_hours || 0;
         calculatedOvertimeHours = timesheet.overtime_hours || 0;
         calculatedNightHours = timesheet.night_hours || 0;
       } else if (timesheet.start_time) {
-        // Timesheet in corso: calcola le ore in tempo reale
+        // Timesheet aperto - calcola in tempo reale
         const startTime = new Date(timesheet.start_time);
         const currentTime = new Date();
         const diffMs = currentTime.getTime() - startTime.getTime();
-        const diffHours = Math.max(0, diffMs / (1000 * 60 * 60));
+        calculatedHours = Math.max(0, diffMs / (1000 * 60 * 60));
         
-        calculatedHours = diffHours;
-        
-        // Calcolo approssimativo per straordinari (se > 8 ore)
-        if (diffHours > 8) {
-          calculatedOvertimeHours = diffHours - 8;
+        // Calcolo straordinari (oltre 8 ore)
+        if (calculatedHours > 8) {
+          calculatedOvertimeHours = calculatedHours - 8;
         }
         
-        // Calcolo per ore notturne (se inizia prima delle 6 o dopo le 22)
+        // Calcolo ore notturne (se inizia prima delle 6 o dopo le 22)
         const startHour = startTime.getHours();
         if (startHour < 6 || startHour >= 22) {
-          calculatedNightHours = diffHours;
+          calculatedNightHours = calculatedHours;
         }
         
         console.log(`🔍 REAL-TIME CALC per ${timesheet.profiles.first_name}:`, {
@@ -494,14 +501,18 @@ export default function AdminTimesheets() {
           night: calculatedNightHours.toFixed(2)
         });
       }
-      
+
       employee.total_hours += calculatedHours;
       employee.overtime_hours += calculatedOvertimeHours;
       employee.night_hours += calculatedNightHours;
-      
-      // Use centralized meal benefit calculation
+
+      // Calcola buoni pasto
       const mealBenefits = getMealBenefits(timesheet);
-      if (mealBenefits.mealVoucher) employee.meal_vouchers += 1;
+      if (mealBenefits.mealVoucher) {
+        employee.meal_vouchers += 1;
+      }
+
+      // Calcola ore sabato/festivi
       if (timesheet.is_saturday) employee.saturday_hours += calculatedHours;
       if (timesheet.is_holiday) employee.holiday_hours += calculatedHours;
     });
@@ -516,8 +527,7 @@ export default function AdminTimesheets() {
       <Card>
         <CardContent className="p-6">
           <div className="flex items-center justify-center">
-            <Clock className="h-6 w-6 animate-spin mr-2" />
-            Caricamento timesheet...
+            <div className="text-center">Caricamento...</div>
           </div>
         </CardContent>
       </Card>
@@ -533,119 +543,132 @@ export default function AdminTimesheets() {
             Visualizza e gestisci i timesheet di tutti i dipendenti
           </p>
         </div>
+        
+        <div className="flex items-center gap-2">
+          <Button 
+            onClick={() => setInsertDialogOpen(true)}
+            className="gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Nuovo Timesheet
+          </Button>
+          <Button 
+            variant="outline"
+            onClick={() => setAbsenceDialogOpen(true)}
+            className="gap-2"
+          >
+            <UserPlus className="h-4 w-4" />
+            Aggiungi Assenza
+          </Button>
+        </div>
       </div>
 
-      <Tabs value={activeView} onValueChange={(value) => setActiveView(value as any)} className="w-full">
-        {/* Filtri e controlli */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Filter className="h-5 w-5" />
-              Filtri e Controlli
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Vista</label>
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="daily">Giornaliera</TabsTrigger>
-                  <TabsTrigger value="weekly">Settimanale</TabsTrigger>
-                  <TabsTrigger value="monthly">Mensile</TabsTrigger>
-                </TabsList>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Data di riferimento</label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !dateFilter && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {dateFilter ? format(parseISO(dateFilter), 'PPP', { locale: it }) : <span>Seleziona data</span>}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <CalendarComponent
-                      mode="single"
-                      selected={dateFilter ? parseISO(dateFilter) : undefined}
-                      onSelect={(date) => {
-                        if (date) {
-                          setDateFilter(format(date, 'yyyy-MM-dd'));
-                        }
-                      }}
-                      disabled={(date) =>
-                        date > new Date() || date < new Date("1900-01-01")
-                      }
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Dipendente</label>
-                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleziona dipendente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tutti i dipendenti</SelectItem>
-                    {employees.map((employee) => (
-                      <SelectItem key={employee.user_id} value={employee.user_id}>
-                        {employee.first_name} {employee.last_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Progetto</label>
-                <Select value={selectedProject} onValueChange={setSelectedProject}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleziona progetto" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tutti i progetti</SelectItem>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Ricerca</label>
-                <Input
-                  type="text"
-                  placeholder="Cerca per nome o progetto..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-
-              <div className="flex items-end space-x-2">
-                <Button onClick={loadTimesheets} className="flex-1">
-                  Aggiorna
-                </Button>
-              </div>
+      {/* Controlli filtri */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="h-5 w-5" />
+            Filtri
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Filtro dipendente */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Dipendente</label>
+              <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Tutti i dipendenti" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutti i dipendenti</SelectItem>
+                  {employees.map((employee) => (
+                    <SelectItem key={employee.user_id} value={employee.user_id}>
+                      {employee.first_name} {employee.last_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </CardContent>
-        </Card>
 
-        {/* Contenuto delle viste */}
+            {/* Filtro progetto */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Progetto</label>
+              <Select value={selectedProject} onValueChange={setSelectedProject}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Tutti i progetti" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutti i progetti</SelectItem>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Filtro data */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Data</label>
+              <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !dateFilter && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateFilter ? format(parseISO(dateFilter), 'dd/MM/yyyy', { locale: it }) : "Seleziona data"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    mode="single"
+                    selected={dateFilter ? parseISO(dateFilter) : undefined}
+                    onSelect={(date) => {
+                      if (date) {
+                        setDateFilter(format(date, 'yyyy-MM-dd'));
+                        setIsCalendarOpen(false);
+                      }
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Ricerca */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Ricerca</label>
+              <Input
+                placeholder="Cerca dipendente o progetto..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tabs per le diverse viste */}
+      <Tabs value={activeView} onValueChange={(value) => setActiveView(value as 'daily' | 'weekly' | 'monthly')}>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="daily">Vista Giornaliera</TabsTrigger>
+          <TabsTrigger value="weekly">Vista Settimanale</TabsTrigger>
+          <TabsTrigger value="monthly">Vista Mensile</TabsTrigger>
+        </TabsList>
+
         <TabsContent value="daily" className="mt-6">
-          <DailyView 
+          <DailySummaryView 
             timesheets={filteredTimesheets}
             absences={absences}
+            aggregateTimesheetsByEmployee={aggregateTimesheetsByEmployee}
+            employeeSettings={employeeSettings}
+            companySettings={companySettings}
             onEditTimesheet={(timesheet) => {
               setEditingTimesheet(timesheet);
               setEditDialogOpen(true);
@@ -696,19 +719,46 @@ export default function AdminTimesheets() {
           setEditingTimesheet(null);
         }}
       />
+
+      {/* Dialog per inserimento */}
+      <TimesheetInsertDialog
+        open={insertDialogOpen}
+        onOpenChange={setInsertDialogOpen}
+        selectedDate={selectedTimesheetDate ? parseISO(selectedTimesheetDate) : new Date()}
+        onSuccess={() => {
+          loadTimesheets();
+          setInsertDialogOpen(false);
+        }}
+      />
+
+      {/* Dialog per inserimento assenza */}
+      <AbsenceInsertDialog
+        open={absenceDialogOpen}
+        onOpenChange={setAbsenceDialogOpen}
+        onSuccess={() => {
+          loadTimesheets(); // Ricarica anche le assenze
+          setAbsenceDialogOpen(false);
+        }}
+      />
     </div>
   );
 }
 
-// Vista giornaliera semplificata
-function DailyView({ 
+// Vista riassuntiva giornaliera
+function DailySummaryView({ 
   timesheets, 
-  absences, 
-  onEditTimesheet, 
+  absences,
+  aggregateTimesheetsByEmployee,
+  employeeSettings,
+  companySettings,
+  onEditTimesheet,
   onDeleteTimesheet 
 }: {
   timesheets: TimesheetWithProfile[];
   absences: any[];
+  aggregateTimesheetsByEmployee: () => EmployeeSummary[];
+  employeeSettings: any;
+  companySettings: any;
   onEditTimesheet: (timesheet: TimesheetWithProfile) => void;
   onDeleteTimesheet: (id: string) => void;
 }) {
@@ -716,216 +766,208 @@ function DailyView({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Calendar className="h-5 w-5" />
-          Vista Giornaliera
+          <Users className="h-5 w-5" />
+          Riepilogo Giornaliero
         </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {timesheets.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Nessun timesheet trovato per la data selezionata
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Dipendente</TableHead>
-                    <TableHead>Progetto</TableHead>
-                    <TableHead>Inizio</TableHead>
-                    <TableHead>Fine</TableHead>
-                    <TableHead>Ore Totali</TableHead>
-                    <TableHead>Straordinari</TableHead>
-                    <TableHead>Note</TableHead>
-                    <TableHead>Azioni</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {timesheets.map((timesheet) => (
-                    <TableRow key={timesheet.id}>
-                      <TableCell className="font-medium">
-                        {timesheet.profiles ? 
-                          `${timesheet.profiles.first_name} ${timesheet.profiles.last_name}` : 
-                          'N/A'
-                        }
-                      </TableCell>
-                      <TableCell>
-                        {timesheet.projects?.name || 'Nessun progetto'}
-                      </TableCell>
-                      <TableCell>
-                        {timesheet.start_time ? 
-                          format(parseISO(timesheet.start_time), 'HH:mm') : 
-                          '-'
-                        }
-                      </TableCell>
-                      <TableCell>
-                        {timesheet.end_time ? 
-                          format(parseISO(timesheet.end_time), 'HH:mm') : 
-                          'In corso'
-                        }
-                      </TableCell>
-                      <TableCell>
-                        <HoursDisplay timesheet={timesheet} />
-                      </TableCell>
-                      <TableCell>
-                        {timesheet.overtime_hours ? 
-                          `${timesheet.overtime_hours.toFixed(1)}h` : 
-                          '0h'
-                        }
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate">
-                        {timesheet.notes || '-'}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onEditTimesheet(timesheet)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => onDeleteTimesheet(timesheet.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-  const navigatePrevWeek = () => setCurrentWeek(prev => subWeeks(prev, 1));
-  const navigateNextWeek = () => setCurrentWeek(prev => addWeeks(prev, 1));
-  const navigateToday = () => setCurrentWeek(new Date());
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Vista Settimanale
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={navigatePrevWeek}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="sm" onClick={navigateToday}>
-              Oggi
-            </Button>
-            <Button variant="outline" size="sm" onClick={navigateNextWeek}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
         <CardDescription>
-          {format(weekStart, 'dd MMM', { locale: it })} - {format(weekEnd, 'dd MMM yyyy', { locale: it })}
+          Visualizzazione aggregata per dipendente
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {weeklyData.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            Nessun timesheet trovato per questa settimana
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {weeklyData.map(employee => (
-              <Card key={employee.user_id} className="border-l-4 border-l-primary">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">
-                      {employee.first_name} {employee.last_name}
-                    </CardTitle>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>Totale: {employee.total_hours.toFixed(1)}h</span>
-                      {employee.overtime_hours > 0 && (
-                        <span className="text-orange-600">
-                          Straord: {employee.overtime_hours.toFixed(1)}h
-                        </span>
-                      )}
-                      {employee.night_hours > 0 && (
-                        <span className="text-blue-600">
-                          Notte: {employee.night_hours.toFixed(1)}h
-                        </span>
-                      )}
+        <div className="space-y-4">
+          {aggregateTimesheetsByEmployee().length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Nessun timesheet trovato per i criteri selezionati
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {aggregateTimesheetsByEmployee().map((employee) => (
+                <Card key={employee.user_id} className="border-l-4 border-l-primary">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h3 className="font-semibold text-lg">
+                          {employee.first_name} {employee.last_name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">{employee.email}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="secondary">
+                          {employee.total_hours.toFixed(1)}h totali
+                        </Badge>
+                        {employee.overtime_hours > 0 && (
+                          <Badge variant="outline" className="text-orange-600 border-orange-200">
+                            {employee.overtime_hours.toFixed(1)}h straord.
+                          </Badge>
+                        )}
+                        {employee.night_hours > 0 && (
+                          <Badge variant="outline" className="text-blue-600 border-blue-200">
+                            {employee.night_hours.toFixed(1)}h notturne
+                          </Badge>
+                        )}
+                        {employee.meal_vouchers > 0 && (
+                          <Badge variant="outline" className="text-green-600 border-green-200">
+                            {employee.meal_vouchers} buoni pasto
+                          </Badge>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-7 gap-2">
-                    {employee.days.map((day, dayIndex) => (
-                      <div key={day.date} className="space-y-2">
-                        <div className="text-center text-xs font-medium text-muted-foreground">
-                          {format(weekDays[dayIndex], 'EEE dd', { locale: it })}
+
+                    <Collapsible>
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" className="w-full justify-between p-0 h-auto">
+                          <span className="text-sm text-muted-foreground">
+                            Dettagli timesheet ({employee.timesheets.length} voci)
+                          </span>
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="space-y-2 mt-4">
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Data</TableHead>
+                                <TableHead>Progetto</TableHead>
+                                <TableHead>Orario</TableHead>
+                                <TableHead>Ore</TableHead>
+                                <TableHead>Buoni Pasto</TableHead>
+                                <TableHead>Posizione</TableHead>
+                                <TableHead>Azioni</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {employee.timesheets.map((timesheet) => {
+                                const mealBenefits = BenefitsService.calculateMealBenefitsSync(
+                                  timesheet, 
+                                  employeeSettings[timesheet.user_id], 
+                                  companySettings
+                                );
+                                
+                                return (
+                                  <TableRow key={timesheet.id}>
+                                    <TableCell className="font-medium">
+                                      {format(parseISO(timesheet.date), 'dd/MM/yyyy', { locale: it })}
+                                      {(timesheet.is_saturday || timesheet.is_holiday) && (
+                                        <Badge variant="outline" className="ml-2 text-xs">
+                                          {timesheet.is_holiday ? 'Festivo' : 'Sabato'}
+                                        </Badge>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      {timesheet.projects ? timesheet.projects.name : 'N/A'}
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex flex-col gap-1">
+                                        <div className="flex items-center gap-2">
+                                          <span>{timesheet.start_time ? format(parseISO(timesheet.start_time), 'HH:mm') : '-'}</span>
+                                          <span>→</span>
+                                          <span>{timesheet.end_time ? format(parseISO(timesheet.end_time), 'HH:mm') : 'In corso'}</span>
+                                          {!timesheet.end_time && (
+                                            <Badge variant="secondary" className="text-xs">ATTIVO</Badge>
+                                          )}
+                                        </div>
+                                        {timesheet.lunch_start_time && timesheet.lunch_end_time && (
+                                          <div className="text-xs text-muted-foreground">
+                                            Pausa: {format(parseISO(timesheet.lunch_start_time), 'HH:mm')} - {format(parseISO(timesheet.lunch_end_time), 'HH:mm')}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="space-y-1">
+                                        <div className="font-medium">
+                                          <HoursDisplay timesheet={timesheet} />
+                                        </div>
+                                        {timesheet.overtime_hours && timesheet.overtime_hours > 0 && (
+                                          <div className="text-xs text-orange-600">
+                                            +{timesheet.overtime_hours.toFixed(1)}h straord.
+                                          </div>
+                                        )}
+                                        {timesheet.night_hours && timesheet.night_hours > 0 && (
+                                          <div className="text-xs text-blue-600">
+                                            {timesheet.night_hours.toFixed(1)}h notturne
+                                          </div>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center gap-1">
+                                        {mealBenefits.mealVoucher && (
+                                          <Badge variant="secondary" className="text-xs">Buono</Badge>
+                                        )}
+                                        {mealBenefits.dailyAllowance && (
+                                          <Badge variant="outline" className="text-xs">Indennità</Badge>
+                                        )}
+                                        {!mealBenefits.mealVoucher && !mealBenefits.dailyAllowance && (
+                                          <span className="text-xs text-muted-foreground">-</span>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <LocationDisplay 
+                                        startLat={timesheet.start_location_lat}
+                                        startLng={timesheet.start_location_lng}
+                                        endLat={timesheet.end_location_lat}
+                                        endLng={timesheet.end_location_lng}
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center gap-2">
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => onEditTimesheet(timesheet)}
+                                        >
+                                          <Edit className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => onDeleteTimesheet(timesheet.id)}
+                                          className="text-red-600 hover:text-red-700"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
                         </div>
-                        <div className="min-h-[80px] p-2 rounded border bg-muted/20">
-                          {day.timesheets.length > 0 ? (
-                            <div className="space-y-1">
-                              {day.timesheets.map(timesheet => (
-                                <div key={timesheet.id} className="text-xs space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <span className="font-medium">
-                                      <HoursDisplay timesheet={timesheet} />
-                                    </span>
-                                    <div className="flex gap-1">
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 w-6 p-0"
-                                        onClick={() => onEditTimesheet(timesheet)}
-                                      >
-                                        <Edit className="h-3 w-3" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
-                                        onClick={() => onDeleteTimesheet(timesheet.id)}
-                                      >
-                                        <Trash2 className="h-3 w-3" />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                  <div className="text-muted-foreground">
-                                    {timesheet.start_time && format(parseISO(timesheet.start_time), 'HH:mm')}
-                                    {timesheet.end_time && ` - ${format(parseISO(timesheet.end_time), 'HH:mm')}`}
-                                    {!timesheet.end_time && timesheet.start_time && ' - In corso'}
-                                  </div>
-                                  {timesheet.projects && (
-                                    <div className="text-muted-foreground truncate">
-                                      {timesheet.projects.name}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-center text-muted-foreground text-xs">
-                              Nessun timesheet
-                            </div>
-                          )}
+                      </CollapsibleContent>
+                    </Collapsible>
+
+                    {/* Mostra le assenze per questo dipendente */}
+                    {absences.filter(absence => absence.user_id === employee.user_id).length > 0 && (
+                      <div className="mt-4 pt-4 border-t">
+                        <h4 className="font-medium text-sm mb-2">Assenze</h4>
+                        <div className="space-y-1">
+                          {absences
+                            .filter(absence => absence.user_id === employee.user_id)
+                            .map((absence) => (
+                              <div key={absence.id} className="flex items-center gap-2 text-sm">
+                                <AbsenceIndicator absences={[absence]} />
+                                <span className="text-muted-foreground">
+                                  {format(parseISO(absence.date), 'dd/MM/yyyy', { locale: it })}
+                                </span>
+                                {absence.notes && (
+                                  <span className="text-muted-foreground">- {absence.notes}</span>
+                                )}
+                              </div>
+                            ))
+                          }
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
