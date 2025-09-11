@@ -118,62 +118,63 @@ export const useAdaptiveLocationTracking = ({
       const position = await getCurrentPosition();
       const { latitude, longitude, accuracy } = position.coords;
       
-      let movementDetected = false;
-      let newInterval = BASELINE_INTERVAL;
+      setState(prev => {
+        let movementDetected = false;
+        let newInterval = BASELINE_INTERVAL;
 
-      // Check for movement if we have a previous location
-      if (state.lastLocation) {
-        const distance = calculateDistance(
-          state.lastLocation.lat,
-          state.lastLocation.lng,
-          latitude,
-          longitude
-        );
+        // Check for movement if we have a previous location
+        if (prev.lastLocation) {
+          const distance = calculateDistance(
+            prev.lastLocation.lat,
+            prev.lastLocation.lng,
+            latitude,
+            longitude
+          );
 
-        movementDetected = distance > MOVEMENT_THRESHOLD;
-        
-        // Adjust interval based on movement
-        if (movementDetected) {
-          newInterval = ACTIVE_INTERVAL;
-          // Notify user about movement detection (optional)
-          if (!state.movementDetected) {
-            toast({
-              title: "Movimento rilevato",
-              description: "Tracciamento più frequente attivato",
-              duration: 3000,
-            });
+          movementDetected = distance > MOVEMENT_THRESHOLD;
+          
+          // Adjust interval based on movement
+          if (movementDetected) {
+            newInterval = ACTIVE_INTERVAL;
+            // Notify user about movement detection (optional)
+            if (!prev.movementDetected) {
+              toast({
+                title: "Movimento rilevato",
+                description: "Tracciamento più frequente attivato",
+                duration: 3000,
+              });
+            }
+          } else {
+            // If no movement for a while, increase interval
+            newInterval = prev.movementDetected ? BASELINE_INTERVAL : IDLE_INTERVAL;
           }
-        } else {
-          // If no movement for a while, increase interval
-          newInterval = state.movementDetected ? BASELINE_INTERVAL : IDLE_INTERVAL;
         }
-      }
 
-      // Save the ping
-      await saveLocationPing({
-        latitude,
-        longitude,
-        accuracy: accuracy || undefined,
-        timestamp: new Date(),
-        movement_detected: movementDetected,
-        ping_interval_used: state.currentInterval
+        // Save the ping asynchronously
+        saveLocationPing({
+          latitude,
+          longitude,
+          accuracy: accuracy || undefined,
+          timestamp: new Date(),
+          movement_detected: movementDetected,
+          ping_interval_used: prev.currentInterval
+        });
+
+        // Reschedule next ping with new interval
+        if (intervalRef.current) {
+          clearTimeout(intervalRef.current);
+        }
+        
+        intervalRef.current = setTimeout(performLocationPing, newInterval);
+
+        return {
+          ...prev,
+          lastLocation: { lat: latitude, lng: longitude },
+          currentInterval: newInterval / (60 * 1000), // Convert to minutes for display
+          movementDetected,
+          error: null
+        };
       });
-
-      // Update state
-      setState(prev => ({
-        ...prev,
-        lastLocation: { lat: latitude, lng: longitude },
-        currentInterval: newInterval / (60 * 1000), // Convert to minutes for display
-        movementDetected,
-        error: null
-      }));
-
-      // Reschedule next ping with new interval
-      if (intervalRef.current) {
-        clearTimeout(intervalRef.current);
-      }
-      
-      intervalRef.current = setTimeout(performLocationPing, newInterval);
 
     } catch (error) {
       console.error('Error getting location:', error);
@@ -188,7 +189,7 @@ export const useAdaptiveLocationTracking = ({
       }
       intervalRef.current = setTimeout(performLocationPing, BASELINE_INTERVAL);
     }
-  }, [state.lastLocation, state.currentInterval, state.movementDetected, calculateDistance, getCurrentPosition, saveLocationPing, toast]);
+  }, [calculateDistance, getCurrentPosition, saveLocationPing, toast]);
 
   const startTracking = useCallback(async () => {
     if (!timesheetId || !isActive) return;
@@ -244,7 +245,7 @@ export const useAdaptiveLocationTracking = ({
     return () => {
       stopTracking();
     };
-  }, [isActive, timesheetId, startTracking, stopTracking]);
+  }, [isActive, timesheetId]);
 
   // Cleanup on unmount
   useEffect(() => {

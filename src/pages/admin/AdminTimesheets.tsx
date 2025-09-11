@@ -15,7 +15,6 @@ import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { OvertimeTracker } from '@/components/OvertimeTracker';
 import { TimesheetTimeline } from '@/components/TimesheetTimeline';
-import LocationTrackingIndicator from '@/components/LocationTrackingIndicator';
 import { TimesheetEditDialog } from '@/components/TimesheetEditDialog';
 import { TimesheetInsertDialog } from '@/components/TimesheetInsertDialog';
 import { AbsenceInsertDialog } from '@/components/AbsenceInsertDialog';
