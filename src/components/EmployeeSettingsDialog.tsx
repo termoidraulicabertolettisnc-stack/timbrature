@@ -131,12 +131,13 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
       if (companyError) throw companyError;
       setCompanySettings(companyData);
 
-      // Load employee specific settings
+      // Load employee specific settings (only active record)
       const { data: employeeData, error: employeeError } = await supabase
         .from('employee_settings')
         .select('*')
         .eq('user_id', employee.id)
         .eq('company_id', selectedCompanyId)
+        .is('valid_to', null)  // Only get active settings
         .maybeSingle();
 
       if (employeeError) throw employeeError;
