@@ -73,6 +73,13 @@ export function WeeklyTimelineView({
 
   // Organizza i dati per dipendente
   const employeeData = useMemo(() => {
+    console.log('🔍 WeeklyTimelineView - Processing data:', {
+      timesheets_count: timesheets.length,
+      absences_count: absences.length,
+      dateFilter,
+      sample_timesheet: timesheets[0]
+    });
+    
     const employeesMap = new Map<string, EmployeeWeekData>();
 
     // Inizializza i dipendenti dai timesheet
@@ -200,8 +207,18 @@ export function WeeklyTimelineView({
       }
     });
 
-    return Array.from(employeesMap.values());
-  }, [timesheets, absences, weekDays, employeeSettings, companySettings]);
+    const result = Array.from(employeesMap.values());
+    console.log('📊 WeeklyTimelineView - Final result:', {
+      employees_count: result.length,
+      employees: result.map(emp => ({ 
+        name: `${emp.first_name} ${emp.last_name}`, 
+        days_with_entries: emp.days.filter(d => d.entries.length > 0).length,
+        total_hours: emp.totals.total_hours 
+      }))
+    });
+    
+    return result;
+  }, [timesheets, absences, dateFilter, employeeSettings, companySettings]);
 
   // Usa hook per aggiornamenti real-time
   const realtimeData = useWeeklyRealtimeHours(timesheets);
