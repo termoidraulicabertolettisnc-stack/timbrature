@@ -17,6 +17,8 @@ interface WeeklyTimelineViewProps {
   companySettings: any;
   onEditTimesheet: (timesheet: TimesheetWithProfile) => void;
   onDeleteTimesheet: (id: string) => void;
+  onAddTimesheet: (date: string, userId: string) => void;
+  onAddAbsence: (date: string, userId: string) => void;
   onNavigatePrevious: () => void;
   onNavigateNext: () => void;
   onNavigateToday: () => void;
@@ -62,6 +64,8 @@ export function WeeklyTimelineView({
   companySettings,
   onEditTimesheet,
   onDeleteTimesheet,
+  onAddTimesheet,
+  onAddAbsence,
   onNavigatePrevious,
   onNavigateNext,
   onNavigateToday
@@ -71,7 +75,20 @@ export function WeeklyTimelineView({
   const weekEnd = endOfWeek(baseDate, { weekStartsOn: 1 });
   const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
-  // Organizza i dati per dipendente
+  // Funzione per mappare i tipi di assenze in italiano
+  const getAbsenceTypeLabel = (type: string) => {
+    const absenceTypes: Record<string, { label: string; icon: any }> = {
+      'vacation': { label: 'Ferie', icon: Plane },
+      'sick_leave': { label: 'Malattia', icon: HeartPulse },
+      'business_trip': { label: 'Trasferta', icon: MapPin },
+      'personal': { label: 'Personale', icon: Clock },
+      'maternity': { label: 'Maternità', icon: HeartPulse },
+      'paternity': { label: 'Paternità', icon: HeartPulse },
+      'study': { label: 'Studio', icon: Clock },
+      'unpaid_leave': { label: 'Aspettativa', icon: Clock }
+    };
+    return absenceTypes[type] || { label: type, icon: Clock };
+  };
   const employeeData = useMemo(() => {
     console.log('🔍 WeeklyTimelineView - Processing data:', {
       timesheets_count: timesheets.length,
@@ -392,18 +409,42 @@ export function WeeklyTimelineView({
                           
                           {/* Absences */}
                           <div className="flex gap-1">
-                            {day.absences.map((absence, idx) => (
-                              <Badge
-                                key={idx}
-                                variant="secondary"
-                                className="text-xs gap-1"
-                              >
-                                {absence.type === 'sick_leave' && <HeartPulse className="h-3 w-3" />}
-                                {absence.type === 'vacation' && <Plane className="h-3 w-3" />}
-                                {absence.type === 'business_trip' && <MapPin className="h-3 w-3" />}
-                                {absence.type}
-                              </Badge>
-                            ))}
+                            {day.absences.map((absence, idx) => {
+                              const absenceInfo = getAbsenceTypeLabel(absence.type);
+                              const IconComponent = absenceInfo.icon;
+                              return (
+                                <Badge
+                                  key={idx}
+                                  variant="destructive"
+                                  className="text-xs gap-1 bg-red-100 text-red-800 border-red-200"
+                                >
+                                  <IconComponent className="h-3 w-3" />
+                                  {absenceInfo.label}
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                          
+                          {/* Pulsanti per aggiungere timbrature/assenze */}
+                          <div className="flex gap-1 ml-auto">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={() => onAddTimesheet(day.date, employee.user_id)}
+                              title="Aggiungi timbratura"
+                            >
+                              <Clock className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={() => onAddAbsence(day.date, employee.user_id)}
+                              title="Aggiungi assenza"
+                            >
+                              <Plane className="h-3 w-3" />
+                            </Button>
                           </div>
                         </div>
 

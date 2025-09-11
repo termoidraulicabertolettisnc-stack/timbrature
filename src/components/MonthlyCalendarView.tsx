@@ -4,7 +4,7 @@ import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Plane, HeartPulse } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clock, Plane, HeartPulse, MapPin, Plus } from 'lucide-react';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { BenefitsService } from '@/services/BenefitsService';
 
@@ -16,6 +16,8 @@ interface MonthlyCalendarViewProps {
   companySettings: any;
   onEditTimesheet: (timesheet: TimesheetWithProfile) => void;
   onDeleteTimesheet: (id: string) => void;
+  onAddTimesheet: (date: string, userId: string) => void;
+  onAddAbsence: (date: string, userId: string) => void;
   onNavigatePrevious: () => void;
   onNavigateNext: () => void;
   onNavigateToday: () => void;
@@ -52,6 +54,8 @@ export function MonthlyCalendarView({
   companySettings,
   onEditTimesheet,
   onDeleteTimesheet,
+  onAddTimesheet,
+  onAddAbsence,
   onNavigatePrevious,
   onNavigateNext,
   onNavigateToday
@@ -63,7 +67,20 @@ export function MonthlyCalendarView({
   const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
   const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
-  // Organizza i dati per dipendente
+  // Funzione per mappare i tipi di assenze in italiano
+  const getAbsenceTypeLabel = (type: string) => {
+    const absenceTypes: Record<string, { label: string; icon: any; color: string }> = {
+      'vacation': { label: 'Ferie', icon: Plane, color: 'text-blue-600' },
+      'sick_leave': { label: 'Malattia', icon: HeartPulse, color: 'text-red-600' },
+      'business_trip': { label: 'Trasferta', icon: MapPin, color: 'text-green-600' },
+      'personal': { label: 'Personale', icon: Clock, color: 'text-purple-600' },
+      'maternity': { label: 'Maternità', icon: HeartPulse, color: 'text-pink-600' },
+      'paternity': { label: 'Paternità', icon: HeartPulse, color: 'text-blue-500' },
+      'study': { label: 'Studio', icon: Clock, color: 'text-indigo-600' },
+      'unpaid_leave': { label: 'Aspettativa', icon: Clock, color: 'text-gray-600' }
+    };
+    return absenceTypes[type] || { label: type, icon: Clock, color: 'text-gray-600' };
+  };
   const employeeData = useMemo(() => {
     console.log('🔍 MonthlyCalendarView - Processing data:', {
       timesheets_count: timesheets.length,
@@ -213,7 +230,7 @@ export function MonthlyCalendarView({
     const absence = dayData.absences[0];
 
     return (
-      <div className="min-h-[60px] p-1 space-y-1">
+      <div className="min-h-[60px] p-1 space-y-1 group">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium">{format(day, 'd')}</span>
           {dayData.timesheets.length > 0 && (
@@ -240,15 +257,18 @@ export function MonthlyCalendarView({
 
         {hasAbsence ? (
           <div className="space-y-1">
-            <div className="flex items-center gap-1">
-              {absence.type === 'vacation' && <Plane className="h-3 w-3 text-blue-500" />}
-              {absence.type === 'sick' && <HeartPulse className="h-3 w-3 text-red-500" />}
-              <span className="text-xs text-muted-foreground capitalize">
-                {absence.type === 'vacation' ? 'Ferie' : 
-                 absence.type === 'sick' ? 'Malattia' : 
-                 absence.type}
-              </span>
-            </div>
+            {dayData.absences.map((absence, idx) => {
+              const absenceInfo = getAbsenceTypeLabel(absence.type);
+              const IconComponent = absenceInfo.icon;
+              return (
+                <div key={idx} className="flex items-center gap-1">
+                  <IconComponent className={`h-3 w-3 ${absenceInfo.color}`} />
+                  <span className={`text-xs font-medium ${absenceInfo.color}`}>
+                    {absenceInfo.label}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         ) : dayData.timesheets.length > 0 ? (
           <div className="space-y-1">
@@ -269,7 +289,29 @@ export function MonthlyCalendarView({
               <UtensilsCrossed className="h-3 w-3 text-green-600" />
             )}
           </div>
-        ) : null}
+        ) : (
+          // Pulsanti per giorni vuoti
+          <div className="flex gap-1 mt-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={() => onAddTimesheet(dateStr, employee.user_id)}
+              title="Aggiungi timbratura"
+            >
+              <Clock className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={() => onAddAbsence(dateStr, employee.user_id)}
+              title="Aggiungi assenza"
+            >
+              <Plus className="h-3 w-3" />
+            </Button>
+          </div>
+        )}
       </div>
     );
   };

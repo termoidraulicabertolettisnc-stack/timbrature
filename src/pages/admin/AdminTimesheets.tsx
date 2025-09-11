@@ -158,6 +158,19 @@ export default function AdminTimesheets() {
   const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
   const [selectedTimesheetDate, setSelectedTimesheetDate] = useState<string>('');
 
+  // Funzioni per aggiungere timesheet e assenze da specifici giorni
+  const handleAddTimesheet = (date: string, userId: string) => {
+    setSelectedTimesheetDate(date);
+    setSelectedEmployee(userId); // Imposta l'utente selezionato
+    setInsertDialogOpen(true);
+  };
+
+  const handleAddAbsence = (date: string, userId: string) => {
+    setSelectedTimesheetDate(date);
+    setSelectedEmployee(userId); // Imposta l'utente selezionato  
+    setAbsenceDialogOpen(true);
+  };
+
   // Stati per le impostazioni
   const [companySettings, setCompanySettings] = useState<any>(null);
   const [employeeSettings, setEmployeeSettings] = useState<{[key: string]: any}>({});
@@ -726,6 +739,8 @@ export default function AdminTimesheets() {
               setEditDialogOpen(true);
             }}
             onDeleteTimesheet={deleteTimesheet}
+            onAddTimesheet={handleAddTimesheet}
+            onAddAbsence={handleAddAbsence}
             onNavigatePrevious={navigatePrevious}
             onNavigateNext={navigateNext}
             onNavigateToday={navigateToToday}
@@ -744,6 +759,8 @@ export default function AdminTimesheets() {
               setEditDialogOpen(true);
             }}
             onDeleteTimesheet={deleteTimesheet}
+            onAddTimesheet={handleAddTimesheet}
+            onAddAbsence={handleAddAbsence}
             onNavigatePrevious={navigatePrevious}
             onNavigateNext={navigateNext}
             onNavigateToday={navigateToToday}
