@@ -128,15 +128,6 @@ export default function PayrollDashboard() {
 
       if (absenceError) throw absenceError;
 
-        // Get employee settings for meal voucher calculation
-        const { data: employeeSettings, error: settingsError } = await supabase
-          .from('employee_settings')
-          .select('*')
-          .in('user_id', userIds)
-          .order('updated_at', { ascending: false });
-
-        if (settingsError) throw settingsError;
-
         // Get company settings for default values
         const { data: companySettings, error: companySettingsError } = await supabase
           .from('company_settings')
@@ -145,15 +136,12 @@ export default function PayrollDashboard() {
 
         if (companySettingsError) throw companySettingsError;
 
-        console.log('PayrollDashboard - Employee Settings:', employeeSettings);
         console.log('PayrollDashboard - Company Settings:', companySettings);
 
-      // Process data by employee
-      const processedData: PayrollData[] = profiles.map(profile => {
+      // Process data by employee using temporal settings
+      const processedData: PayrollData[] = await Promise.all(profiles.map(async (profile) => {
         const employeeTimesheets = (timesheets || []).filter(t => t.user_id === profile.user_id);
         const employeeAbsences = (absences || []).filter(a => a.user_id === profile.user_id);
-        const settings = employeeSettings?.find(s => s.user_id === profile.user_id && s.company_id === profile.company_id) || 
-                        employeeSettings?.find(s => s.user_id === profile.user_id);
         
         const dailyData: { [day: string]: { ordinary: number; overtime: number; absence: string | null } } = {};
         let totalOrdinary = 0;
@@ -161,18 +149,11 @@ export default function PayrollDashboard() {
         let absenceTotals: { [absenceType: string]: number } = {};
         let mealVoucherDays = 0;
         
-        // Get effective settings (employee settings take precedence over company settings)
+        // Get company settings for default values
         const companySettingsForEmployee = companySettings?.find(cs => cs.company_id === profile.company_id);
-        const effectiveMealAllowancePolicy = (settings as any)?.meal_allowance_policy || (companySettingsForEmployee as any)?.meal_allowance_policy || 'disabled';
-        const effectiveMealVoucherMinHours = settings?.meal_voucher_min_hours || companySettingsForEmployee?.meal_voucher_min_hours || 6;
-        const mealVoucherAmount = settings?.meal_voucher_amount || companySettingsForEmployee?.meal_voucher_amount || 8.00;
+        const mealVoucherAmount = companySettingsForEmployee?.meal_voucher_amount || 8.00;
         
-        console.log(`PayrollDashboard - ${profile.first_name} ${profile.last_name}:`, {
-          employeeMealAllowancePolicy: (settings as any)?.meal_allowance_policy,
-          companyMealAllowancePolicy: (companySettingsForEmployee as any)?.meal_allowance_policy,
-          effectiveMealAllowancePolicy: effectiveMealAllowancePolicy,
-          saturdayHandling: settings?.saturday_handling || companySettingsForEmployee?.saturday_handling
-        });
+        console.log(`PayrollDashboard - Processing ${profile.first_name} ${profile.last_name}`);
 
         // Initialize all days of the month
         const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
@@ -181,17 +162,21 @@ export default function PayrollDashboard() {
           dailyData[dayKey] = { ordinary: 0, overtime: 0, absence: null };
         }
 
-        // Process timesheets
-        employeeTimesheets.forEach(ts => {
+        // Process timesheets with temporal settings
+        for (const ts of employeeTimesheets) {
           const day = new Date(ts.date).getDate();
           const dayKey = String(day).padStart(2, '0');
           
-          // Check if Saturday is configured as business trip for this employee
-          const effectiveSaturdayHandling = settings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
+          // Get temporal employee settings for this specific date
+          const { getEmployeeSettingsForDate } = await import('@/utils/temporalEmployeeSettings');
+          const temporalSettings = await getEmployeeSettingsForDate(ts.user_id, ts.date);
+          
+          // Check if Saturday is configured as business trip for this employee on this date
+          const effectiveSaturdayHandling = temporalSettings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
           
           // Skip Saturday hours entirely if configured as business trip (trasferta)
           if (ts.is_saturday && effectiveSaturdayHandling === 'trasferta') {
-            return; // Don't include Saturday hours at all in payroll view
+            continue; // Don't include Saturday hours at all in payroll view
           }
           
           const overtime = ts.overtime_hours || 0;
@@ -203,24 +188,24 @@ export default function PayrollDashboard() {
           totalOrdinary += ordinary;
           totalOvertime += overtime;
           
-          // Calculate meal vouchers based on unified policy
-          if (effectiveMealAllowancePolicy === 'disabled') {
-            // No meal vouchers earned if disabled
-          } else if (effectiveMealAllowancePolicy === 'daily_allowance') {
-            // Daily allowance policy means no meal vouchers (they're mutually exclusive)
-          } else if (effectiveMealAllowancePolicy === 'meal_vouchers_only') {
-            if ((ts.total_hours || 0) > 6) {
-              mealVoucherDays++;
-            }
-          } else if (effectiveMealAllowancePolicy === 'meal_vouchers_always') {
+          // Calculate meal vouchers using temporal calculation
+          const { calculateMealBenefitsTemporal } = await import('@/utils/mealBenefitsCalculator');
+          const mealBenefits = await calculateMealBenefitsTemporal(
+            ts,
+            temporalSettings ? {
+              meal_allowance_policy: temporalSettings.meal_allowance_policy,
+              meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
+              daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
+              lunch_break_type: temporalSettings.lunch_break_type
+            } : undefined,
+            companySettingsForEmployee,
+            ts.date
+          );
+          
+          if (mealBenefits.mealVoucher) {
             mealVoucherDays++;
-          } else if (effectiveMealAllowancePolicy === 'both') {
-            // With 'both' policy, meal vouchers are earned based on hours worked
-            if ((ts.total_hours || 0) >= effectiveMealVoucherMinHours) {
-              mealVoucherDays++;
-            }
           }
-        });
+        }
 
         // Process absences
         employeeAbsences.forEach(abs => {
@@ -245,7 +230,7 @@ export default function PayrollDashboard() {
           meal_vouchers: mealVoucherDays,
           meal_voucher_amount: mealVoucherAmount
         };
-      });
+      }));
 
       setPayrollData(processedData);
     } catch (error) {

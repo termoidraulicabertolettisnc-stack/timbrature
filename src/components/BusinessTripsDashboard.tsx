@@ -257,12 +257,10 @@ const BusinessTripsDashboard = () => {
 
       if (companySettingsError) throw companySettingsError;
 
-      // Process data by employee
-      const processedData: BusinessTripData[] = profiles.map(profile => {
+      // Process data by employee using temporal settings
+      const processedData: BusinessTripData[] = await Promise.all(profiles.map(async (profile) => {
         const employeeTimesheets = (timesheets || []).filter(t => t.user_id === profile.user_id);
         const employeeAbsences = (absences || []).filter(a => a.user_id === profile.user_id);
-        const settings = employeeSettings?.find(s => s.user_id === profile.user_id && s.company_id === profile.company_id) || 
-                        employeeSettings?.find(s => s.user_id === profile.user_id);
         const companySettingsForEmployee = companySettings?.find(cs => cs.company_id === profile.company_id);
         
         const dailyData: { [day: string]: { ordinary: number; overtime: number; absence: string | null; business_trip: boolean } } = {};
@@ -275,24 +273,8 @@ const BusinessTripsDashboard = () => {
         let saturdayAmount = 0;
         let dailyAllowanceDays = 0;
         let dailyAllowanceAmount = 0;
-        
-        // Get employee settings with company defaults
-        const effectiveSaturdayHandling = settings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
-        const effectiveMealAllowancePolicy = (settings as any)?.meal_allowance_policy || (companySettingsForEmployee as any)?.meal_allowance_policy || 'disabled';
-        const effectiveMealVoucherMinHours = settings?.meal_voucher_min_hours || companySettingsForEmployee?.meal_voucher_min_hours || 6;
-        const effectiveDailyAllowanceMinHours = settings?.daily_allowance_min_hours || (companySettingsForEmployee as any)?.default_daily_allowance_min_hours || 6;
-        const effectiveDailyAllowanceAmount = settings?.daily_allowance_amount || (companySettingsForEmployee as any)?.default_daily_allowance_amount || 10;
-        const effectiveSaturdayRate = settings?.saturday_hourly_rate || companySettingsForEmployee?.saturday_hourly_rate || 10;
-        const mealVoucherAmount = settings?.meal_voucher_amount || companySettingsForEmployee?.meal_voucher_amount || 8.00;
-        
-        console.log(`BusinessTripsDashboard - ${profile.first_name} ${profile.last_name}:`, {
-          employeeMealAllowancePolicy: (settings as any)?.meal_allowance_policy,
-          companyMealAllowancePolicy: (companySettingsForEmployee as any)?.meal_allowance_policy,
-          effectiveMealAllowancePolicy: effectiveMealAllowancePolicy,
-          saturdayHandling: effectiveSaturdayHandling,
-          dailyAllowanceAmount: effectiveDailyAllowanceAmount,
-          dailyAllowanceMinHours: effectiveDailyAllowanceMinHours
-        });
+
+        console.log(`BusinessTripsDashboard - Processing ${profile.first_name} ${profile.last_name}`);
 
         // Initialize all days of the month
         const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
@@ -301,12 +283,25 @@ const BusinessTripsDashboard = () => {
           dailyData[dayKey] = { ordinary: 0, overtime: 0, absence: null, business_trip: false };
         }
 
-        // Process timesheets
-        employeeTimesheets.forEach(ts => {
+        // Default values from company settings
+        const defaultSaturdayRate = companySettingsForEmployee?.saturday_hourly_rate || 10;
+        let defaultMealVoucherAmount = companySettingsForEmployee?.meal_voucher_amount || 8.00;
+
+        // Process timesheets with temporal settings
+        for (const ts of employeeTimesheets) {
           const day = new Date(ts.date).getDate();
           const dayKey = String(day).padStart(2, '0');
           const date = new Date(ts.date);
           const isSaturday = date.getDay() === 6;
+          
+          // Get temporal employee settings for this specific date
+          const { getEmployeeSettingsForDate } = await import('@/utils/temporalEmployeeSettings');
+          const temporalSettings = await getEmployeeSettingsForDate(ts.user_id, ts.date);
+          
+          // Use temporal settings or fallback to company defaults
+          const effectiveSaturdayHandling = temporalSettings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
+          const effectiveSaturdayRate = temporalSettings?.saturday_hourly_rate || defaultSaturdayRate;
+          const temporalMealVoucherAmount = temporalSettings?.meal_voucher_amount || defaultMealVoucherAmount;
           
           let overtime = ts.overtime_hours || 0;
           let isBusinessTrip = false;
@@ -320,11 +315,36 @@ const BusinessTripsDashboard = () => {
             saturdayAmount += (ts.total_hours || 0) * effectiveSaturdayRate;
           }
           
-          // Check for daily allowance eligibility
-          if ((effectiveMealAllowancePolicy === 'daily_allowance' || effectiveMealAllowancePolicy === 'both') && (ts.total_hours || 0) >= effectiveDailyAllowanceMinHours) {
-            // For daily allowance policy or 'both' policy, count all qualifying days including Saturday business trips
+          // Calculate meal benefits using temporal calculation
+          const { calculateMealBenefitsTemporal } = await import('@/utils/mealBenefitsCalculator');
+          const mealBenefits = await calculateMealBenefitsTemporal(
+            ts,
+            temporalSettings ? {
+              meal_allowance_policy: temporalSettings.meal_allowance_policy,
+              meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
+              daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
+              lunch_break_type: temporalSettings.lunch_break_type
+            } : undefined,
+            companySettingsForEmployee,
+            ts.date
+          );
+          
+          // Count daily allowance days
+          if (mealBenefits.dailyAllowance) {
             dailyAllowanceDays += 1;
+            const effectiveDailyAllowanceAmount = temporalSettings?.daily_allowance_amount || 
+                                                 companySettingsForEmployee?.default_daily_allowance_amount || 10;
             dailyAllowanceAmount += effectiveDailyAllowanceAmount;
+          }
+          
+          // Count meal voucher days
+          if (mealBenefits.mealVoucher) {
+            mealVoucherDays++;
+          }
+          
+          // Update meal voucher amount if needed
+          if (temporalMealVoucherAmount && temporalMealVoucherAmount !== defaultMealVoucherAmount) {
+            defaultMealVoucherAmount = temporalMealVoucherAmount;
           }
           
           const ordinary = Math.max(0, (ts.total_hours || 0) - overtime);
@@ -335,13 +355,7 @@ const BusinessTripsDashboard = () => {
           
           totalOrdinary += ordinary;
           totalOvertime += overtime;
-          
-          // Use centralized meal benefit calculation
-          const mealBenefits = calculateMealBenefits(ts, settings, companySettingsForEmployee);
-          if (mealBenefits.mealVoucher) {
-            mealVoucherDays++;
-          }
-        });
+        }
 
         // Process absences
         employeeAbsences.forEach(abs => {
@@ -378,9 +392,9 @@ const BusinessTripsDashboard = () => {
             }
           },
           meal_vouchers: mealVoucherDays,
-          meal_voucher_amount: mealVoucherAmount
+          meal_voucher_amount: defaultMealVoucherAmount
         };
-      });
+      }));
 
       setBusinessTripData(processedData);
     } catch (error) {

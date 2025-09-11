@@ -119,10 +119,57 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
     loadEmployeeSettings();
   }, [employeeUserIds.join(',')]);
 
-  // Get meal benefits for a timesheet using centralized calculation
+  // Get meal benefits for a timesheet using temporal calculation
+  const [mealBenefitsCache, setMealBenefitsCache] = useState<{ [key: string]: { mealVoucher: boolean; dailyAllowance: boolean } }>({});
+
+  // Precompute meal benefits for all timesheets
+  useEffect(() => {
+    const computeMealBenefits = async () => {
+      const cache: { [key: string]: { mealVoucher: boolean; dailyAllowance: boolean } } = {};
+      
+      for (const timesheet of realtimeTimesheets) {
+        if (timesheet.start_time) {
+          try {
+            const { calculateMealBenefitsTemporal } = await import('@/utils/mealBenefitsCalculator');
+            const { getEmployeeSettingsForDate } = await import('@/utils/temporalEmployeeSettings');
+            
+            // Get temporal settings for this specific date
+            const temporalSettings = await getEmployeeSettingsForDate(timesheet.user_id, timesheet.date);
+            
+            const mealBenefits = await calculateMealBenefitsTemporal(
+              timesheet,
+              temporalSettings ? {
+                meal_allowance_policy: temporalSettings.meal_allowance_policy,
+                meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
+                daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
+                lunch_break_type: temporalSettings.lunch_break_type
+              } : undefined,
+              companySettings,
+              timesheet.date
+            );
+            
+            cache[timesheet.id] = {
+              mealVoucher: mealBenefits.mealVoucher,
+              dailyAllowance: mealBenefits.dailyAllowance
+            };
+          } catch (error) {
+            console.error('Error computing meal benefits for timesheet', timesheet.id, error);
+            cache[timesheet.id] = { mealVoucher: false, dailyAllowance: false };
+          }
+        }
+      }
+      
+      setMealBenefitsCache(cache);
+    };
+
+    if (realtimeTimesheets.length > 0 && companySettings) {
+      computeMealBenefits();
+    }
+  }, [realtimeTimesheets, companySettings]);
+
+  // Get cached meal benefits for a timesheet
   const getMealBenefits = (timesheet: TimesheetWithProfile) => {
-    const employeeSettings_for_user = employeeSettings[timesheet.user_id];
-    return calculateMealBenefits(timesheet, employeeSettings_for_user, companySettings);
+    return mealBenefitsCache[timesheet.id] || { mealVoucher: false, dailyAllowance: false };
   };
 
   // Calcola le ore lavorate per un timesheet (anche se in corso)
@@ -161,52 +208,63 @@ export function TimesheetTimeline({ timesheets, weekDays, onTimesheetClick }: Ti
     return Math.max(0, diffHours - lunchBreakHours);
   };
 
-  // Calculate if timesheet qualifies for daily allowance
-  const calculateDailyAllowanceEarned = (timesheet: TimesheetWithProfile): boolean => {
-    const workedHours = calculateWorkedHours(timesheet);
-    if (workedHours === 0) return false;
+  // Calculate if timesheet qualifies for daily allowance using temporal settings
+  const calculateDailyAllowanceEarned = async (timesheet: TimesheetWithProfile): Promise<boolean> => {
+    const { calculateMealBenefitsTemporal } = await import('@/utils/mealBenefitsCalculator');
+    const { getEmployeeSettingsForDate } = await import('@/utils/temporalEmployeeSettings');
     
-    const settings = employeeSettings[timesheet.user_id];
-    const effectiveMealAllowancePolicy = settings?.meal_allowance_policy || companySettings?.meal_allowance_policy || 'disabled';
-    const effectiveDailyAllowanceMinHours = settings?.daily_allowance_min_hours || companySettings?.default_daily_allowance_min_hours || 6;
-
-    const result = (
-      (effectiveMealAllowancePolicy === 'daily_allowance' || effectiveMealAllowancePolicy === 'both') && 
-      workedHours >= effectiveDailyAllowanceMinHours
+    // Get temporal settings for this specific date
+    const temporalSettings = await getEmployeeSettingsForDate(timesheet.user_id, timesheet.date);
+    
+    const mealBenefits = await calculateMealBenefitsTemporal(
+      timesheet,
+      temporalSettings ? {
+        meal_allowance_policy: temporalSettings.meal_allowance_policy,
+        meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
+        daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
+        lunch_break_type: temporalSettings.lunch_break_type
+      } : undefined,
+      companySettings,
+      timesheet.date
     );
     
     console.log(`💰 Daily allowance for ${timesheet.id} (${timesheet.date}):`, {
-      workedHours: workedHours.toFixed(2),
-      effectiveMealAllowancePolicy,
-      effectiveDailyAllowanceMinHours,
-      result
+      workedHours: mealBenefits.workedHours.toFixed(2),
+      temporalSettings: temporalSettings?.meal_allowance_policy,
+      calculated: mealBenefits.dailyAllowance
     });
     
-    return result;
+    return mealBenefits.dailyAllowance;
   };
 
-  // Calculate if timesheet qualifies for meal voucher
-  const calculateMealVoucherEarned = (timesheet: TimesheetWithProfile): boolean => {
-    const workedHours = calculateWorkedHours(timesheet);
-    if (workedHours === 0) return false;
+  // Calculate if timesheet qualifies for meal voucher using temporal settings
+  const calculateMealVoucherEarned = async (timesheet: TimesheetWithProfile): Promise<boolean> => {
+    const { calculateMealBenefitsTemporal } = await import('@/utils/mealBenefitsCalculator');
+    const { getEmployeeSettingsForDate } = await import('@/utils/temporalEmployeeSettings');
     
-    const settings = employeeSettings[timesheet.user_id];
-    const effectiveMealAllowancePolicy = settings?.meal_allowance_policy || companySettings?.meal_allowance_policy || 'disabled';
-    const effectiveMealVoucherMinHours = settings?.meal_voucher_min_hours || companySettings?.meal_voucher_min_hours || 6;
-
-    // For 'both' policy or 'meal_vouchers_only', check if worked hours meet minimum
-    const result = (effectiveMealAllowancePolicy === 'both' || effectiveMealAllowancePolicy === 'meal_vouchers_only') &&
-      workedHours >= effectiveMealVoucherMinHours;
+    // Get temporal settings for this specific date
+    const temporalSettings = await getEmployeeSettingsForDate(timesheet.user_id, timesheet.date);
+    
+    const mealBenefits = await calculateMealBenefitsTemporal(
+      timesheet,
+      temporalSettings ? {
+        meal_allowance_policy: temporalSettings.meal_allowance_policy,
+        meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
+        daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
+        lunch_break_type: temporalSettings.lunch_break_type
+      } : undefined,
+      companySettings,
+      timesheet.date
+    );
     
     console.log(`🍽️ Meal voucher for ${timesheet.id} (${timesheet.date}):`, {
-      workedHours: workedHours.toFixed(2),
-      effectiveMealAllowancePolicy,
-      effectiveMealVoucherMinHours,
+      workedHours: mealBenefits.workedHours.toFixed(2),
+      temporalSettings: temporalSettings?.meal_allowance_policy,
       dbValue: timesheet.meal_voucher_earned,
-      calculated: result
+      calculated: mealBenefits.mealVoucher
     });
     
-    return result;
+    return mealBenefits.mealVoucher;
   };
 
   // Orari di riferimento dinamici
