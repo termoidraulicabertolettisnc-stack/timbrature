@@ -25,7 +25,7 @@ interface CompanySettings {
   lunch_break_type?: string;
 }
 
-interface MealBenefits {
+export interface MealBenefits {
   mealVoucher: boolean;
   dailyAllowance: boolean;
   workedHours: number;

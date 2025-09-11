@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import * as ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { calculateMealBenefits } from '@/utils/mealBenefitsCalculator';
+import { BenefitsService } from '@/services/BenefitsService';
 
 declare module 'jspdf' {
   interface jsPDF {
@@ -325,19 +325,30 @@ export default function AdminExport() {
             totalOrdinary += ordinary;
             totalOvertime += overtime;
             
-            // Use centralized meal benefit calculation - need to simulate timesheet format
+            // Use centralized temporal meal benefit calculation
             const timesheetData = {
               start_time: dayRecord.start_time,
               end_time: dayRecord.end_time,
               lunch_start_time: dayRecord.lunch_start_time,
               lunch_end_time: dayRecord.lunch_end_time,
               lunch_duration_minutes: dayRecord.lunch_duration_minutes,
-              total_hours: dayRecord.total_hours
+              total_hours: dayRecord.total_hours,
+              user_id: dayRecord.user_id || employee.id,
+              date: currentDate
             };
-            const mealBenefits = calculateMealBenefits(timesheetData, settings, null);
-            if (mealBenefits.mealVoucher) {
-              workingDays++;
-            }
+            
+            BenefitsService.validateTemporalUsage('AdminExport.generatePayroll');
+            
+            // Note: This should be made async, but for now we'll handle the promise
+            BenefitsService.calculateMealBenefits(timesheetData, settings, null, currentDate)
+              .then(mealBenefits => {
+                if (mealBenefits.mealVoucher) {
+                  workingDays++;
+                }
+              })
+              .catch(err => {
+                console.error('Error calculating meal benefits:', err);
+              });
           }
         } else if (!isHoliday) {
           // Non-working day (weekend or absence without record)

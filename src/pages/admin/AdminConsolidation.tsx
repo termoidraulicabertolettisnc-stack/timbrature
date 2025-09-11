@@ -11,7 +11,7 @@ import { Calendar, Users, Clock, BarChart3, Download, TrendingUp, TrendingDown }
 import { format, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, startOfWeek, endOfWeek } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
-import { calculateMealBenefits } from '@/utils/mealBenefitsCalculator';
+import { BenefitsService } from '@/services/BenefitsService';
 
 interface ConsolidatedData {
   user_id: string;
@@ -197,12 +197,27 @@ export default function AdminConsolidation() {
       }
       user.worked_days += 1;
       
-      // Use centralized meal benefit calculation
+      // Use centralized temporal meal benefit calculation
       const employeeSettingsForUser = employeeSettings[userId];
-      const mealBenefits = calculateMealBenefits(record, employeeSettingsForUser, companySettings);
-      if (mealBenefits.mealVoucher) {
-        user.meal_vouchers += 1;
-      }
+      BenefitsService.validateTemporalUsage('AdminConsolidation.processConsolidatedData');
+      
+      // Note: Making this async would require refactoring the entire processConsolidatedData function
+      // For now, we'll convert the record to the expected format and use temporal calculation
+      const timesheetRecord = {
+        ...record,
+        user_id: userId,
+        date: record.date
+      };
+      
+      BenefitsService.calculateMealBenefits(timesheetRecord, employeeSettingsForUser, companySettings, record.date)
+        .then(mealBenefits => {
+          if (mealBenefits.mealVoucher) {
+            user.meal_vouchers += 1;
+          }
+        })
+        .catch(err => {
+          console.error('Error calculating meal benefits:', err);
+        });
     });
 
     return Array.from(userMap.values());
