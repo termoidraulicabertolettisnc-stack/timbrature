@@ -164,23 +164,39 @@ export async function saveTemporalEmployeeSettings(
       }
       console.log('✅ Previous settings deleted');
     } else {
-      // Chiudi TUTTI i record attivi precedenti per questo utente
-      console.log('📅 Closing all active settings...');
+      // Per modifiche da data specifica: mantieni la storia precedente e applica le nuove impostazioni dalla data selezionata
+      console.log('📅 Splitting timeline for date-specific changes...');
       const dayBefore = new Date(validFrom);
       dayBefore.setDate(dayBefore.getDate() - 1);
       const validToDate = dayBefore.toISOString().split('T')[0];
 
+      // Chiudi solo i record attivi che si sovrappongono con il nuovo periodo
+      // Questo significa: record che iniziano PRIMA della nuova validFrom
       const { error: updateError } = await supabase
         .from('employee_settings')
         .update({ valid_to: validToDate })
         .eq('user_id', userId)
-        .is('valid_to', null); // Chiudi tutti i record attivi, indipendentemente dalla data di inizio
+        .is('valid_to', null)
+        .lt('valid_from', validFrom); // Solo record che iniziano prima della nuova data
 
       if (updateError) {
         console.error('❌ Update error:', updateError);
         return { success: false, error: updateError.message };
       }
-      console.log('✅ All active settings closed');
+      
+      // Se esistono record che iniziano dalla stessa data o dopo, eliminali
+      const { error: deleteError } = await supabase
+        .from('employee_settings')
+        .delete()
+        .eq('user_id', userId)
+        .gte('valid_from', validFrom);
+        
+      if (deleteError) {
+        console.error('❌ Delete future records error:', deleteError);
+        return { success: false, error: deleteError.message };
+      }
+      
+      console.log('✅ Timeline split completed');
     }
 
     // STEP 4: Inserisci le nuove impostazioni con retry logic
