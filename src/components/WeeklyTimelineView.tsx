@@ -151,13 +151,14 @@ export function WeeklyTimelineView({
 
       // Calcola durata e posizione per timeline
       if (timesheet.start_time) {
-        const startTime = new Date(`${timesheet.date}T${timesheet.start_time}`);
+        // Parse corretto: start_time è già un timestamp completo
+        const startTime = new Date(timesheet.start_time);
         let endTime: Date;
         let duration: number;
         let isActive = false;
 
         if (timesheet.end_time) {
-          endTime = new Date(`${timesheet.date}T${timesheet.end_time}`);
+          endTime = new Date(timesheet.end_time);
           duration = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
         } else {
           // Timesheet aperto - calcola in tempo reale
@@ -166,11 +167,17 @@ export function WeeklyTimelineView({
           isActive = true;
         }
 
+        // Validazione della durata
+        if (isNaN(duration) || duration < 0) {
+          console.warn('⚠️ Invalid duration calculated:', { timesheet_id: timesheet.id, startTime, endTime, duration });
+          return; // Skip questo timesheet se la durata non è valida
+        }
+
         // Calcola durate separate per orario normale e straordinario
         const regularHours = Math.min(duration, 8);
         const overtimeHours = Math.max(0, duration - 8);
 
-        // Posizione sulla timeline (0-24 ore)
+        // Posizione sulla timeline (0-24 ore) - estrai l'ora dal timestamp
         const startHour = startTime.getHours() + startTime.getMinutes() / 60;
         const endHour = Math.min(24, startHour + duration);
         const position = (startHour / 24) * 100;
@@ -187,8 +194,8 @@ export function WeeklyTimelineView({
 
         const entry: TimelineEntry = {
           timesheet,
-          start_time: timesheet.start_time,
-          end_time: timesheet.end_time,
+          start_time: format(startTime, 'HH:mm:ss'), // Converti a formato orario
+          end_time: timesheet.end_time ? format(new Date(timesheet.end_time), 'HH:mm:ss') : null,
           duration,
           regular_duration: regularHours,
           overtime_duration: overtimeHours,
@@ -200,10 +207,12 @@ export function WeeklyTimelineView({
 
         day.entries.push(entry);
 
-        // Aggiorna i totali
-        employee.totals.total_hours += duration;
-        employee.totals.overtime_hours += overtimeHours;
-        employee.totals.night_hours += timesheet.night_hours || 0;
+        // Aggiorna i totali con validazione
+        if (!isNaN(duration)) {
+          employee.totals.total_hours += duration;
+          employee.totals.overtime_hours += overtimeHours;
+          employee.totals.night_hours += timesheet.night_hours || 0;
+        }
       }
     });
 
@@ -339,16 +348,16 @@ export function WeeklyTimelineView({
                       </CardTitle>
                       <p className="text-sm text-muted-foreground">{employee.email}</p>
                     </div>
-                    <div className="flex items-center gap-4 text-sm">
+                     <div className="flex items-center gap-4 text-sm">
                       <span className="font-medium">
-                        Totale: {employee.totals.total_hours.toFixed(1)}h
+                        Totale: {isNaN(employee.totals.total_hours) ? '0.0' : employee.totals.total_hours.toFixed(1)}h
                       </span>
-                      {employee.totals.overtime_hours > 0 && (
+                      {employee.totals.overtime_hours > 0 && !isNaN(employee.totals.overtime_hours) && (
                         <span className="text-orange-600">
                           Straord: {employee.totals.overtime_hours.toFixed(1)}h
                         </span>
                       )}
-                      {employee.totals.night_hours > 0 && (
+                      {employee.totals.night_hours > 0 && !isNaN(employee.totals.night_hours) && (
                         <span className="text-blue-600">
                           Notte: {employee.totals.night_hours.toFixed(1)}h
                         </span>
