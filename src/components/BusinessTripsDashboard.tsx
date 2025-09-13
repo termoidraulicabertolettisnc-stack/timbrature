@@ -390,46 +390,19 @@ const BusinessTripsDashboard = () => {
         
         if (totalBusinessTripAmount > 0) {
           // Determine the maximum daily business trip value for this employee
-          // We need to check what rate applies for Saturdays (meal benefits determine with/without meal)
-          let maxDailyValue = 0;
+          // Use the employee's general meal voucher policy settings, not individual Saturday meal benefits
+          const { getEmployeeSettingsForDate } = await import('@/utils/temporalEmployeeSettings');
+          const temporalSettings = await getEmployeeSettingsForDate(profile.user_id, `${selectedMonth}-01`);
           
-          // Get the most common rate used during the month for this employee
-          for (const ts of employeeTimesheets) {
-            const date = new Date(ts.date);
-            const isSaturday = date.getDay() === 6;
-            
-            if (isSaturday) {
-              const { getEmployeeSettingsForDate } = await import('@/utils/temporalEmployeeSettings');
-              const temporalSettings = await getEmployeeSettingsForDate(ts.user_id, ts.date);
-              
-              // Check if employee gets meal benefits on this Saturday
-              const { calculateMealBenefitsTemporal } = await import('@/utils/mealBenefitsCalculator');
-              const mealBenefits = await calculateMealBenefitsTemporal(
-                ts,
-                temporalSettings ? {
-                  meal_allowance_policy: temporalSettings.meal_allowance_policy,
-                  meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
-                  daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
-                  lunch_break_type: temporalSettings.lunch_break_type,
-                  saturday_handling: temporalSettings.saturday_handling
-                } : undefined,
-                companySettingsForEmployee,
-                ts.date
-              );
-              
-              // Determine rate based on meal benefits
-              const rateWithMeal = temporalSettings?.business_trip_rate_with_meal || companySettingsForEmployee?.business_trip_rate_with_meal || 30.98;
-              const rateWithoutMeal = temporalSettings?.business_trip_rate_without_meal || companySettingsForEmployee?.business_trip_rate_without_meal || 46.48;
-              
-              const applicableRate = mealBenefits.mealVoucher ? rateWithMeal : rateWithoutMeal;
-              maxDailyValue = Math.max(maxDailyValue, applicableRate);
-            }
-          }
+          // Check if employee has meal voucher policy enabled generally
+          const hasMealVoucherPolicy = temporalSettings?.meal_voucher_policy !== null || companySettingsForEmployee?.meal_voucher_policy !== 'disabilitato';
           
-          // If no Saturday data found, use default rate without meal
-          if (maxDailyValue === 0) {
-            maxDailyValue = companySettingsForEmployee?.business_trip_rate_without_meal || 46.48;
-          }
+          // Determine rates
+          const rateWithMeal = temporalSettings?.business_trip_rate_with_meal || companySettingsForEmployee?.business_trip_rate_with_meal || 30.98;
+          const rateWithoutMeal = temporalSettings?.business_trip_rate_without_meal || companySettingsForEmployee?.business_trip_rate_without_meal || 46.48;
+          
+          // Use appropriate rate based on whether employee has meal voucher policy enabled
+          const maxDailyValue = hasMealVoucherPolicy ? rateWithMeal : rateWithoutMeal;
           
           // Passaggio 1: Calculate standardized business trip days (rounded up)
           standardizedBusinessTripDays = Math.ceil(totalBusinessTripAmount / maxDailyValue);
