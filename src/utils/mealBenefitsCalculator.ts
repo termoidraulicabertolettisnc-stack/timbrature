@@ -16,6 +16,7 @@ interface EmployeeSettings {
   meal_voucher_min_hours?: number;
   daily_allowance_min_hours?: number;
   lunch_break_type?: string;
+  saturday_handling?: string;
 }
 
 interface CompanySettings {
@@ -23,6 +24,7 @@ interface CompanySettings {
   meal_voucher_min_hours?: number;
   default_daily_allowance_min_hours?: number;
   lunch_break_type?: string;
+  saturday_handling?: string;
 }
 
 export interface MealBenefits {
@@ -46,6 +48,23 @@ export function calculateMealBenefits(
   
   if (workedHours === 0) {
     return { mealVoucher: false, dailyAllowance: false, workedHours: 0 };
+  }
+
+  // Check if it's Saturday and configured as "trasferta"
+  if (timesheet.date) {
+    const workDate = new Date(timesheet.date);
+    const isSaturday = workDate.getDay() === 6;
+    
+    if (isSaturday) {
+      const saturdayHandling = employeeSettings?.saturday_handling || 
+                              companySettings?.saturday_handling || 
+                              'straordinario';
+      
+      // If Saturday is configured as "trasferta", no meal benefits
+      if (saturdayHandling === 'trasferta') {
+        return { mealVoucher: false, dailyAllowance: false, workedHours };
+      }
+    }
   }
 
   // Determine effective policy
@@ -111,7 +130,8 @@ function mapTemporalToEmployeeSettings(temporal: TemporalEmployeeSettings): Empl
     meal_allowance_policy: temporal.meal_allowance_policy,
     meal_voucher_min_hours: temporal.meal_voucher_min_hours,
     daily_allowance_min_hours: temporal.daily_allowance_min_hours,
-    lunch_break_type: temporal.lunch_break_type
+    lunch_break_type: temporal.lunch_break_type,
+    saturday_handling: temporal.saturday_handling
   };
 }
 

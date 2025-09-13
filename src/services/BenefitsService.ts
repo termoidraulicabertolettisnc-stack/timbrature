@@ -16,6 +16,7 @@ export interface EmployeeSettings {
   meal_voucher_min_hours?: number;
   daily_allowance_min_hours?: number;
   lunch_break_type?: string;
+  saturday_handling?: string;
 }
 
 export interface CompanySettings {
@@ -23,6 +24,7 @@ export interface CompanySettings {
   meal_voucher_min_hours?: number;
   default_daily_allowance_min_hours?: number;
   lunch_break_type?: string;
+  saturday_handling?: string;
 }
 
 /**
