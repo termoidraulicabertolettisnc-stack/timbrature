@@ -26,9 +26,11 @@ interface CompanySettings {
   business_trip_rate_without_meal: number;
   saturday_hourly_rate: number;
   meal_voucher_amount: number;
-  daily_allowance_amount: number;
-  daily_allowance_policy: string;
-  daily_allowance_min_hours: number;
+  // Allineato ai nomi reali nel database
+  default_daily_allowance_amount: number;
+  meal_allowance_policy: 'disabled' | 'meal_vouchers_only' | 'meal_vouchers_always' | 'daily_allowance' | 'both';
+  default_daily_allowance_min_hours: number;
+  meal_voucher_min_hours: number;
   created_at: string;
   updated_at: string;
 }
@@ -102,9 +104,10 @@ export default function AdminSettings() {
         business_trip_rate_without_meal: 46.48,
         saturday_hourly_rate: 10.00,
         meal_voucher_amount: 8.00,
-        daily_allowance_amount: 10.00,
-        daily_allowance_policy: 'disabled',
-        daily_allowance_min_hours: 6,
+        default_daily_allowance_amount: 10.00,
+        meal_allowance_policy: 'meal_vouchers_only' as const,
+        default_daily_allowance_min_hours: 6,
+        meal_voucher_min_hours: 6,
       };
 
       const { data, error } = await supabase
@@ -146,9 +149,10 @@ export default function AdminSettings() {
           business_trip_rate_without_meal: settings.business_trip_rate_without_meal,
           saturday_hourly_rate: settings.saturday_hourly_rate,
           meal_voucher_amount: settings.meal_voucher_amount,
-          daily_allowance_amount: settings.daily_allowance_amount,
-          daily_allowance_policy: settings.daily_allowance_policy,
-          daily_allowance_min_hours: settings.daily_allowance_min_hours,
+          default_daily_allowance_amount: settings.default_daily_allowance_amount,
+          meal_allowance_policy: settings.meal_allowance_policy,
+          default_daily_allowance_min_hours: settings.default_daily_allowance_min_hours,
+          meal_voucher_min_hours: settings.meal_voucher_min_hours,
         })
         .eq('id', settings.id);
 
@@ -540,14 +544,14 @@ export default function AdminSettings() {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="daily_allowance_amount">Importo Indennità Giornaliera (€)</Label>
+                <Label htmlFor="default_daily_allowance_amount">Importo Indennità Giornaliera (€)</Label>
                 <Input
-                  id="daily_allowance_amount"
+                  id="default_daily_allowance_amount"
                   type="number"
                   min="0"
                   step="0.01"
-                  value={settings.daily_allowance_amount}
-                  onChange={(e) => updateSetting('daily_allowance_amount', parseFloat(e.target.value) || 10.00)}
+                  value={settings.default_daily_allowance_amount}
+                  onChange={(e) => updateSetting('default_daily_allowance_amount', parseFloat(e.target.value) || 10.00)}
                 />
                 <p className="text-xs text-muted-foreground">
                   Importo dell'indennità giornaliera
@@ -555,18 +559,34 @@ export default function AdminSettings() {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="daily_allowance_min_hours">Ore Minime per Indennità</Label>
+                <Label htmlFor="default_daily_allowance_min_hours">Ore Minime per Indennità</Label>
                 <Input
-                  id="daily_allowance_min_hours"
+                  id="default_daily_allowance_min_hours"
                   type="number"
                   min="0"
                   max="12"
                   step="0.5"
-                  value={settings.daily_allowance_min_hours}
-                  onChange={(e) => updateSetting('daily_allowance_min_hours', parseInt(e.target.value) || 6)}
+                  value={settings.default_daily_allowance_min_hours}
+                  onChange={(e) => updateSetting('default_daily_allowance_min_hours', parseInt(e.target.value) || 6)}
                 />
                 <p className="text-xs text-muted-foreground">
                   Ore minime per ottenere l'indennità giornaliera
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="meal_voucher_min_hours">Ore Minime per Buono Pasto</Label>
+                <Input
+                  id="meal_voucher_min_hours"
+                  type="number"
+                  min="0"
+                  max="12"
+                  step="0.5"
+                  value={settings.meal_voucher_min_hours}
+                  onChange={(e) => updateSetting('meal_voucher_min_hours', parseInt(e.target.value) || 6)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Ore minime per ottenere il buono pasto
                 </p>
               </div>
               

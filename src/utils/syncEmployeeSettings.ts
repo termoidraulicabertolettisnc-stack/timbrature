@@ -56,8 +56,9 @@ export const syncEmployeeSettingsStructure = async (companyId: string) => {
         saturday_hourly_rate: empSetting.saturday_hourly_rate !== undefined ? empSetting.saturday_hourly_rate : null,
         meal_voucher_amount: empSetting.meal_voucher_amount !== undefined ? empSetting.meal_voucher_amount : null,
         daily_allowance_amount: empSetting.daily_allowance_amount !== undefined ? empSetting.daily_allowance_amount : null,
-        daily_allowance_policy: empSetting.daily_allowance_policy !== undefined ? empSetting.daily_allowance_policy : null,
+        meal_allowance_policy: empSetting.meal_allowance_policy !== undefined ? empSetting.meal_allowance_policy : null,
         daily_allowance_min_hours: empSetting.daily_allowance_min_hours !== undefined ? empSetting.daily_allowance_min_hours : null,
+        meal_voucher_min_hours: empSetting.meal_voucher_min_hours !== undefined ? empSetting.meal_voucher_min_hours : null,
         updated_at: new Date().toISOString()
       };
 
@@ -130,8 +131,9 @@ export const createDefaultEmployeeSettings = async (
       saturday_hourly_rate: null,
       meal_voucher_amount: null,
       daily_allowance_amount: null,
-      daily_allowance_policy: null,
+      meal_allowance_policy: null,
       daily_allowance_min_hours: null,
+      meal_voucher_min_hours: null,
     };
 
     const { data, error } = await supabase
