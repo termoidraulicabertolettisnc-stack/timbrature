@@ -9,24 +9,26 @@ import { Separator } from '@/components/ui/separator';
 import { Settings, Clock, Coffee, Calendar, Moon, Gift, Save, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { syncEmployeeSettingsStructure } from '@/utils/syncEmployeeSettings';
 
 interface CompanySettings {
   id: string;
   company_id: string;
   standard_weekly_hours: any;
-  lunch_break_type: 'libera' | '0_minuti' | '15_minuti' | '30_minuti' | '45_minuti' | '60_minuti' | '90_minuti' | '120_minuti';
+  lunch_break_type: '0_minuti' | '15_minuti' | '30_minuti' | '45_minuti' | '60_minuti' | '90_minuti' | '120_minuti' | 'libera';
   overtime_calculation: 'dopo_8_ore' | 'sempre';
   saturday_handling: 'trasferta' | 'straordinario';
-  meal_allowance_policy: 'disabled' | 'meal_vouchers_only' | 'meal_vouchers_always' | 'daily_allowance';
+  meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni' | 'disabilitato';
   night_shift_start: string;
   night_shift_end: string;
+  overtime_monthly_compensation: boolean;
   business_trip_rate_with_meal: number;
   business_trip_rate_without_meal: number;
   saturday_hourly_rate: number;
   meal_voucher_amount: number;
-  meal_voucher_min_hours: number;
-  default_daily_allowance_amount: number;
-  default_daily_allowance_min_hours: number;
+  daily_allowance_amount: number;
+  daily_allowance_policy: string;
+  daily_allowance_min_hours: number;
   created_at: string;
   updated_at: string;
 }
@@ -92,16 +94,17 @@ export default function AdminSettings() {
         lunch_break_type: '60_minuti' as const,
         overtime_calculation: 'dopo_8_ore' as const,
         saturday_handling: 'trasferta' as const,
-        meal_allowance_policy: 'meal_vouchers_only' as const,
+        meal_voucher_policy: 'oltre_6_ore' as const,
         night_shift_start: '20:00:00',
         night_shift_end: '05:00:00',
+        overtime_monthly_compensation: false,
         business_trip_rate_with_meal: 30.98,
         business_trip_rate_without_meal: 46.48,
         saturday_hourly_rate: 10.00,
         meal_voucher_amount: 8.00,
-        meal_voucher_min_hours: 6,
-        default_daily_allowance_amount: 10.00,
-        default_daily_allowance_min_hours: 6,
+        daily_allowance_amount: 10.00,
+        daily_allowance_policy: 'disabled',
+        daily_allowance_min_hours: 6,
       };
 
       const { data, error } = await supabase
@@ -135,16 +138,17 @@ export default function AdminSettings() {
           lunch_break_type: settings.lunch_break_type,
           overtime_calculation: settings.overtime_calculation,
           saturday_handling: settings.saturday_handling,
-          meal_allowance_policy: settings.meal_allowance_policy,
+          meal_voucher_policy: settings.meal_voucher_policy,
           night_shift_start: settings.night_shift_start,
           night_shift_end: settings.night_shift_end,
+          overtime_monthly_compensation: settings.overtime_monthly_compensation,
           business_trip_rate_with_meal: settings.business_trip_rate_with_meal,
           business_trip_rate_without_meal: settings.business_trip_rate_without_meal,
           saturday_hourly_rate: settings.saturday_hourly_rate,
           meal_voucher_amount: settings.meal_voucher_amount,
-          meal_voucher_min_hours: settings.meal_voucher_min_hours,
-          default_daily_allowance_amount: settings.default_daily_allowance_amount,
-          default_daily_allowance_min_hours: settings.default_daily_allowance_min_hours,
+          daily_allowance_amount: settings.daily_allowance_amount,
+          daily_allowance_policy: settings.daily_allowance_policy,
+          daily_allowance_min_hours: settings.daily_allowance_min_hours,
         })
         .eq('id', settings.id);
 
@@ -156,6 +160,19 @@ export default function AdminSettings() {
       });
 
       setHasChanges(false);
+
+      // Synchronize employee settings structure after company settings are saved
+      if (settings.company_id) {
+        const syncResult = await syncEmployeeSettingsStructure(settings.company_id);
+        if (!syncResult.success) {
+          console.warn('Employee settings sync failed:', syncResult.error);
+          toast({
+            title: "Avviso",
+            description: "Configurazioni aziendali salvate, ma sincronizzazione dipendenti parzialmente fallita",
+            variant: "default",
+          });
+        }
+      }
 
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -351,6 +368,39 @@ export default function AdminSettings() {
           </CardContent>
         </Card>
 
+        {/* Compenso Mensile Straordinari */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Compenso Straordinari
+            </CardTitle>
+            <CardDescription>
+              Configura se i dipendenti ricevono compenso mensile per straordinari
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <input
+                  id="overtime_monthly_compensation"
+                  type="checkbox"
+                  checked={settings.overtime_monthly_compensation || false}
+                  onChange={(e) => updateSetting('overtime_monthly_compensation', e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="overtime_monthly_compensation">Compenso Mensile Straordinari</Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {settings.overtime_monthly_compensation 
+                  ? 'I dipendenti ricevono un compenso mensile per le ore di straordinario' 
+                  : 'Nessun compenso mensile specifico per straordinari'
+                }
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Gestione Sabato */}
         <Card>
           <CardHeader>
@@ -398,51 +448,27 @@ export default function AdminSettings() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="meal_allowance_policy">Policy Unificata</Label>
+              <Label htmlFor="meal_voucher_policy">Policy Buoni Pasto</Label>
               <Select 
-                value={settings.meal_allowance_policy} 
-                onValueChange={(value) => updateSetting('meal_allowance_policy', value)}
+                value={settings.meal_voucher_policy} 
+                onValueChange={(value) => updateSetting('meal_voucher_policy', value)}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="disabled">Disabilitato</SelectItem>
-                  <SelectItem value="meal_vouchers_only">Solo Buoni Pasto</SelectItem>
-                  <SelectItem value="meal_vouchers_always">Buoni Pasto Sempre</SelectItem>
-                  <SelectItem value="daily_allowance">Indennità Giornaliera</SelectItem>
+                  <SelectItem value="disabilitato">Disabilitato</SelectItem>
+                  <SelectItem value="oltre_6_ore">Oltre 6 ore</SelectItem>
+                  <SelectItem value="sempre_parttime">Sempre per Part-time</SelectItem>
+                  <SelectItem value="conteggio_giorni">Conteggio Giorni</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {settings.meal_allowance_policy === 'disabled' && 'Né buoni pasto né indennità giornaliere vengono assegnati'}
-                {settings.meal_allowance_policy === 'meal_vouchers_only' && 'Buoni pasto assegnati in base alle ore minime configurate'}
-                {settings.meal_allowance_policy === 'meal_vouchers_always' && 'Buoni pasto sempre assegnati per ogni giorno lavorativo'}
-                {settings.meal_allowance_policy === 'daily_allowance' && 'Indennità giornaliera assegnata in base alle ore minime configurate (nessun buono pasto)'}
+                {settings.meal_voucher_policy === 'disabilitato' && 'Buoni pasto disabilitati'}
+                {settings.meal_voucher_policy === 'oltre_6_ore' && 'Buoni pasto assegnati oltre le 6 ore lavorative'}
+                {settings.meal_voucher_policy === 'sempre_parttime' && 'Buoni pasto sempre assegnati per part-time'}
+                {settings.meal_voucher_policy === 'conteggio_giorni' && 'Buoni pasto basati su conteggio giorni lavorativi'}
               </p>
-          {/* Meal Voucher Minimum Hours - Only show if meal_allowance_policy is meal_vouchers_only */}
-          {settings.meal_allowance_policy === 'meal_vouchers_only' && (
-            <div className="space-y-2">
-              <Label htmlFor="meal_voucher_min_hours">Ore minime per buoni pasto</Label>
-              <Select 
-                value={String(settings.meal_voucher_min_hours || 6)} 
-                onValueChange={(value) => updateSetting('meal_voucher_min_hours', parseInt(value))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="4">4 ore</SelectItem>
-                  <SelectItem value="5">5 ore</SelectItem>
-                  <SelectItem value="6">6 ore</SelectItem>
-                  <SelectItem value="7">7 ore</SelectItem>
-                  <SelectItem value="8">8 ore</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Ore minime necessarie per assegnare i buoni pasto
-              </p>
-            </div>
-          )}
             </div>
           </CardContent>
         </Card>
@@ -520,8 +546,8 @@ export default function AdminSettings() {
                   type="number"
                   min="0"
                   step="0.01"
-                  value={settings.default_daily_allowance_amount}
-                  onChange={(e) => updateSetting('default_daily_allowance_amount', parseFloat(e.target.value) || 10.00)}
+                  value={settings.daily_allowance_amount}
+                  onChange={(e) => updateSetting('daily_allowance_amount', parseFloat(e.target.value) || 10.00)}
                 />
                 <p className="text-xs text-muted-foreground">
                   Importo dell'indennità giornaliera
@@ -536,8 +562,8 @@ export default function AdminSettings() {
                   min="0"
                   max="12"
                   step="0.5"
-                  value={settings.default_daily_allowance_min_hours}
-                  onChange={(e) => updateSetting('default_daily_allowance_min_hours', parseInt(e.target.value) || 6)}
+                  value={settings.daily_allowance_min_hours}
+                  onChange={(e) => updateSetting('daily_allowance_min_hours', parseInt(e.target.value) || 6)}
                 />
                 <p className="text-xs text-muted-foreground">
                   Ore minime per ottenere l'indennità giornaliera
