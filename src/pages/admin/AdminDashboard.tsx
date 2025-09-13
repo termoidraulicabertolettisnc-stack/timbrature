@@ -14,8 +14,8 @@ export default function AdminDashboard() {
         </p>
       </div>
 
-      <Tabs defaultValue="overview" className="w-full flex gap-6">
-        <TabsList className="flex flex-col h-fit w-48 bg-muted/50 p-1">
+      <Tabs defaultValue="overview" className="w-full flex gap-4">
+        <TabsList className="flex flex-col h-fit w-40 bg-muted/50 p-1">
           <TabsTrigger value="overview" className="w-full justify-start gap-2 data-[state=active]:bg-background">
             <Users className="h-4 w-4" />
             Panoramica
