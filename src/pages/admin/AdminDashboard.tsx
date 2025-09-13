@@ -15,7 +15,7 @@ export default function AdminDashboard() {
       </div>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="flex w-full flex-wrap gap-1 h-auto p-1">
           <TabsTrigger value="overview">Panoramica</TabsTrigger>
           <TabsTrigger value="payroll">Vista Buste Paga</TabsTrigger>
           <TabsTrigger value="business-trips">Trasferte</TabsTrigger>
