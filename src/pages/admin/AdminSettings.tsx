@@ -16,7 +16,6 @@ interface CompanySettings {
   company_id: string;
   standard_weekly_hours: any;
   lunch_break_type: '0_minuti' | '15_minuti' | '30_minuti' | '45_minuti' | '60_minuti' | '90_minuti' | '120_minuti' | 'libera' | null;
-  overtime_calculation: 'dopo_8_ore' | 'sempre' | null;
   saturday_handling: 'trasferta' | 'straordinario' | null;
   meal_allowance_policy: 'disabled' | 'meal_vouchers_only' | 'daily_allowance' | 'both' | null;
   night_shift_start: string | null;
@@ -36,7 +35,6 @@ export default function AdminSettings() {
     company_id: '',
     standard_weekly_hours: null,
     lunch_break_type: null,
-    overtime_calculation: null,
     saturday_handling: null,
     meal_allowance_policy: null,
     night_shift_start: null,
@@ -105,7 +103,6 @@ export default function AdminSettings() {
           lun: 8, mar: 8, mer: 8, gio: 8, ven: 8, sab: 0, dom: 0
         },
         lunch_break_type: '60_minuti' as const,
-        overtime_calculation: 'dopo_8_ore' as const,
         saturday_handling: 'trasferta' as const,
         meal_voucher_policy: 'oltre_6_ore' as const,
         night_shift_start: '20:00:00',
@@ -146,7 +143,6 @@ export default function AdminSettings() {
         .update({
           standard_weekly_hours: settings.standard_weekly_hours,
           lunch_break_type: settings.lunch_break_type,
-          overtime_calculation: settings.overtime_calculation,
           saturday_handling: settings.saturday_handling,
           meal_allowance_policy: settings.meal_allowance_policy,
           night_shift_start: settings.night_shift_start,
@@ -330,45 +326,27 @@ export default function AdminSettings() {
           </CardContent>
         </Card>
 
-        {/* Overtime */}
+        {/* Overtime Monthly Compensation */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5" />
-              Calcolo Straordinari
+              Compenso Straordinari
             </CardTitle>
             <CardDescription>
-              Configurazione del calcolo delle ore straordinarie
+              Gli straordinari vengono calcolati sempre dopo le ore lavorative standard giornaliere
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div>
-                <Label>Calcolo Straordinari</Label>
-                <Select
-                  value={settings.overtime_calculation || ''}
-                  onValueChange={(value) => updateSetting('overtime_calculation', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleziona modalità" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="dopo_8_ore">Dopo Ore Standard Giornaliere</SelectItem>
-                    <SelectItem value="sempre">Sempre</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <input
-                  id="overtime_monthly_compensation"
-                  type="checkbox"
-                  checked={settings.overtime_monthly_compensation || false}
-                  onChange={(e) => updateSetting('overtime_monthly_compensation', e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-                <Label htmlFor="overtime_monthly_compensation">Compenso Mensile Straordinari</Label>
-              </div>
+            <div className="flex items-center space-x-2">
+              <input
+                id="overtime_monthly_compensation"
+                type="checkbox"
+                checked={settings.overtime_monthly_compensation || false}
+                onChange={(e) => updateSetting('overtime_monthly_compensation', e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              <Label htmlFor="overtime_monthly_compensation">Compenso Mensile Straordinari</Label>
             </div>
           </CardContent>
         </Card>

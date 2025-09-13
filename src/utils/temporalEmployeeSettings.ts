@@ -6,7 +6,6 @@ export interface TemporalEmployeeSettings {
   company_id: string;
   standard_weekly_hours?: any;
   lunch_break_type?: any;
-  overtime_calculation?: any;
   saturday_handling?: any;
   meal_voucher_policy?: any;
   meal_allowance_policy?: any;

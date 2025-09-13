@@ -45,7 +45,6 @@ export const syncEmployeeSettingsStructure = async (companyId: string) => {
         // This ensures new fields added to company settings are available to employees
         standard_weekly_hours: empSetting.standard_weekly_hours !== undefined ? empSetting.standard_weekly_hours : null,
         lunch_break_type: empSetting.lunch_break_type !== undefined ? empSetting.lunch_break_type : null,
-        overtime_calculation: empSetting.overtime_calculation !== undefined ? empSetting.overtime_calculation : null,
         saturday_handling: empSetting.saturday_handling !== undefined ? empSetting.saturday_handling : null,
         meal_voucher_policy: empSetting.meal_voucher_policy !== undefined ? empSetting.meal_voucher_policy : null,
         night_shift_start: empSetting.night_shift_start !== undefined ? empSetting.night_shift_start : null,
@@ -120,7 +119,6 @@ export const createDefaultEmployeeSettings = async (
       // All fields set to NULL to inherit from company settings
       standard_weekly_hours: null,
       lunch_break_type: null,
-      overtime_calculation: null,
       saturday_handling: null,
       meal_voucher_policy: null,
       night_shift_start: null,

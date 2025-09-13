@@ -185,7 +185,6 @@ export type Database = {
           meal_voucher_policy: Database["public"]["Enums"]["meal_voucher_type"]
           night_shift_end: string
           night_shift_start: string
-          overtime_calculation: Database["public"]["Enums"]["overtime_type"]
           overtime_monthly_compensation: boolean | null
           saturday_handling: Database["public"]["Enums"]["saturday_type"]
           saturday_hourly_rate: number | null
@@ -213,7 +212,6 @@ export type Database = {
           meal_voucher_policy?: Database["public"]["Enums"]["meal_voucher_type"]
           night_shift_end?: string
           night_shift_start?: string
-          overtime_calculation?: Database["public"]["Enums"]["overtime_type"]
           overtime_monthly_compensation?: boolean | null
           saturday_handling?: Database["public"]["Enums"]["saturday_type"]
           saturday_hourly_rate?: number | null
@@ -241,7 +239,6 @@ export type Database = {
           meal_voucher_policy?: Database["public"]["Enums"]["meal_voucher_type"]
           night_shift_end?: string
           night_shift_start?: string
-          overtime_calculation?: Database["public"]["Enums"]["overtime_type"]
           overtime_monthly_compensation?: boolean | null
           saturday_handling?: Database["public"]["Enums"]["saturday_type"]
           saturday_hourly_rate?: number | null
@@ -325,9 +322,6 @@ export type Database = {
             | null
           night_shift_end: string | null
           night_shift_start: string | null
-          overtime_calculation:
-            | Database["public"]["Enums"]["overtime_type"]
-            | null
           overtime_monthly_compensation: boolean | null
           saturday_handling: Database["public"]["Enums"]["saturday_type"] | null
           saturday_hourly_rate: number | null
@@ -362,9 +356,6 @@ export type Database = {
             | null
           night_shift_end?: string | null
           night_shift_start?: string | null
-          overtime_calculation?:
-            | Database["public"]["Enums"]["overtime_type"]
-            | null
           overtime_monthly_compensation?: boolean | null
           saturday_handling?:
             | Database["public"]["Enums"]["saturday_type"]
@@ -401,9 +392,6 @@ export type Database = {
             | null
           night_shift_end?: string | null
           night_shift_start?: string | null
-          overtime_calculation?:
-            | Database["public"]["Enums"]["overtime_type"]
-            | null
           overtime_monthly_compensation?: boolean | null
           saturday_handling?:
             | Database["public"]["Enums"]["saturday_type"]

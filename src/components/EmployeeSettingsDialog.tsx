@@ -24,7 +24,6 @@ interface EmployeeSettings {
   company_id: string;
   standard_weekly_hours: any;
   lunch_break_type: string | null;
-  overtime_calculation: string | null;
   saturday_handling: string | null;
   meal_voucher_policy: string | null;
   night_shift_start: string | null;
@@ -42,7 +41,6 @@ interface EmployeeSettings {
 interface CompanySettings {
   standard_weekly_hours: any;
   lunch_break_type: '0_minuti' | '15_minuti' | '30_minuti' | '45_minuti' | '60_minuti' | '90_minuti' | '120_minuti' | 'libera';
-  overtime_calculation: 'dopo_8_ore' | 'sempre';
   saturday_handling: 'trasferta' | 'straordinario';
   meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni' | 'disabilitato';
   night_shift_start: string;
@@ -76,7 +74,6 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
     company_id: employee.company_id,
     standard_weekly_hours: null,
     lunch_break_type: null,
-    overtime_calculation: null,
     saturday_handling: null,
     meal_voucher_policy: null,
     night_shift_start: null,
@@ -151,7 +148,6 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
           company_id: selectedCompanyId,
           standard_weekly_hours: null,
           lunch_break_type: null,
-          overtime_calculation: null,
           saturday_handling: null,
           meal_voucher_policy: null,
           night_shift_start: null,
@@ -270,7 +266,6 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
       company_id: selectedCompanyId,
       standard_weekly_hours: null,
       lunch_break_type: null,
-      overtime_calculation: null,
       saturday_handling: null,
       meal_voucher_policy: null,
       night_shift_start: null,
@@ -473,38 +468,24 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
             </CardContent>
           </Card>
 
-          {/* Overtime */}
+          {/* Overtime Monthly Compensation */}
           <Card>
             <CardHeader>
-              <CardTitle>Calcolo Straordinari</CardTitle>
+              <CardTitle>Compenso Straordinari</CardTitle>
               <CardDescription>
-                Come vengono calcolati gli straordinari
-                {companySettings && ` (Aziendale: ${companySettings.overtime_calculation})`}
+                Gli straordinari vengono calcolati sempre dopo le ore lavorative standard giornaliere
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <Label>Calcolo Straordinari</Label>
-                  <Select
-                    value={settings.overtime_calculation || 'company_default'}
-                    onValueChange={(value) => updateSetting('overtime_calculation', value === 'company_default' ? null : value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={companySettings ? `Default: ${companySettings.overtime_calculation}` : 'Seleziona metodo'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="company_default">Usa Default Aziendale</SelectItem>
-                      <SelectItem value="dopo_8_ore">
-                        Dopo Ore Standard Giornaliere
-                      </SelectItem>
-                      <SelectItem value="sempre">Sempre</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Valore effettivo: {getEffectiveValue(settings.overtime_calculation, companySettings?.overtime_calculation)}
-                  </p>
-                </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  id="overtime_monthly_compensation"
+                  type="checkbox"
+                  checked={settings.overtime_monthly_compensation || false}
+                  onChange={(e) => updateSetting('overtime_monthly_compensation', e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="overtime_monthly_compensation">Compenso Mensile Straordinari</Label>
               </div>
             </CardContent>
           </Card>
