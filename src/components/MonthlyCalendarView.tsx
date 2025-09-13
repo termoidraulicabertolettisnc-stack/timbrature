@@ -83,12 +83,153 @@ export function MonthlyCalendarView({
 
     const employeesMap = new Map<string, EmployeeMonthData>();
 
+    // Utility per distribuire ore turni notturni
+    const distributeNightShiftHours = (timesheet: TimesheetWithProfile, employee: EmployeeMonthData) => {
+      if (!timesheet.start_time) return;
+
+      const startTime = new Date(timesheet.start_time);
+      let endTime: Date;
+      let totalHours = 0;
+
+      if (timesheet.end_time) {
+        endTime = new Date(timesheet.end_time);
+        totalHours = timesheet.total_hours || 0;
+      } else {
+        endTime = new Date();
+        const diffMs = endTime.getTime() - startTime.getTime();
+        totalHours = Math.max(0, diffMs / (1000 * 60 * 60));
+      }
+
+      const startDate = format(startTime, 'yyyy-MM-dd');
+      const endDate = format(endTime, 'yyyy-MM-dd');
+      const isNightShift = startDate !== endDate || timesheet.night_hours > 0;
+
+      // Calcola buoni pasto una sola volta
+      const employeeSettingsForUser = employeeSettings[timesheet.user_id];
+      BenefitsService.validateTemporalUsage('MonthlyCalendarView.getMealBenefits');
+      const mealBenefits = BenefitsService.calculateMealBenefitsSync(
+        timesheet, 
+        employeeSettingsForUser, 
+        companySettings
+      );
+
+      if (!isNightShift) {
+        // Turno normale
+        const date = timesheet.date;
+        
+        if (!employee.days[date]) {
+          employee.days[date] = {
+            date,
+            timesheets: [],
+            absences: [],
+            regular_hours: 0,
+            overtime_hours: 0,
+            night_hours: 0,
+            meal_vouchers: 0
+          };
+        }
+
+        employee.days[date].timesheets.push(timesheet);
+        
+        const regularHours = Math.min(totalHours, 8);
+        const overtimeHours = Math.max(0, totalHours - 8);
+
+        employee.days[date].regular_hours += regularHours;
+        employee.days[date].overtime_hours += overtimeHours;
+        employee.days[date].night_hours += timesheet.night_hours || 0;
+
+        if (mealBenefits.mealVoucher) {
+          employee.days[date].meal_vouchers += 1;
+        }
+      } else {
+        // Turno notturno - distribuisci ore tra due giorni
+        const startHour = startTime.getHours() + startTime.getMinutes() / 60;
+        const endHour = endTime.getHours() + endTime.getMinutes() / 60;
+        
+        // Calcola ore per il primo giorno (fino a mezzanotte)
+        const firstDayHours = Math.max(0, 24 - startHour);
+        const secondDayHours = Math.max(0, endHour);
+        
+        // È possibile che il calcolo automatico non sia perfetto, quindi usiamo una proporzione
+        const firstDayProportion = firstDayHours / (firstDayHours + secondDayHours);
+        const adjustedFirstDayHours = totalHours * firstDayProportion;
+        const adjustedSecondDayHours = totalHours * (1 - firstDayProportion);
+
+        // Primo giorno
+        if (!employee.days[startDate]) {
+          employee.days[startDate] = {
+            date: startDate,
+            timesheets: [],
+            absences: [],
+            regular_hours: 0,
+            overtime_hours: 0,
+            night_hours: 0,
+            meal_vouchers: 0
+          };
+        }
+
+        employee.days[startDate].timesheets.push({
+          ...timesheet,
+          id: `${timesheet.id}_day1`,
+          total_hours: adjustedFirstDayHours
+        });
+
+        const firstDayRegular = Math.min(adjustedFirstDayHours, 8);
+        const firstDayOvertime = Math.max(0, adjustedFirstDayHours - 8);
+
+        employee.days[startDate].regular_hours += firstDayRegular;
+        employee.days[startDate].overtime_hours += firstDayOvertime;
+        employee.days[startDate].night_hours += (timesheet.night_hours || 0) * firstDayProportion;
+
+        if (mealBenefits.mealVoucher) {
+          employee.days[startDate].meal_vouchers += 1;
+        }
+
+        // Secondo giorno
+        if (!employee.days[endDate]) {
+          employee.days[endDate] = {
+            date: endDate,
+            timesheets: [],
+            absences: [],
+            regular_hours: 0,
+            overtime_hours: 0,
+            night_hours: 0,
+            meal_vouchers: 0
+          };
+        }
+
+        employee.days[endDate].timesheets.push({
+          ...timesheet,
+          id: `${timesheet.id}_day2`,
+          total_hours: adjustedSecondDayHours
+        });
+
+        // Per il secondo giorno, considera che potrebbero essere ore "continuative"
+        const remainingRegularCapacity = Math.max(0, 8 - firstDayRegular);
+        const secondDayRegular = Math.min(adjustedSecondDayHours, remainingRegularCapacity);
+        const secondDayOvertime = Math.max(0, adjustedSecondDayHours - secondDayRegular);
+
+        employee.days[endDate].regular_hours += secondDayRegular;
+        employee.days[endDate].overtime_hours += secondDayOvertime;
+        employee.days[endDate].night_hours += (timesheet.night_hours || 0) * (1 - firstDayProportion);
+      }
+
+      // Aggiorna i totali una sola volta
+      const regularHours = Math.min(totalHours, 8);
+      const overtimeHours = Math.max(0, totalHours - 8);
+      employee.totals.regular_hours += regularHours;
+      employee.totals.overtime_hours += overtimeHours;
+      employee.totals.total_hours += totalHours;
+    };
+
     // Inizializza i dipendenti dai timesheet
     timesheets.forEach(timesheet => {
       console.log('📋 Processing timesheet:', {
         date: timesheet.date,
+        end_date: timesheet.end_date,
         user: timesheet.profiles?.first_name,
-        start_time: timesheet.start_time
+        start_time: timesheet.start_time,
+        night_hours: timesheet.night_hours
       });
       
       if (!timesheet.profiles) return;
@@ -106,56 +247,7 @@ export function MonthlyCalendarView({
       }
 
       const employee = employeesMap.get(key)!;
-      const date = timesheet.date;
-
-      if (!employee.days[date]) {
-        employee.days[date] = {
-          date,
-          timesheets: [],
-          absences: [],
-          regular_hours: 0,
-          overtime_hours: 0,
-          night_hours: 0,
-          meal_vouchers: 0
-        };
-      }
-
-      employee.days[date].timesheets.push(timesheet);
-
-      // Calcola ore (con tempo reale per timesheet aperti)
-      let hours = 0;
-      if (timesheet.end_time) {
-        hours = timesheet.total_hours || 0;
-      } else if (timesheet.start_time) {
-        const startTime = new Date(timesheet.start_time);
-        const currentTime = new Date();
-        const diffMs = currentTime.getTime() - startTime.getTime();
-        hours = Math.max(0, diffMs / (1000 * 60 * 60));
-      }
-
-      const regularHours = Math.min(hours, 8);
-      const overtimeHours = Math.max(0, hours - 8);
-
-      employee.days[date].regular_hours += regularHours;
-      employee.days[date].overtime_hours += overtimeHours;
-      employee.days[date].night_hours += timesheet.night_hours || 0;
-
-      employee.totals.regular_hours += regularHours;
-      employee.totals.overtime_hours += overtimeHours;
-      employee.totals.total_hours += hours;
-
-      // Calcola buoni pasto
-      const employeeSettingsForUser = employeeSettings[timesheet.user_id];
-      BenefitsService.validateTemporalUsage('MonthlyCalendarView.getMealBenefits');
-      const mealBenefits = BenefitsService.calculateMealBenefitsSync(
-        timesheet, 
-        employeeSettingsForUser, 
-        companySettings
-      );
-      
-      if (mealBenefits.mealVoucher) {
-        employee.days[date].meal_vouchers += 1;
-      }
+      distributeNightShiftHours(timesheet, employee);
     });
 
     // Aggiungi assenze
@@ -267,12 +359,18 @@ export function MonthlyCalendarView({
               {dayData.overtime_hours > 0 && (
                 <div className="text-orange-600">S: {dayData.overtime_hours.toFixed(1)}h</div>
               )}
+              {dayData.night_hours > 0 && (
+                <div className="text-purple-600">N: {dayData.night_hours.toFixed(1)}h</div>
+              )}
             </div>
             
-            <div className="text-xs font-medium">
+            <div className="text-xs font-medium flex items-center gap-1">
               {dayData.regular_hours + dayData.overtime_hours > 0 && 
                 `${(dayData.regular_hours + dayData.overtime_hours).toFixed(1)}h`
               }
+              {dayData.night_hours > 0 && (
+                <div className="w-2 h-2 bg-purple-600 rounded-full" title="Turno notturno" />
+              )}
             </div>
             
             {dayData.meal_vouchers > 0 && (

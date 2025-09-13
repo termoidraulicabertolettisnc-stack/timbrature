@@ -157,64 +157,57 @@ export function WeeklyTimelineView({
       }
     });
 
-    // Processa i timesheet per ogni dipendente
-    timesheets.forEach(timesheet => {
-      const employee = employeesMap.get(timesheet.user_id);
-      if (!employee) return;
+    // Utility per dividere turni notturni
+    const splitNightShift = (timesheet: TimesheetWithProfile, employee: EmployeeWeekData) => {
+      if (!timesheet.start_time) return;
 
-      const dayIndex = employee.days.findIndex(day => day.date === timesheet.date);
-      if (dayIndex === -1) return;
+      const startTime = new Date(timesheet.start_time);
+      let endTime: Date;
+      let isActive = false;
 
-      const day = employee.days[dayIndex];
+      if (timesheet.end_time) {
+        endTime = new Date(timesheet.end_time);
+      } else {
+        endTime = new Date();
+        isActive = true;
+      }
 
-      // Calcola durata e posizione per timeline
-      if (timesheet.start_time) {
-        // Parse corretto: start_time è già un timestamp completo
-        const startTime = new Date(timesheet.start_time);
-        let endTime: Date;
-        let duration: number;
-        let isActive = false;
+      const totalDuration = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+      if (isNaN(totalDuration) || totalDuration < 0) return;
 
-        if (timesheet.end_time) {
-          endTime = new Date(timesheet.end_time);
-          duration = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
-        } else {
-          // Timesheet aperto - calcola in tempo reale
-          endTime = new Date();
-          duration = Math.max(0, (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60));
-          isActive = true;
-        }
+      // Controlla se il turno attraversa la mezzanotte
+      const startDate = format(startTime, 'yyyy-MM-dd');
+      const endDate = format(endTime, 'yyyy-MM-dd');
+      const isNightShift = startDate !== endDate || timesheet.night_hours > 0;
 
-        // Validazione della durata
-        if (isNaN(duration) || duration < 0) {
-          console.warn('⚠️ Invalid duration calculated:', { timesheet_id: timesheet.id, startTime, endTime, duration });
-          return; // Skip questo timesheet se la durata non è valida
-        }
+      // Calcola meal voucher una sola volta
+      const employeeSetting = employeeSettings[timesheet.user_id];
+      BenefitsService.validateTemporalUsage('WeeklyTimelineView');
+      const mealBenefits = BenefitsService.calculateMealBenefitsSync(
+        timesheet,
+        employeeSetting,
+        companySettings
+      );
 
-        // Calcola durate separate per orario normale e straordinario
-        const regularHours = Math.min(duration, 8);
-        const overtimeHours = Math.max(0, duration - 8);
+      if (!isNightShift) {
+        // Turno normale - processa come prima
+        const dayIndex = employee.days.findIndex(day => day.date === timesheet.date);
+        if (dayIndex === -1) return;
 
-        // Posizione sulla timeline (0-24 ore) - estrai l'ora dal timestamp
+        const day = employee.days[dayIndex];
         const startHour = startTime.getHours() + startTime.getMinutes() / 60;
-        const endHour = Math.min(24, startHour + duration);
+        const endHour = Math.min(24, startHour + totalDuration);
         const position = (startHour / 24) * 100;
         const width = ((endHour - startHour) / 24) * 100;
 
-        // Calcola meal voucher
-        const employeeSetting = employeeSettings[timesheet.user_id];
-        BenefitsService.validateTemporalUsage('WeeklyTimelineView');
-        const mealBenefits = BenefitsService.calculateMealBenefitsSync(
-          timesheet,
-          employeeSetting,
-          companySettings
-        );
+        const regularHours = Math.min(totalDuration, 8);
+        const overtimeHours = Math.max(0, totalDuration - 8);
 
         const entry: TimelineEntry = {
           timesheet,
-          start_time: format(startTime, 'HH:mm:ss'), // Converti a formato orario
-          end_time: timesheet.end_time ? format(new Date(timesheet.end_time), 'HH:mm:ss') : null,
-          duration,
+          start_time: format(startTime, 'HH:mm:ss'),
+          end_time: timesheet.end_time ? format(endTime, 'HH:mm:ss') : null,
+          duration: totalDuration,
           regular_duration: regularHours,
           overtime_duration: overtimeHours,
           position,
@@ -224,14 +217,75 @@ export function WeeklyTimelineView({
         };
 
         day.entries.push(entry);
+      } else {
+        // Turno notturno - dividi in due parti
+        const startHour = startTime.getHours() + startTime.getMinutes() / 60;
+        const endHour = endTime.getHours() + endTime.getMinutes() / 60;
+        
+        // Prima parte: dal tempo di inizio fino a mezzanotte
+        const firstDayIndex = employee.days.findIndex(day => day.date === startDate);
+        if (firstDayIndex !== -1) {
+          const firstDayDuration = 24 - startHour;
+          const firstDayRegular = Math.min(firstDayDuration, 8);
+          const firstDayOvertime = Math.max(0, firstDayDuration - 8);
+          
+          const firstEntry: TimelineEntry = {
+            timesheet: { ...timesheet, id: `${timesheet.id}_part1` },
+            start_time: format(startTime, 'HH:mm:ss'),
+            end_time: '24:00:00',
+            duration: firstDayDuration,
+            regular_duration: firstDayRegular,
+            overtime_duration: firstDayOvertime,
+            position: (startHour / 24) * 100,
+            width: ((24 - startHour) / 24) * 100,
+            mealVoucher: mealBenefits.mealVoucher,
+            isActive: isActive && !timesheet.end_time
+          };
 
-        // Aggiorna i totali con validazione
-        if (!isNaN(duration)) {
-          employee.totals.total_hours += duration;
-          employee.totals.overtime_hours += overtimeHours;
-          employee.totals.night_hours += timesheet.night_hours || 0;
+          employee.days[firstDayIndex].entries.push(firstEntry);
+        }
+
+        // Seconda parte: da mezzanotte al tempo di fine
+        const secondDayIndex = employee.days.findIndex(day => day.date === endDate);
+        if (secondDayIndex !== -1) {
+          const secondDayDuration = endHour;
+          const remainingRegular = Math.max(0, Math.min(8 - (24 - startHour), secondDayDuration));
+          const secondDayRegular = Math.max(0, remainingRegular);
+          const secondDayOvertime = Math.max(0, secondDayDuration - secondDayRegular);
+          
+          const secondEntry: TimelineEntry = {
+            timesheet: { ...timesheet, id: `${timesheet.id}_part2` },
+            start_time: '00:00:00',
+            end_time: timesheet.end_time ? format(endTime, 'HH:mm:ss') : null,
+            duration: secondDayDuration,
+            regular_duration: secondDayRegular,
+            overtime_duration: secondDayOvertime,
+            position: 0,
+            width: (endHour / 24) * 100,
+            mealVoucher: false, // Solo la prima parte ha il buono pasto
+            isActive: isActive && !timesheet.end_time
+          };
+
+          employee.days[secondDayIndex].entries.push(secondEntry);
         }
       }
+
+      // Aggiorna i totali una sola volta
+      if (!isNaN(totalDuration)) {
+        const regularHours = Math.min(totalDuration, 8);
+        const overtimeHours = Math.max(0, totalDuration - 8);
+        employee.totals.total_hours += totalDuration;
+        employee.totals.overtime_hours += overtimeHours;
+        employee.totals.night_hours += timesheet.night_hours || 0;
+      }
+    };
+
+    // Processa i timesheet per ogni dipendente
+    timesheets.forEach(timesheet => {
+      const employee = employeesMap.get(timesheet.user_id);
+      if (!employee) return;
+
+      splitNightShift(timesheet, employee);
     });
 
     const result = Array.from(employeesMap.values());
@@ -254,21 +308,31 @@ export function WeeklyTimelineView({
     const regularWidth = (entry.regular_duration / entry.duration) * entry.width;
     const overtimeWidth = (entry.overtime_duration / entry.duration) * entry.width;
     
+    // Controlla se è un turno notturno (parte di un turno spezzato)
+    const isNightShiftPart = entry.timesheet.id.includes('_part');
+    const isFirstPart = entry.timesheet.id.includes('_part1');
+    const isSecondPart = entry.timesheet.id.includes('_part2');
+    const originalId = isNightShiftPart ? entry.timesheet.id.split('_part')[0] : entry.timesheet.id;
+    
     return (
       <div
         key={entry.timesheet.id}
-        className="absolute flex h-6 z-10"
+        className="absolute flex h-6 z-10 group"
         style={{ left: `${entry.position}%`, width: `${entry.width}%` }}
       >
         {/* Fascia orario normale */}
         {entry.regular_duration > 0 && (
           <div
-            className={`h-full bg-primary rounded-l-sm ${entry.overtime_duration === 0 ? 'rounded-r-sm' : ''} 
+            className={`h-full ${isNightShiftPart ? 'bg-blue-600' : 'bg-primary'} 
+              ${isFirstPart ? 'rounded-l-sm' : isSecondPart ? 'rounded-r-sm' : 'rounded-l-sm'} 
+              ${entry.overtime_duration === 0 && !isSecondPart ? 'rounded-r-sm' : ''} 
               ${entry.isActive ? 'animate-pulse' : ''} 
-              cursor-pointer hover:bg-primary/80 transition-colors 
-              flex items-center justify-between px-2 text-white text-xs`}
+              cursor-pointer hover:opacity-80 transition-all
+              flex items-center justify-between px-2 text-white text-xs
+              ${isNightShiftPart ? 'border-2 border-blue-400' : ''}`}
             style={{ width: `${(regularWidth / entry.width) * 100}%` }}
-            onClick={() => onEditTimesheet(entry.timesheet)}
+            onClick={() => onEditTimesheet({ ...entry.timesheet, id: originalId })}
+            title={isNightShiftPart ? `Turno notturno ${isFirstPart ? '(prima parte)' : '(seconda parte)'} - ${entry.start_time} - ${entry.end_time || 'in corso'}` : `${entry.start_time} - ${entry.end_time || 'in corso'}`}
           >
             <div className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
@@ -277,30 +341,32 @@ export function WeeklyTimelineView({
             
             <div className="flex items-center gap-1">
               {entry.mealVoucher && <UtensilsCrossed className="h-3 w-3" />}
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-4 w-4 p-0 text-white hover:text-white hover:bg-white/20"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEditTimesheet(entry.timesheet);
-                  }}
-                >
-                  <Edit className="h-3 w-3" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-4 w-4 p-0 text-white hover:text-red-200 hover:bg-red-500/20"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteTimesheet(entry.timesheet.id);
-                  }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
+              {!isNightShiftPart && (
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-4 w-4 p-0 text-white hover:text-white hover:bg-white/20"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditTimesheet({ ...entry.timesheet, id: originalId });
+                    }}
+                  >
+                    <Edit className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-4 w-4 p-0 text-white hover:text-red-200 hover:bg-red-500/20"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteTimesheet(originalId);
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -308,16 +374,27 @@ export function WeeklyTimelineView({
         {/* Fascia straordinari */}
         {entry.overtime_duration > 0 && (
           <div
-            className={`h-full bg-orange-500 rounded-r-sm 
+            className={`h-full ${isNightShiftPart ? 'bg-orange-600' : 'bg-orange-500'} 
+              ${isFirstPart && entry.regular_duration === 0 ? 'rounded-l-sm' : ''} 
+              ${!isFirstPart ? 'rounded-r-sm' : ''} 
               ${entry.isActive ? 'animate-pulse' : ''} 
-              cursor-pointer hover:bg-orange-600 transition-colors 
-              flex items-center justify-center text-white text-xs font-medium`}
+              cursor-pointer hover:opacity-80 transition-all
+              flex items-center justify-center text-white text-xs font-medium
+              ${isNightShiftPart ? 'border-2 border-orange-400' : ''}`}
             style={{ width: `${(overtimeWidth / entry.width) * 100}%` }}
-            onClick={() => onEditTimesheet(entry.timesheet)}
-            title={`Straordinari: ${entry.overtime_duration.toFixed(1)}h`}
+            onClick={() => onEditTimesheet({ ...entry.timesheet, id: originalId })}
+            title={`Straordinari: ${entry.overtime_duration.toFixed(1)}h ${isNightShiftPart ? (isFirstPart ? '(prima parte)' : '(seconda parte)') : ''}`}
           >
             +{entry.overtime_duration.toFixed(1)}h
           </div>
+        )}
+        
+        {/* Indicatore di connessione per turni notturni */}
+        {isFirstPart && (
+          <div className="absolute -right-1 top-1/2 transform -translate-y-1/2 w-2 h-1 bg-blue-400 rounded-full animate-pulse" />
+        )}
+        {isSecondPart && (
+          <div className="absolute -left-1 top-1/2 transform -translate-y-1/2 w-2 h-1 bg-blue-400 rounded-full animate-pulse" />
         )}
       </div>
     );
