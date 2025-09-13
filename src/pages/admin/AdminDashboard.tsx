@@ -14,24 +14,34 @@ export default function AdminDashboard() {
         </p>
       </div>
 
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="flex w-full flex-wrap gap-1 h-auto p-1">
-          <TabsTrigger value="overview">Panoramica</TabsTrigger>
-          <TabsTrigger value="payroll">Vista Buste Paga</TabsTrigger>
-          <TabsTrigger value="business-trips">Trasferte</TabsTrigger>
+      <Tabs defaultValue="overview" className="w-full flex gap-6">
+        <TabsList className="flex flex-col h-fit w-48 bg-muted/50 p-1">
+          <TabsTrigger value="overview" className="w-full justify-start gap-2 data-[state=active]:bg-background">
+            <Users className="h-4 w-4" />
+            Panoramica
+          </TabsTrigger>
+          <TabsTrigger value="payroll" className="w-full justify-start gap-2 data-[state=active]:bg-background">
+            <Clock className="h-4 w-4" />
+            Vista Buste Paga
+          </TabsTrigger>
+          <TabsTrigger value="business-trips" className="w-full justify-start gap-2 data-[state=active]:bg-background">
+            <FolderKanban className="h-4 w-4" />
+            Trasferte
+          </TabsTrigger>
         </TabsList>
-        
-        <TabsContent value="overview" className="space-y-6 mt-6">
-          <OverviewDashboard />
-        </TabsContent>
-        
-        <TabsContent value="payroll" className="mt-6">
-          <PayrollDashboard />
-        </TabsContent>
-        
-        <TabsContent value="business-trips" className="mt-6">
-          <BusinessTripsDashboard />
-        </TabsContent>
+        <div className="flex-1">
+          <TabsContent value="overview" className="space-y-6 mt-0">
+            <OverviewDashboard />
+          </TabsContent>
+          
+          <TabsContent value="payroll" className="mt-0">
+            <PayrollDashboard />
+          </TabsContent>
+          
+          <TabsContent value="business-trips" className="mt-0">
+            <BusinessTripsDashboard />
+          </TabsContent>
+        </div>
       </Tabs>
     </div>
   );
