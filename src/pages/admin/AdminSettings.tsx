@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+// RadioGroup removed - no longer needed
 import { Settings, Clock, Coffee, Calendar, Moon, Gift, Save, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -18,7 +18,7 @@ interface CompanySettings {
   lunch_break_type: '0_minuti' | '15_minuti' | '30_minuti' | '45_minuti' | '60_minuti' | '90_minuti' | '120_minuti' | 'libera' | null;
   overtime_calculation: 'dopo_8_ore' | 'sempre' | null;
   saturday_handling: 'trasferta' | 'straordinario' | null;
-  meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni' | 'disabilitato' | null;
+  meal_allowance_policy: 'disabled' | 'meal_vouchers_only' | 'daily_allowance' | 'both' | null;
   night_shift_start: string | null;
   night_shift_end: string | null;
   overtime_monthly_compensation?: boolean | null;
@@ -26,9 +26,8 @@ interface CompanySettings {
   business_trip_rate_without_meal: number | null;
   saturday_hourly_rate: number | null;
   meal_voucher_amount: number | null;
-  daily_allowance_amount: number | null;
-  daily_allowance_policy: 'disabled' | 'meal_vouchers_only' | 'daily_allowance' | 'both' | null;
-  daily_allowance_min_hours: number | null;
+  default_daily_allowance_amount: number | null;
+  default_daily_allowance_min_hours: number | null;
   meal_voucher_min_hours: number | null;
 }
 
@@ -39,7 +38,7 @@ export default function AdminSettings() {
     lunch_break_type: null,
     overtime_calculation: null,
     saturday_handling: null,
-    meal_voucher_policy: null,
+    meal_allowance_policy: null,
     night_shift_start: null,
     night_shift_end: null,
     overtime_monthly_compensation: null,
@@ -47,9 +46,8 @@ export default function AdminSettings() {
     business_trip_rate_without_meal: null,
     saturday_hourly_rate: null,
     meal_voucher_amount: null,
-    daily_allowance_amount: null,
-    daily_allowance_policy: null,
-    daily_allowance_min_hours: null,
+    default_daily_allowance_amount: null,
+    default_daily_allowance_min_hours: null,
     meal_voucher_min_hours: null,
   });
   const [loading, setLoading] = useState(true);
@@ -150,7 +148,7 @@ export default function AdminSettings() {
           lunch_break_type: settings.lunch_break_type,
           overtime_calculation: settings.overtime_calculation,
           saturday_handling: settings.saturday_handling,
-          meal_voucher_policy: settings.meal_voucher_policy,
+          meal_allowance_policy: settings.meal_allowance_policy,
           night_shift_start: settings.night_shift_start,
           night_shift_end: settings.night_shift_end,
           overtime_monthly_compensation: settings.overtime_monthly_compensation,
@@ -158,9 +156,8 @@ export default function AdminSettings() {
           business_trip_rate_without_meal: settings.business_trip_rate_without_meal,
           saturday_hourly_rate: settings.saturday_hourly_rate,
           meal_voucher_amount: settings.meal_voucher_amount,
-          daily_allowance_amount: settings.daily_allowance_amount,
-          daily_allowance_policy: settings.daily_allowance_policy,
-          daily_allowance_min_hours: settings.daily_allowance_min_hours,
+          default_daily_allowance_amount: settings.default_daily_allowance_amount,
+          default_daily_allowance_min_hours: settings.default_daily_allowance_min_hours,
           meal_voucher_min_hours: settings.meal_voucher_min_hours,
         })
         .eq('id', settings.id);
@@ -421,54 +418,103 @@ export default function AdminSettings() {
           </CardContent>
         </Card>
 
-        {/* Meal Benefits */}
+        {/* Meal Benefits - Unified Policy */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Gift className="h-5 w-5" />
-              Benefici Pasto
+              Buoni Pasto e Indennità Giornaliera
             </CardTitle>
             <CardDescription>
-              Configurazione buoni pasto e indennità giornaliere
+              Politica unificata per buoni pasto o indennità giornaliera (mutuamente esclusivi)
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <div>
-                <Label>Policy Buoni Pasto</Label>
+                <Label>Politica Buoni Pasto / Indennità</Label>
                 <Select
-                  value={settings.meal_voucher_policy || ''}
-                  onValueChange={(value) => updateSetting('meal_voucher_policy', value)}
+                  value={settings.meal_allowance_policy || 'disabled'}
+                  onValueChange={(value) => updateSetting('meal_allowance_policy', value)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Seleziona policy" />
+                    <SelectValue placeholder="Seleziona politica" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="oltre_6_ore">Oltre 6 Ore Lavorative</SelectItem>
-                    <SelectItem value="sempre_parttime">Sempre per Part-time</SelectItem>
-                    <SelectItem value="conteggio_giorni">Conteggio Giorni Mese</SelectItem>
-                    <SelectItem value="disabilitato">Disabilitato</SelectItem>
+                    <SelectItem value="disabled">Tutto disabilitato</SelectItem>
+                    <SelectItem value="meal_vouchers_only">Solo buoni pasto</SelectItem>
+                    <SelectItem value="daily_allowance">Indennità giornaliera</SelectItem>
+                    <SelectItem value="both">Buoni pasto e indennità</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              {settings.meal_voucher_policy !== 'disabilitato' && (
-                <>
+              {/* Conditional Fields for Daily Allowance */}
+              {(settings.meal_allowance_policy === 'daily_allowance' || settings.meal_allowance_policy === 'both') && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border rounded-lg bg-muted/20">
                   <div>
-                    <Label htmlFor="meal_voucher_amount">Valore Buono Pasto (€)</Label>
+                    <Label htmlFor="default_daily_allowance_amount">
+                      Importo indennità giornaliera (€)
+                      <span className="text-destructive">*</span>
+                    </Label>
                     <Input
-                      id="meal_voucher_amount"
+                      id="default_daily_allowance_amount"
                       type="number"
-                      min="0"
                       step="0.01"
-                      value={settings.meal_voucher_amount || ''}
-                      onChange={(e) => updateSetting('meal_voucher_amount', parseFloat(e.target.value) || null)}
-                      placeholder="8.00"
+                      value={settings.default_daily_allowance_amount || ''}
+                      onChange={(e) => updateSetting('default_daily_allowance_amount', parseFloat(e.target.value) || null)}
+                      placeholder="10.00"
+                      className="mt-1"
+                      required
                     />
                   </div>
                   
                   <div>
-                    <Label htmlFor="meal_voucher_min_hours">Ore Minime per Buono Pasto</Label>
+                    <Label htmlFor="default_daily_allowance_min_hours">
+                      Ore minime per indennità
+                      <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="default_daily_allowance_min_hours"
+                      type="number"
+                      min="0"
+                      max="12"
+                      step="0.5"
+                      value={settings.default_daily_allowance_min_hours || ''}
+                      onChange={(e) => updateSetting('default_daily_allowance_min_hours', parseInt(e.target.value) || null)}
+                      placeholder="6"
+                      className="mt-1"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Conditional Fields for Meal Vouchers */}
+              {(settings.meal_allowance_policy === 'meal_vouchers_only' || settings.meal_allowance_policy === 'both') && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border rounded-lg bg-muted/20">
+                  <div>
+                    <Label htmlFor="meal_voucher_amount">
+                      Importo buono pasto (€)
+                      <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="meal_voucher_amount"
+                      type="number"
+                      step="0.01"
+                      value={settings.meal_voucher_amount || ''}
+                      onChange={(e) => updateSetting('meal_voucher_amount', parseFloat(e.target.value) || null)}
+                      placeholder="8.00"
+                      className="mt-1"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="meal_voucher_min_hours">
+                      Ore minime per buoni pasto
+                      <span className="text-destructive">*</span>
+                    </Label>
                     <Input
                       id="meal_voucher_min_hours"
                       type="number"
@@ -476,68 +522,13 @@ export default function AdminSettings() {
                       max="12"
                       step="0.5"
                       value={settings.meal_voucher_min_hours || ''}
-                      onChange={(e) => updateSetting('meal_voucher_min_hours', parseFloat(e.target.value) || null)}
+                      onChange={(e) => updateSetting('meal_voucher_min_hours', parseInt(e.target.value) || null)}
                       placeholder="6"
+                      className="mt-1"
+                      required
                     />
                   </div>
-                </>
-              )}
-
-              <div>
-                <Label>Policy Indennità Giornaliera</Label>
-                <RadioGroup
-                  value={settings.daily_allowance_policy || 'disabled'}
-                  onValueChange={(value) => updateSetting('daily_allowance_policy', value)}
-                  className="mt-2"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="disabled" id="disabled" />
-                    <Label htmlFor="disabled">Disabilitata</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="meal_vouchers_only" id="meal_vouchers_only" />
-                    <Label htmlFor="meal_vouchers_only">Solo Buoni Pasto</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="daily_allowance" id="daily_allowance" />
-                    <Label htmlFor="daily_allowance">Solo Indennità Giornaliera</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="both" id="both" />
-                    <Label htmlFor="both">Entrambi (Buoni Pasto + Indennità)</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              {(settings.daily_allowance_policy === 'daily_allowance' || settings.daily_allowance_policy === 'both') && (
-                <>
-                  <div>
-                    <Label htmlFor="daily_allowance_amount">Importo Indennità Giornaliera (€)</Label>
-                    <Input
-                      id="daily_allowance_amount"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={settings.daily_allowance_amount || ''}
-                      onChange={(e) => updateSetting('daily_allowance_amount', parseFloat(e.target.value) || null)}
-                      placeholder="10.00"
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="daily_allowance_min_hours">Ore Minime per Indennità</Label>
-                    <Input
-                      id="daily_allowance_min_hours"
-                      type="number"
-                      min="0"
-                      max="12"
-                      step="0.5"
-                      value={settings.daily_allowance_min_hours || ''}
-                      onChange={(e) => updateSetting('daily_allowance_min_hours', parseFloat(e.target.value) || null)}
-                      placeholder="6"
-                    />
-                  </div>
-                </>
+                </div>
               )}
             </div>
           </CardContent>
