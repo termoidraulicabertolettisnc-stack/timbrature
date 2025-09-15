@@ -14,22 +14,22 @@ export default function AdminDashboard() {
         </p>
       </div>
 
-      <Tabs defaultValue="overview" className="w-full flex gap-4">
-        <TabsList className="flex flex-col h-fit w-40 bg-muted/50 p-1">
-          <TabsTrigger value="overview" className="w-full justify-start gap-2 data-[state=active]:bg-background">
+      <Tabs defaultValue="overview" className="w-full flex flex-col gap-4">
+        <TabsList className="flex h-fit w-fit bg-muted/50 p-1">
+          <TabsTrigger value="overview" className="flex items-center gap-2 data-[state=active]:bg-background">
             <Users className="h-4 w-4" />
             Panoramica
           </TabsTrigger>
-          <TabsTrigger value="payroll" className="w-full justify-start gap-2 data-[state=active]:bg-background">
+          <TabsTrigger value="payroll" className="flex items-center gap-2 data-[state=active]:bg-background">
             <Clock className="h-4 w-4" />
             Vista Buste Paga
           </TabsTrigger>
-          <TabsTrigger value="business-trips" className="w-full justify-start gap-2 data-[state=active]:bg-background">
+          <TabsTrigger value="business-trips" className="flex items-center gap-2 data-[state=active]:bg-background">
             <FolderKanban className="h-4 w-4" />
             Trasferte
           </TabsTrigger>
         </TabsList>
-        <div className="flex-1">
+        <div className="w-full">
           <TabsContent value="overview" className="space-y-6 mt-0">
             <OverviewDashboard />
           </TabsContent>
