@@ -65,7 +65,6 @@ export function OvertimeConversionDialog({
 
     setLoading(true);
     try {
-      console.log('OvertimeConversionDialog - Saving conversion:', { userId, month, hours, notes });
       const success = await OvertimeConversionService.applyManualConversion(
         userId,
         month,
@@ -73,7 +72,6 @@ export function OvertimeConversionDialog({
         notes || undefined
       );
 
-      console.log('OvertimeConversionDialog - Save result:', success);
       if (success) {
         toast.success('Conversione straordinari salvata con successo');
         onSuccess?.();
