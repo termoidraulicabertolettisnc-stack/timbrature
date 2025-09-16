@@ -37,7 +37,7 @@ export class OvertimeConversionService {
     }
 
     return {
-      enable_overtime_conversion: employeeSettings?.enable_overtime_conversion ?? true,
+      enable_overtime_conversion: employeeSettings?.enable_overtime_conversion ?? companySettings?.enable_overtime_conversion ?? false,
       overtime_conversion_rate: employeeSettings?.overtime_conversion_rate ?? companySettings.default_overtime_conversion_rate ?? 12.00,
       overtime_conversion_limit: employeeSettings?.overtime_conversion_limit ?? companySettings.default_overtime_conversion_limit
     };
@@ -312,7 +312,17 @@ export class OvertimeConversionService {
     month: string
   ): Promise<boolean> {
     try {
-      const result = await this.processAutomaticConversions(month);
+      // Get user's company ID
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id, first_name, last_name')
+        .eq('user_id', userId)
+        .single();
+
+      if (!profile) return false;
+
+      // Process automatic conversions for this user's company
+      const result = await this.processAutomaticConversions(month, profile.company_id);
       return result.processed > 0 && result.errors.length === 0;
     } catch (error) {
       console.error('Error processing user automatic conversion:', error);
