@@ -666,86 +666,88 @@ const BusinessTripsDashboard = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-auto max-h-[600px]">
-            <Table className="text-xs">
-              <TableHeader className="sticky top-0 bg-background z-20">
-                <TableRow>
-                  <TableHead className="sticky left-0 bg-background z-30 w-48 min-w-48 text-xs font-medium border-r">
-                    Dipendente
-                  </TableHead>
-                  {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                    const day = i + 1;
-                    const date = new Date(parseInt(selectedMonth.split('-')[0]), parseInt(selectedMonth.split('-')[1]) - 1, day);
-                    const dayOfWeek = date.getDay();
-                    const dayNames = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
-                    const dayName = dayNames[dayOfWeek];
-                    const isHol = isHoliday(day);
-                    const isSun = isSunday(day);
-                    
-                    return (
-                      <TableHead 
-                        key={day} 
-                        className={`text-center w-12 min-w-12 text-xs font-medium ${
-                          isHol || isSun ? 'bg-red-50' : ''
-                        } ${dayOfWeek === 6 ? 'bg-orange-50' : ''}`}
-                      >
-                        <div className="flex flex-col">
-                          <span className="font-bold">{day}</span>
-                          <span className="text-xs font-normal opacity-75">{dayName}</span>
-                        </div>
-                      </TableHead>
-                    );
-                  })}
-                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-gray-50 border-l">Tot</TableHead>
-                  <TableHead className="text-center w-16 min-w-16 text-xs font-medium bg-yellow-50">Buoni Pasto</TableHead>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <TableHead className="text-center w-20 min-w-20 text-xs font-medium bg-orange-50">Importo Tot.</TableHead>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Importo totale trasferte</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <TableHead className="text-center w-16 min-w-16 text-xs font-medium bg-orange-50">Gg Trasf.</TableHead>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Giorni trasferta normalizzati</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                   <TooltipProvider>
-                     <Tooltip>
-                       <TooltipTrigger asChild>
-                         <TableHead className="text-center w-16 min-w-16 text-xs font-medium bg-orange-50">€/Giorno</TableHead>
-                       </TooltipTrigger>
-                       <TooltipContent>
-                         <p>Importo giornaliero trasferte</p>
-                       </TooltipContent>
-                     </Tooltip>
-                   </TooltipProvider>
-                   <TooltipProvider>
-                     <Tooltip>
-                       <TooltipTrigger asChild>
-                         <TableHead className="text-center w-16 min-w-16 text-xs font-medium bg-green-50">Conversioni</TableHead>
-                       </TooltipTrigger>
-                       <TooltipContent>
-                         <p>Gestione conversioni straordinari</p>
-                       </TooltipContent>
-                     </Tooltip>
-                   </TooltipProvider>
-                </TableRow>
-              </TableHeader>
+          {/* Responsive wrapper with horizontal scroll */}
+          <div className="overflow-x-auto max-w-[calc(100vw-2rem)] lg:max-w-none">
+            <div className="overflow-y-auto max-h-[600px]">
+              <Table className="text-xs min-w-fit">
+                <TableHeader className="sticky top-0 bg-background z-20">
+                  <TableRow>
+                    <TableHead className="sticky left-0 bg-background z-30 w-40 min-w-40 text-xs font-medium border-r">
+                      Dipendente
+                    </TableHead>
+                    {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                      const day = i + 1;
+                      const date = new Date(parseInt(selectedMonth.split('-')[0]), parseInt(selectedMonth.split('-')[1]) - 1, day);
+                      const dayOfWeek = date.getDay();
+                      const dayNames = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
+                      const dayName = dayNames[dayOfWeek];
+                      const isHol = isHoliday(day);
+                      const isSun = isSunday(day);
+                      
+                      return (
+                        <TableHead 
+                          key={day} 
+                          className={`text-center w-9 min-w-9 text-xs font-medium px-1 ${
+                            isHol || isSun ? 'bg-red-50' : ''
+                          } ${dayOfWeek === 6 ? 'bg-orange-50' : ''}`}
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-bold text-xs leading-none">{day}</span>
+                            <span className="text-[10px] font-normal opacity-75 leading-none">{dayName}</span>
+                          </div>
+                        </TableHead>
+                      );
+                    })}
+                    <TableHead className="text-center w-10 min-w-10 text-xs font-medium bg-gray-50 border-l px-1">Tot</TableHead>
+                    <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-yellow-50 px-1">Buoni</TableHead>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <TableHead className="text-center w-16 min-w-16 text-xs font-medium bg-orange-50 px-1">Imp. Tot.</TableHead>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Importo totale trasferte</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-orange-50 px-1">Gg Tr.</TableHead>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Giorni trasferta normalizzati</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                     <TooltipProvider>
+                       <Tooltip>
+                         <TooltipTrigger asChild>
+                           <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-orange-50 px-1">€/G</TableHead>
+                         </TooltipTrigger>
+                         <TooltipContent>
+                           <p>Importo giornaliero trasferte</p>
+                         </TooltipContent>
+                       </Tooltip>
+                     </TooltipProvider>
+                     <TooltipProvider>
+                       <Tooltip>
+                         <TooltipTrigger asChild>
+                           <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-green-50 px-1">Conv.</TableHead>
+                         </TooltipTrigger>
+                         <TooltipContent>
+                           <p>Gestione conversioni straordinari</p>
+                         </TooltipContent>
+                       </Tooltip>
+                     </TooltipProvider>
+                  </TableRow>
+                </TableHeader>
               <TableBody>
                 {businessTripData.map((employee) => (
                   <React.Fragment key={employee.employee_id}>
                     {/* Ordinary Hours Row */}
                     <TableRow className="hover:bg-green-50/50">
-                      <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                      <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs px-2 py-1 border-r">
                         <span className="text-green-700 font-bold">O</span> - {employee.employee_name}
                       </TableCell>
                       {Array.from({ length: getDaysInMonth() }, (_, i) => {
@@ -759,7 +761,7 @@ const BusinessTripsDashboard = () => {
                         return (
                           <TableCell 
                             key={day} 
-                            className={`text-center p-1 text-xs ${
+                            className={`text-center px-0.5 py-1 text-xs ${
                               isHol || isSun ? 'bg-red-50' : ''
                             } ${isBusinessTrip ? 'bg-orange-50' : ''} ${
                               ordinary > 0 ? 'text-green-700 font-medium' : 'text-muted-foreground'
@@ -787,7 +789,7 @@ const BusinessTripsDashboard = () => {
 
                     {/* Overtime Hours Row */}
                     <TableRow className="hover:bg-blue-50/50">
-                      <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                      <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs px-2 py-1 border-r">
                         <span className="text-blue-700 font-bold">S</span> - {employee.employee_name}
                       </TableCell>
                       {Array.from({ length: getDaysInMonth() }, (_, i) => {
@@ -800,7 +802,7 @@ const BusinessTripsDashboard = () => {
                         return (
                           <TableCell 
                             key={day} 
-                            className={`text-center p-1 text-xs ${
+                            className={`text-center px-0.5 py-1 text-xs ${
                               isHol || isSun ? 'bg-red-50' : ''
                             } ${overtime > 0 ? 'text-blue-700 font-medium' : 'text-muted-foreground'}`}
                           >
@@ -808,13 +810,14 @@ const BusinessTripsDashboard = () => {
                           </TableCell>
                         );
                       })}
-                      <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-gray-50 border-l">
+                      <TableCell className="text-center font-bold text-blue-700 text-xs px-1 py-1 bg-gray-50 border-l">
                         {employee.totals.overtime.toFixed(1)}
                       </TableCell>
-                      <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
-                      <TableCell className="text-center text-xs p-1 bg-orange-50">-</TableCell>
-                      <TableCell className="text-center text-xs p-1 bg-orange-50">-</TableCell>
-                      <TableCell className="text-center text-xs p-1 bg-orange-50">-</TableCell>
+                      <TableCell className="text-center text-xs px-1 py-1 bg-yellow-50">-</TableCell>
+                      <TableCell className="text-center text-xs px-1 py-1 bg-orange-50">-</TableCell>
+                      <TableCell className="text-center text-xs px-1 py-1 bg-orange-50">-</TableCell>
+                      <TableCell className="text-center text-xs px-1 py-1 bg-orange-50">-</TableCell>
+                      <TableCell className="text-center text-xs px-1 py-1 bg-green-50">-</TableCell>
                     </TableRow>
 
                     {/* Dynamic Absence Rows */}
@@ -822,7 +825,7 @@ const BusinessTripsDashboard = () => {
                       if (hours > 0) {
                         return (
                           <TableRow key={`${employee.employee_id}-${absenceType}`} className="hover:bg-red-50/50">
-                            <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                            <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs px-2 py-1 border-r">
                               <span className="text-red-700 font-bold">{getAbsenceTypeLabel(absenceType)}</span> - {employee.employee_name}
                             </TableCell>
                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
@@ -835,7 +838,7 @@ const BusinessTripsDashboard = () => {
                               return (
                                 <TableCell 
                                   key={day} 
-                                  className={`text-center p-1 text-xs ${
+                                  className={`text-center px-0.5 py-1 text-xs ${
                                     isHol || isSun ? 'bg-red-50' : ''
                                   }`}
                                 >
@@ -864,7 +867,7 @@ const BusinessTripsDashboard = () => {
                     {/* Business Trip Row */}
                     {employee.totals.business_trip_hours > 0 && (
                       <TableRow className="hover:bg-orange-50/50">
-                        <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                        <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs px-2 py-1 border-r">
                           <span className="text-orange-700 font-bold">T</span> - {employee.employee_name}
                         </TableCell>
                         {Array.from({ length: getDaysInMonth() }, (_, i) => {
@@ -877,7 +880,7 @@ const BusinessTripsDashboard = () => {
                           return (
                             <TableCell 
                               key={day} 
-                              className={`text-center p-1 text-xs ${
+                              className={`text-center px-0.5 py-1 text-xs ${
                                 isHol || isSun ? 'bg-red-50' : ''
                               } ${isBusinessTrip ? 'bg-orange-100' : ''}`}
                             >
@@ -969,6 +972,7 @@ const BusinessTripsDashboard = () => {
               </TableBody>
             </Table>
           </div>
+        </div>
         </CardContent>
       </Card>
 
