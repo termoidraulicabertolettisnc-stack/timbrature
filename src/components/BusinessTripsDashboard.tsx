@@ -5,9 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, Download, Users, MapPin } from "lucide-react";
+import { Calendar, Download, Users, MapPin, TrendingDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog';
+import { OvertimeConversionService } from '@/services/OvertimeConversionService';
 import * as ExcelJS from 'exceljs';
 import { calculateMealBenefits } from '@/utils/mealBenefitsCalculator';
 
@@ -26,6 +28,8 @@ interface BusinessTripData {
       saturday_amount: number;
       daily_allowance_days: number;
       daily_allowance_amount: number;
+      overtime_conversion_hours: number;
+      overtime_conversion_amount: number;
     };
     standardized_business_trip_days: number;
     daily_business_trip_rate: number;
@@ -41,6 +45,17 @@ const BusinessTripsDashboard = () => {
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [conversionDialog, setConversionDialog] = useState<{
+    open: boolean;
+    userId: string;
+    userName: string;
+    originalOvertimeHours: number;
+  }>({
+    open: false,
+    userId: '',
+    userName: '',
+    originalOvertimeHours: 0
   });
 
   // Italian holidays for 2024 (you can expand this)
@@ -384,11 +399,29 @@ const BusinessTripsDashboard = () => {
 
         const totalBusinessTripAmount = saturdayAmount + dailyAllowanceAmount;
 
+        // Calculate overtime conversions for this employee
+        let overtimeConversionHours = 0;
+        let overtimeConversionAmount = 0;
+        
+        try {
+          const conversionCalc = await OvertimeConversionService.calculateConversionDetails(
+            profile.user_id,
+            selectedMonth,
+            totalOvertime
+          );
+          overtimeConversionHours = conversionCalc.converted_hours;
+          overtimeConversionAmount = conversionCalc.conversion_amount;
+        } catch (error) {
+          console.warn('Error calculating overtime conversion for employee', profile.user_id, error);
+        }
+
+        const finalBusinessTripAmount = totalBusinessTripAmount + overtimeConversionAmount;
+
         // Calculate standardized business trip days and daily rate
         let standardizedBusinessTripDays = 0;
         let dailyBusinessTripRate = 0;
         
-        if (totalBusinessTripAmount > 0) {
+        if (finalBusinessTripAmount > 0) {
           // Determine the maximum daily business trip value for this employee
           // Use the same logic as meal benefits calculation to determine the correct rate
           const { BenefitsService } = await import('@/services/BenefitsService');
@@ -441,15 +474,17 @@ const BusinessTripsDashboard = () => {
           daily_data: dailyData,
           totals: { 
             ordinary: totalOrdinary, 
-            overtime: totalOvertime, 
+            overtime: totalOvertime,
             absence_totals: absenceTotals,
-            business_trip_hours: businessTripHours,
-            business_trip_amount: totalBusinessTripAmount,
+            business_trip_hours: businessTripHours + overtimeConversionHours,
+            business_trip_amount: finalBusinessTripAmount,
             business_trip_breakdown: {
               saturday_hours: saturdayHours,
               saturday_amount: saturdayAmount,
               daily_allowance_days: dailyAllowanceDays,
               daily_allowance_amount: dailyAllowanceAmount,
+              overtime_conversion_hours: overtimeConversionHours,
+              overtime_conversion_amount: overtimeConversionAmount,
             },
             standardized_business_trip_days: standardizedBusinessTripDays,
             daily_business_trip_rate: dailyBusinessTripRate,
