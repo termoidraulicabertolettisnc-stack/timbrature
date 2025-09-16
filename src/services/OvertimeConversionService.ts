@@ -199,6 +199,128 @@ export class OvertimeConversionService {
   }
 
   /**
+   * Process automatic conversions for a specific month and company
+   */
+  static async processAutomaticConversions(
+    month: string, 
+    companyId?: string
+  ): Promise<{ processed: number; errors: string[] }> {
+    const monthStart = format(startOfMonth(new Date(month + '-01')), 'yyyy-MM-dd');
+    const [year, monthNum] = month.split('-');
+    const startDate = `${year}-${monthNum}-01`;
+    const endDate = `${year}-${monthNum}-${new Date(parseInt(year), parseInt(monthNum), 0).getDate()}`;
+    
+    let processed = 0;
+    const errors: string[] = [];
+    
+    try {
+      // Determine which users to process
+      let usersQuery = supabase
+        .from('profiles')
+        .select('user_id, company_id, first_name, last_name')
+        .eq('is_active', true);
+      
+      if (companyId) {
+        usersQuery = usersQuery.eq('company_id', companyId);
+      }
+      
+      const { data: users, error: usersError } = await usersQuery;
+      if (usersError) throw usersError;
+      
+      if (!users || users.length === 0) return { processed: 0, errors: [] };
+      
+      // Get all timesheets for the month
+      const { data: timesheets, error: timesheetsError } = await supabase
+        .from('timesheets')
+        .select('user_id, overtime_hours')
+        .in('user_id', users.map(u => u.user_id))
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .eq('is_absence', false);
+      
+      if (timesheetsError) throw timesheetsError;
+      
+      // Process each user
+      for (const user of users) {
+        try {
+          // Calculate total overtime for this user in this month
+          const userTimesheets = (timesheets || []).filter(t => t.user_id === user.user_id);
+          const totalOvertimeHours = userTimesheets.reduce((sum, t) => sum + (t.overtime_hours || 0), 0);
+          
+          if (totalOvertimeHours === 0) continue; // Skip users with no overtime
+          
+          // Get conversion settings
+          const settings = await this.getEffectiveConversionSettings(user.user_id, startDate);
+          if (!settings?.enable_overtime_conversion || !settings.overtime_conversion_limit) {
+            continue; // Skip if conversion is disabled or no limit set
+          }
+          
+          // Calculate automatic conversion
+          const automaticConversion = await this.calculateAutomaticConversion(
+            user.user_id, 
+            month, 
+            totalOvertimeHours
+          );
+          
+          if (automaticConversion.hours <= 0) continue; // Skip if no conversion needed
+          
+          // Get or create conversion record
+          const existingConversion = await this.getOrCreateConversion(user.user_id, month);
+          if (!existingConversion) {
+            errors.push(`Could not create conversion record for ${user.first_name} ${user.last_name}`);
+            continue;
+          }
+          
+          // Update automatic conversion hours (preserve manual hours)
+          const totalAmount = (automaticConversion.hours + existingConversion.manual_conversion_hours) * settings.overtime_conversion_rate;
+          
+          const { error: updateError } = await supabase
+            .from('employee_overtime_conversions')
+            .update({
+              automatic_conversion_hours: automaticConversion.hours,
+              conversion_amount: totalAmount,
+              updated_at: new Date().toISOString(),
+              updated_by: (await supabase.auth.getUser()).data.user?.id
+            })
+            .eq('id', existingConversion.id);
+          
+          if (updateError) {
+            errors.push(`Error updating conversion for ${user.first_name} ${user.last_name}: ${updateError.message}`);
+            continue;
+          }
+          
+          processed++;
+          console.log(`✅ Processed automatic conversion for ${user.first_name} ${user.last_name}: ${automaticConversion.hours}h = €${automaticConversion.amount.toFixed(2)}`);
+          
+        } catch (userError) {
+          errors.push(`Error processing ${user.first_name} ${user.last_name}: ${userError}`);
+        }
+      }
+      
+    } catch (error) {
+      errors.push(`System error: ${error}`);
+    }
+    
+    return { processed, errors };
+  }
+
+  /**
+   * Process automatic conversions for a specific user and month
+   */
+  static async processUserAutomaticConversion(
+    userId: string, 
+    month: string
+  ): Promise<boolean> {
+    try {
+      const result = await this.processAutomaticConversions(month);
+      return result.processed > 0 && result.errors.length === 0;
+    } catch (error) {
+      console.error('Error processing user automatic conversion:', error);
+      return false;
+    }
+  }
+
+  /**
    * Get all conversions for a company in a specific month
    */
   static async getCompanyConversions(

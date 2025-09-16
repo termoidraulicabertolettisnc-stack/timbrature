@@ -409,6 +409,10 @@ const BusinessTripsDashboard = () => {
         let overtimeConversionAmount = 0;
         
         try {
+          // First, process automatic conversions for this user if needed
+          await OvertimeConversionService.processUserAutomaticConversion(profile.user_id, selectedMonth);
+          
+          // Then get the conversion details (now including any automatic conversions)
           const conversionCalc = await OvertimeConversionService.calculateConversionDetails(
             profile.user_id,
             selectedMonth,
