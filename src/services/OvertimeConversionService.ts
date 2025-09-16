@@ -121,21 +121,39 @@ export class OvertimeConversionService {
     notes?: string
   ): Promise<boolean> {
     try {
+      console.log('OvertimeConversionService - Starting applyManualConversion:', { userId, month, deltaHours, notes });
+      
       // Get or create conversion record
       const conversion = await this.getOrCreateConversion(userId, month);
-      if (!conversion) return false;
+      console.log('OvertimeConversionService - Conversion record:', conversion);
+      if (!conversion) {
+        console.error('OvertimeConversionService - Failed to get/create conversion record');
+        return false;
+      }
 
       // Get conversion settings
       const settings = await this.getEffectiveConversionSettings(userId, month);
-      if (!settings?.enable_overtime_conversion) return false;
+      console.log('OvertimeConversionService - Conversion settings:', settings);
+      if (!settings?.enable_overtime_conversion) {
+        console.error('OvertimeConversionService - Overtime conversion is disabled');
+        return false;
+      }
 
       // Calculate new manual conversion hours (current + delta)
       const newManualHours = Math.max(0, conversion.manual_conversion_hours + deltaHours);
       const newTotalHours = conversion.automatic_conversion_hours + newManualHours;
       const newAmount = newTotalHours * settings.overtime_conversion_rate;
 
+      console.log('OvertimeConversionService - Calculated values:', {
+        currentManual: conversion.manual_conversion_hours,
+        deltaHours,
+        newManualHours,
+        newTotalHours,
+        newAmount
+      });
+
       // Update the conversion record
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('employee_overtime_conversions')
         .update({
           manual_conversion_hours: newManualHours,
@@ -145,9 +163,17 @@ export class OvertimeConversionService {
           updated_by: (await supabase.auth.getUser()).data.user?.id,
           updated_at: new Date().toISOString()
         })
-        .eq('id', conversion.id);
+        .eq('id', conversion.id)
+        .select();
 
-      return !error;
+      console.log('OvertimeConversionService - Update result:', { data, error });
+
+      if (error) {
+        console.error('OvertimeConversionService - Database update error:', error);
+        return false;
+      }
+
+      return true;
     } catch (error) {
       console.error('Error applying manual conversion:', error);
       return false;
