@@ -32,6 +32,10 @@ interface CompanySettings {
   enable_entry_tolerance?: boolean | null;
   standard_start_time?: string | null;
   entry_tolerance_minutes?: number | null;
+  // Overtime conversion fields
+  enable_overtime_conversion?: boolean | null;
+  default_overtime_conversion_rate?: number | null;
+  default_overtime_conversion_limit?: number | null;
 }
 
 export default function AdminSettings() {
@@ -55,6 +59,10 @@ export default function AdminSettings() {
     enable_entry_tolerance: null,
     standard_start_time: null,
     entry_tolerance_minutes: null,
+    // Overtime conversion fields
+    enable_overtime_conversion: null,
+    default_overtime_conversion_rate: null,
+    default_overtime_conversion_limit: null,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -128,6 +136,10 @@ export default function AdminSettings() {
         enable_entry_tolerance: false,
         standard_start_time: '08:00:00',
         entry_tolerance_minutes: 10,
+        // Overtime conversion defaults
+        enable_overtime_conversion: false,
+        default_overtime_conversion_rate: 12.00,
+        default_overtime_conversion_limit: null,
       };
 
       const { data, error } = await supabase
@@ -171,6 +183,10 @@ export default function AdminSettings() {
           enable_entry_tolerance: settings.enable_entry_tolerance,
           standard_start_time: settings.standard_start_time,
           entry_tolerance_minutes: settings.entry_tolerance_minutes,
+          // Overtime conversion fields
+          enable_overtime_conversion: settings.enable_overtime_conversion,
+          default_overtime_conversion_rate: settings.default_overtime_conversion_rate,
+          default_overtime_conversion_limit: settings.default_overtime_conversion_limit,
         })
         .eq('id', settings.id);
 
@@ -600,6 +616,95 @@ export default function AdminSettings() {
                   placeholder="46.48"
                 />
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Overtime to Business Trip Conversion */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Conversione Straordinari in Trasferte
+            </CardTitle>
+            <CardDescription>
+              Sistema ibrido per convertire ore straordinarie in trasferte quando eccedono i limiti mensili
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <input
+                  id="enable_overtime_conversion"
+                  type="checkbox"
+                  checked={settings.enable_overtime_conversion || false}
+                  onChange={(e) => updateSetting('enable_overtime_conversion', e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="enable_overtime_conversion">Abilita Conversione Straordinari</Label>
+              </div>
+              
+              {settings.enable_overtime_conversion && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border rounded-lg bg-muted/20">
+                  <div>
+                    <Label htmlFor="default_overtime_conversion_rate">
+                      Tariffa Conversione (€/h)
+                      <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="default_overtime_conversion_rate"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={settings.default_overtime_conversion_rate || ''}
+                      onChange={(e) => updateSetting('default_overtime_conversion_rate', parseFloat(e.target.value) || null)}
+                      placeholder="12.00"
+                      className="mt-1"
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Tariffa oraria per la conversione di straordinari in trasferte
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="default_overtime_conversion_limit">
+                      Limite Automatico Mensile (ore)
+                    </Label>
+                    <Input
+                      id="default_overtime_conversion_limit"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={settings.default_overtime_conversion_limit || ''}
+                      onChange={(e) => updateSetting('default_overtime_conversion_limit', parseInt(e.target.value) || null)}
+                      placeholder="20"
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Ore massime di straordinario prima della conversione automatica (vuoto = solo manuale)
+                    </p>
+                  </div>
+                  
+                  <div className="col-span-full">
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        <strong>Sistema Ibrido:</strong> Gli straordinari possono essere convertiti automaticamente quando superano il limite mensile, 
+                        oppure manualmente dalla dashboard Cedolino.
+                        <br />
+                        <strong>Esempio:</strong> Con limite 20h/mese e tariffa 12€/h:
+                        <br />
+                        • Dipendente con 25h straordinari → 5h convertite automaticamente in trasferte (60€)
+                        <br />
+                        • Admin può aggiungere conversioni manuali aggiuntive dalla dashboard
+                        <br />
+                        <em>Le conversioni modificano solo la visualizzazione dashboard, i timesheet originali restano invariati.</em>
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

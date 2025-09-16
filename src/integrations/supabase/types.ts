@@ -174,7 +174,10 @@ export type Database = {
           daily_allowance_policy: string | null
           default_daily_allowance_amount: number | null
           default_daily_allowance_min_hours: number | null
+          default_overtime_conversion_limit: number | null
+          default_overtime_conversion_rate: number | null
           enable_entry_tolerance: boolean | null
+          enable_overtime_conversion: boolean | null
           entry_tolerance_minutes: number | null
           id: string
           lunch_break_type: Database["public"]["Enums"]["lunch_break_type"]
@@ -204,7 +207,10 @@ export type Database = {
           daily_allowance_policy?: string | null
           default_daily_allowance_amount?: number | null
           default_daily_allowance_min_hours?: number | null
+          default_overtime_conversion_limit?: number | null
+          default_overtime_conversion_rate?: number | null
           enable_entry_tolerance?: boolean | null
+          enable_overtime_conversion?: boolean | null
           entry_tolerance_minutes?: number | null
           id?: string
           lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
@@ -234,7 +240,10 @@ export type Database = {
           daily_allowance_policy?: string | null
           default_daily_allowance_amount?: number | null
           default_daily_allowance_min_hours?: number | null
+          default_overtime_conversion_limit?: number | null
+          default_overtime_conversion_rate?: number | null
           enable_entry_tolerance?: boolean | null
+          enable_overtime_conversion?: boolean | null
           entry_tolerance_minutes?: number | null
           id?: string
           lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
@@ -306,6 +315,54 @@ export type Database = {
         }
         Relationships: []
       }
+      employee_overtime_conversions: {
+        Row: {
+          automatic_conversion_hours: number | null
+          company_id: string
+          conversion_amount: number | null
+          created_at: string
+          created_by: string
+          id: string
+          manual_conversion_hours: number | null
+          month: string
+          notes: string | null
+          total_conversion_hours: number | null
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          automatic_conversion_hours?: number | null
+          company_id: string
+          conversion_amount?: number | null
+          created_at?: string
+          created_by: string
+          id?: string
+          manual_conversion_hours?: number | null
+          month: string
+          notes?: string | null
+          total_conversion_hours?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          automatic_conversion_hours?: number | null
+          company_id?: string
+          conversion_amount?: number | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          manual_conversion_hours?: number | null
+          month?: string
+          notes?: string | null
+          total_conversion_hours?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       employee_settings: {
         Row: {
           business_trip_rate_with_meal: number | null
@@ -318,6 +375,7 @@ export type Database = {
           daily_allowance_min_hours: number | null
           daily_allowance_policy: string | null
           enable_entry_tolerance: boolean | null
+          enable_overtime_conversion: boolean | null
           entry_tolerance_minutes: number | null
           id: string
           lunch_break_type:
@@ -333,6 +391,8 @@ export type Database = {
             | null
           night_shift_end: string | null
           night_shift_start: string | null
+          overtime_conversion_limit: number | null
+          overtime_conversion_rate: number | null
           overtime_monthly_compensation: boolean | null
           saturday_handling: Database["public"]["Enums"]["saturday_type"] | null
           saturday_hourly_rate: number | null
@@ -355,6 +415,7 @@ export type Database = {
           daily_allowance_min_hours?: number | null
           daily_allowance_policy?: string | null
           enable_entry_tolerance?: boolean | null
+          enable_overtime_conversion?: boolean | null
           entry_tolerance_minutes?: number | null
           id?: string
           lunch_break_type?:
@@ -370,6 +431,8 @@ export type Database = {
             | null
           night_shift_end?: string | null
           night_shift_start?: string | null
+          overtime_conversion_limit?: number | null
+          overtime_conversion_rate?: number | null
           overtime_monthly_compensation?: boolean | null
           saturday_handling?:
             | Database["public"]["Enums"]["saturday_type"]
@@ -394,6 +457,7 @@ export type Database = {
           daily_allowance_min_hours?: number | null
           daily_allowance_policy?: string | null
           enable_entry_tolerance?: boolean | null
+          enable_overtime_conversion?: boolean | null
           entry_tolerance_minutes?: number | null
           id?: string
           lunch_break_type?:
@@ -409,6 +473,8 @@ export type Database = {
             | null
           night_shift_end?: string | null
           night_shift_start?: string | null
+          overtime_conversion_limit?: number | null
+          overtime_conversion_rate?: number | null
           overtime_monthly_compensation?: boolean | null
           saturday_handling?:
             | Database["public"]["Enums"]["saturday_type"]

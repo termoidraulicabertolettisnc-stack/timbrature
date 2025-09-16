@@ -1,23 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { BenefitsService } from '@/services/BenefitsService';
+import { OvertimeConversionService } from '@/services/OvertimeConversionService';
 import { getEmployeeSettingsForDate } from '@/utils/temporalEmployeeSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, Download, Users } from "lucide-react";
+import { Calendar, Download, Users, TrendingDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog';
 import * as ExcelJS from 'exceljs';
 
 interface PayrollData {
   employee_id: string;
   employee_name: string;
   daily_data: { [day: string]: { ordinary: number; overtime: number; absence: string | null } };
-  totals: { ordinary: number; overtime: number; absence_totals: { [absenceType: string]: number } };
+  totals: { 
+    ordinary: number; 
+    overtime: number; 
+    converted_overtime: number;
+    final_overtime: number;
+    absence_totals: { [absenceType: string]: number } 
+  };
   meal_vouchers: number;
   meal_voucher_amount: number;
+  conversion_amount: number;
 }
 
 export default function PayrollDashboard() {
@@ -27,6 +36,17 @@ export default function PayrollDashboard() {
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [conversionDialog, setConversionDialog] = useState<{
+    open: boolean;
+    userId: string;
+    userName: string;
+    originalOvertimeHours: number;
+  }>({
+    open: false,
+    userId: '',
+    userName: '',
+    originalOvertimeHours: 0
   });
 
   // Italian holidays for 2024 (you can expand this)
@@ -228,11 +248,36 @@ export default function PayrollDashboard() {
           employee_id: profile.user_id,
           employee_name: `${profile.first_name} ${profile.last_name}`,
           daily_data: dailyData,
-          totals: { ordinary: totalOrdinary, overtime: totalOvertime, absence_totals: absenceTotals },
+          totals: { 
+            ordinary: totalOrdinary, 
+            overtime: totalOvertime,
+            converted_overtime: 0, // Will be calculated below
+            final_overtime: totalOvertime, // Will be updated below
+            absence_totals: absenceTotals 
+          },
           meal_vouchers: mealVoucherDays,
-          meal_voucher_amount: mealVoucherAmount
+          meal_voucher_amount: mealVoucherAmount,
+          conversion_amount: 0 // Will be calculated below
         };
       }));
+
+      // Calculate overtime conversions for all employees
+      for (const employee of processedData) {
+        try {
+          const conversionCalc = await OvertimeConversionService.calculateConversionDetails(
+            employee.employee_id,
+            selectedMonth,
+            employee.totals.overtime
+          );
+          
+          employee.totals.converted_overtime = conversionCalc.converted_hours;
+          employee.totals.final_overtime = conversionCalc.remaining_overtime_hours;
+          employee.conversion_amount = conversionCalc.conversion_amount;
+        } catch (error) {
+          console.warn('Error calculating overtime conversion for employee', employee.employee_id, error);
+          // Keep original values as fallback
+        }
+      }
 
       setPayrollData(processedData);
     } catch (error) {
@@ -576,9 +621,9 @@ export default function PayrollDashboard() {
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Ore Straordinario</p>
+              <p className="text-sm font-medium text-muted-foreground">Ore Straordinario Finali</p>
               <p className="text-2xl font-bold">
-                {payrollData.reduce((sum, emp) => sum + emp.totals.overtime, 0).toFixed(0)}h
+                {payrollData.reduce((sum, emp) => sum + emp.totals.final_overtime, 0).toFixed(0)}h
               </p>
             </div>
             <Calendar className="h-8 w-8 text-muted-foreground" />
@@ -628,8 +673,11 @@ export default function PayrollDashboard() {
                       </TableHead>
                     );
                   })}
-                  <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-gray-50 border-l">Tot</TableHead>
-                  <TableHead className="text-center w-16 min-w-16 text-xs font-medium bg-yellow-50">Buoni Pasto</TableHead>
+                   <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-gray-50 border-l">Tot</TableHead>
+                   <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-orange-50">Str. Conv.</TableHead>
+                   <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-blue-50">Str. Fin.</TableHead>
+                   <TableHead className="text-center w-16 min-w-16 text-xs font-medium bg-yellow-50">Buoni Pasto</TableHead>
+                   <TableHead className="text-center w-16 min-w-16 text-xs font-medium bg-green-50">Azioni</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -694,10 +742,31 @@ export default function PayrollDashboard() {
                           </TableCell>
                         );
                       })}
-                      <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-gray-50 border-l">
-                        {employee.totals.overtime.toFixed(1)}
-                      </TableCell>
-                      <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                           <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-gray-50 border-l">
+                             {employee.totals.overtime.toFixed(1)}
+                           </TableCell>
+                           <TableCell className="text-center font-bold text-orange-700 text-xs p-1 bg-orange-50">
+                             {employee.totals.converted_overtime.toFixed(1)}
+                           </TableCell>
+                           <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-blue-50">
+                             {employee.totals.final_overtime.toFixed(1)}
+                           </TableCell>
+                           <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                           <TableCell className="text-center text-xs p-1 bg-green-50">
+                             <Button
+                               size="sm"
+                               variant="ghost"
+                               onClick={() => setConversionDialog({
+                                 open: true,
+                                 userId: employee.employee_id,
+                                 userName: employee.employee_name,
+                                 originalOvertimeHours: employee.totals.overtime
+                               })}
+                               className="h-6 px-2 text-xs"
+                             >
+                               <TrendingDown className="h-3 w-3" />
+                             </Button>
+                           </TableCell>
                     </TableRow>
 
                     {/* Righe Assenze Dinamiche */}
@@ -730,10 +799,13 @@ export default function PayrollDashboard() {
                                 </TableCell>
                               );
                             })}
-                            <TableCell className="text-center font-bold text-red-700 text-xs p-1 bg-gray-50 border-l">
-                              {hours.toFixed(1)}
-                            </TableCell>
-                            <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                             <TableCell className="text-center font-bold text-red-700 text-xs p-1 bg-gray-50 border-l">
+                               {hours.toFixed(1)}
+                             </TableCell>
+                             <TableCell className="text-center text-xs p-1 bg-orange-50">-</TableCell>
+                             <TableCell className="text-center text-xs p-1 bg-blue-50">-</TableCell>
+                             <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                             <TableCell className="text-center text-xs p-1 bg-green-50">-</TableCell>
                           </TableRow>
                         );
                       }
@@ -760,6 +832,14 @@ export default function PayrollDashboard() {
               <strong>S:</strong> Ore Straordinario
             </span>
             <span className="flex items-center gap-1">
+              <div className="w-3 h-3 bg-orange-100 border border-orange-300 rounded"></div>
+              <strong>SC:</strong> Str. Convertiti
+            </span>
+            <span className="flex items-center gap-1">
+              <div className="w-3 h-3 bg-blue-50 border border-blue-300 rounded"></div>
+              <strong>SF:</strong> Str. Finali
+            </span>
+            <span className="flex items-center gap-1">
               <div className="w-3 h-3 bg-red-100 border border-red-300 rounded"></div>
               <strong>N:</strong> Giorni di Assenza
             </span>
@@ -775,6 +855,19 @@ export default function PayrollDashboard() {
           </div>
         </div>
       </Card>
+
+      {/* Overtime Conversion Dialog */}
+      <OvertimeConversionDialog
+        open={conversionDialog.open}
+        onOpenChange={(open) => setConversionDialog(prev => ({ ...prev, open }))}
+        userId={conversionDialog.userId}
+        userName={conversionDialog.userName}
+        month={selectedMonth}
+        originalOvertimeHours={conversionDialog.originalOvertimeHours}
+        onSuccess={() => {
+          fetchPayrollData(); // Refresh data after conversion
+        }}
+      />
     </div>
   );
 }
