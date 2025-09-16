@@ -234,12 +234,12 @@ export default function PayrollDashboard() {
           employee_name: `${profile.first_name} ${profile.last_name}`,
           daily_data: dailyData,
           totals: { 
-            ordinary: totalOrdinary, 
-            overtime: totalOvertime,
-            absence_totals: absenceTotals 
+            ordinary: totalOrdinary ?? 0, 
+            overtime: totalOvertime ?? 0,
+            absence_totals: absenceTotals ?? {} 
           },
-          meal_vouchers: mealVoucherDays,
-          meal_voucher_amount: mealVoucherAmount
+          meal_vouchers: mealVoucherDays ?? 0,
+          meal_voucher_amount: mealVoucherAmount ?? 8.00
         };
       }));
 
@@ -252,11 +252,12 @@ export default function PayrollDashboard() {
             employee.totals.overtime
           );
           
-          // Only show remaining overtime after conversions
-          employee.totals.overtime = conversionCalc.remaining_overtime_hours;
+          // Only show remaining overtime after conversions, with proper fallback
+          employee.totals.overtime = conversionCalc?.remaining_overtime_hours ?? employee.totals.overtime ?? 0;
         } catch (error) {
           console.warn('Error calculating overtime conversion for employee', employee.employee_id, error);
-          // Keep original values as fallback
+          // Ensure we have a valid number as fallback
+          employee.totals.overtime = employee.totals.overtime ?? 0;
         }
       }
 
@@ -368,11 +369,11 @@ export default function PayrollDashboard() {
         
         // Add totals
         if (type === 'O') {
-          rowData.push(employee.totals.ordinary.toFixed(1));
-          rowData.push(employee.meal_vouchers > 0 ? 
-            `${employee.meal_vouchers} x €${employee.meal_voucher_amount.toFixed(2)}` : '-');
+          rowData.push((employee.totals.ordinary ?? 0).toFixed(1));
+          rowData.push((employee.meal_vouchers ?? 0) > 0 ? 
+            `${employee.meal_vouchers} x €${(employee.meal_voucher_amount ?? 0).toFixed(2)}` : '-');
         } else if (type === 'S') {
-          rowData.push(employee.totals.overtime.toFixed(1));
+          rowData.push((employee.totals.overtime ?? 0).toFixed(1));
           rowData.push('-');
         }
         
@@ -442,7 +443,7 @@ export default function PayrollDashboard() {
           }
           
           // Add totals
-          rowData.push(hours.toFixed(1));
+          rowData.push((hours ?? 0).toFixed(1));
           rowData.push('-');
           
           const row = worksheet.addRow(rowData);
@@ -592,7 +593,7 @@ export default function PayrollDashboard() {
             <div>
               <p className="text-sm font-medium text-muted-foreground">Ore Ordinarie</p>
               <p className="text-2xl font-bold">
-                {payrollData.reduce((sum, emp) => sum + emp.totals.ordinary, 0).toFixed(0)}h
+                {payrollData.reduce((sum, emp) => sum + (emp.totals.ordinary ?? 0), 0).toFixed(0)}h
               </p>
             </div>
             <Calendar className="h-8 w-8 text-muted-foreground" />
@@ -604,7 +605,7 @@ export default function PayrollDashboard() {
             <div>
               <p className="text-sm font-medium text-muted-foreground">Ore Straordinario</p>
               <p className="text-2xl font-bold">
-                {payrollData.reduce((sum, emp) => sum + emp.totals.overtime, 0).toFixed(0)}h
+                {payrollData.reduce((sum, emp) => sum + (emp.totals.overtime ?? 0), 0).toFixed(0)}h
               </p>
             </div>
             <Calendar className="h-8 w-8 text-muted-foreground" />
@@ -685,13 +686,13 @@ export default function PayrollDashboard() {
                         );
                       })}
                       <TableCell className="text-center font-bold text-green-700 text-xs p-1 bg-gray-50 border-l">
-                        {employee.totals.ordinary.toFixed(1)}
+                        {(employee.totals.ordinary ?? 0).toFixed(1)}
                       </TableCell>
                       <TableCell className="text-center text-xs p-1 bg-yellow-50">
-                        {employee.meal_vouchers > 0 ? (
+                        {(employee.meal_vouchers ?? 0) > 0 ? (
                           <div className="flex flex-col">
                             <span>{employee.meal_vouchers}</span>
-                            <span className="text-xs opacity-75">€{employee.meal_voucher_amount.toFixed(2)}</span>
+                            <span className="text-xs opacity-75">€{(employee.meal_voucher_amount ?? 0).toFixed(2)}</span>
                           </div>
                         ) : '-'}
                       </TableCell>
@@ -721,7 +722,7 @@ export default function PayrollDashboard() {
                         );
                       })}
                       <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-gray-50 border-l">
-                        {employee.totals.overtime.toFixed(1)}
+                        {(employee.totals.overtime ?? 0).toFixed(1)}
                       </TableCell>
                       <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
                     </TableRow>
