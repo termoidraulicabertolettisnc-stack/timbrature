@@ -4,7 +4,7 @@
 
 /**
  * Apply entry tolerance to a start time based on standard time and tolerance minutes
- * If the entry time is within tolerance of the standard time, normalize to standard time
+ * ONLY normalizes when arriving EARLY within tolerance - never rewards late arrivals
  * 
  * @param startTime - The actual entry time (Date object)
  * @param standardStartTime - Standard start time in HH:MM:SS format (e.g., "08:00:00")
@@ -23,18 +23,20 @@ export function applyEntryTolerance(
   const standardDate = new Date(startTime);
   standardDate.setHours(hours, minutes, seconds || 0, 0);
   
-  // Calculate tolerance window
+  // Calculate tolerance window (only for early arrivals)
   const toleranceMs = toleranceMinutes * 60 * 1000;
   const toleranceStart = new Date(standardDate.getTime() - toleranceMs);
-  const toleranceEnd = new Date(standardDate.getTime() + toleranceMs);
   
-  // Check if start time is within tolerance
-  if (startTime >= toleranceStart && startTime <= toleranceEnd) {
-    // Return the standard time (normalized)
+  // Only normalize if arriving EARLY within tolerance
+  // If arriving late (after standard time), keep the original time
+  if (startTime >= toleranceStart && startTime <= standardDate) {
+    // Return the standard time (normalized for early arrivals)
     return standardDate;
   }
   
-  // Return original time if outside tolerance
+  // Return original time if:
+  // - Arriving too early (before tolerance window)
+  // - Arriving late (after standard time)
   return startTime;
 }
 

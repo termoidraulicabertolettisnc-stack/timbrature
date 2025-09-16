@@ -871,11 +871,13 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                     <Alert>
                       <AlertTriangle className="h-4 w-4" />
                       <AlertDescription className="text-sm">
-                        <strong>Funzionamento:</strong> Gli orari di ingresso entro la tolleranza verranno normalizzati all'orario standard nelle dashboard.
+                        <strong>Funzionamento:</strong> Solo gli orari di ingresso IN ANTICIPO entro la tolleranza verranno normalizzati all'orario standard nelle dashboard.
                         <br />
-                        <strong>Esempio:</strong> Orario {getEffectiveValue(settings.standard_start_time, companySettings?.standard_start_time) || '08:00'}, tolleranza ±{getEffectiveValue(settings.entry_tolerance_minutes, companySettings?.entry_tolerance_minutes) || 10} min
+                        <strong>Esempio:</strong> Orario {getEffectiveValue(settings.standard_start_time, companySettings?.standard_start_time) || '08:00'}, tolleranza {getEffectiveValue(settings.entry_tolerance_minutes, companySettings?.entry_tolerance_minutes) || 10} min prima
                         <br />
-                        <em>I timesheet originali restano invariati, la normalizzazione si applica solo nelle viste.</em>
+                        • In anticipo (07:55) → normalizzato (08:00) • In ritardo (08:05) → non normalizzato (08:05)
+                        <br />
+                        <em>Chi arriva in ritardo mantiene l'orario effettivo. I timesheet originali restano invariati.</em>
                       </AlertDescription>
                     </Alert>
                   </div>

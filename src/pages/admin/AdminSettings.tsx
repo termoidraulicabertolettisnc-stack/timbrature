@@ -674,16 +674,17 @@ export default function AdminSettings() {
                     <Alert>
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
-                        <strong>Come funziona:</strong> Se un dipendente entra entro ±{settings.entry_tolerance_minutes || 10} minuti dall'orario standard ({settings.standard_start_time || '08:00'}), 
+                        <strong>Come funziona:</strong> Se un dipendente entra IN ANTICIPO entro {settings.entry_tolerance_minutes || 10} minuti dall'orario standard ({settings.standard_start_time || '08:00'}), 
                         nelle dashboard l'orario verrà normalizzato a {settings.standard_start_time || '08:00'}. 
                         <br />
                         <strong>Esempio:</strong> Con orario standard 08:00 e tolleranza 10 minuti:
                         <br />
-                        • 07:55 → 08:00 (normalizzato)
-                        • 08:05 → 08:00 (normalizzato)  
-                        • 07:45 → 07:45 (fuori tolleranza, resta invariato)
+                        • 07:50 → 08:00 (arriva in anticipo, normalizzato)
+                        • 07:55 → 08:00 (arriva in anticipo, normalizzato)  
+                        • 08:05 → 08:05 (arriva in ritardo, NON normalizzato)
+                        • 07:45 → 07:45 (troppo in anticipo, resta invariato)
                         <br />
-                        <em>I timesheet originali non vengono mai modificati.</em>
+                        <em>Chi arriva in ritardo mantiene l'orario effettivo. I timesheet originali non vengono mai modificati.</em>
                       </AlertDescription>
                     </Alert>
                   </div>
