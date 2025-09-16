@@ -56,8 +56,10 @@ export function OvertimeConversionDialog({
     if (!userId || !month) return;
 
     const hours = parseFloat(manualHours) || 0;
-    if (hours < 0) {
-      toast.error('Le ore di conversione non possono essere negative');
+    
+    // Verifica che non si stia tentando di de-convertire più ore di quelle convertite
+    if (calculation && hours < 0 && Math.abs(hours) > calculation.converted_hours) {
+      toast.error(`Non puoi de-convertire più di ${calculation.converted_hours.toFixed(2)} ore già convertite`);
       return;
     }
 
@@ -137,20 +139,24 @@ export function OvertimeConversionDialog({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="manual_hours">Ore da convertire manualmente</Label>
+            <Label htmlFor="manual_hours">Ore da convertire (+) o de-convertire (-)</Label>
             <Input
               id="manual_hours"
               type="number"
-              min="0"
               step="0.5"
               value={manualHours}
               onChange={(e) => setManualHours(e.target.value)}
               placeholder="0"
             />
-            {previewHours > 0 && calculation && (
+            {previewHours !== 0 && calculation && (
               <div className="text-sm text-muted-foreground flex items-center gap-1">
                 <Calculator className="h-3 w-3" />
-                {previewHours}h × {calculation.conversion_rate}€/h = {previewAmount.toFixed(2)}€
+                {previewHours > 0 ? 'Conversione' : 'De-conversione'}: {Math.abs(previewHours)}h × {calculation.conversion_rate}€/h = {previewAmount.toFixed(2)}€
+              </div>
+            )}
+            {calculation && calculation.converted_hours > 0 && (
+              <div className="text-xs text-muted-foreground">
+                Usa valori negativi per de-convertire ore già convertite
               </div>
             )}
           </div>

@@ -112,45 +112,46 @@ export class OvertimeConversionService {
   }
 
   /**
-   * Apply manual conversion adjustment
+   * Apply manual conversion adjustment (positive for conversion, negative for de-conversion)
    */
   static async applyManualConversion(
     userId: string, 
     month: string, 
-    manualHours: number,
+    deltaHours: number, 
     notes?: string
   ): Promise<boolean> {
-    const monthStart = format(startOfMonth(new Date(month + '-01')), 'yyyy-MM-dd');
-    const settings = await this.getEffectiveConversionSettings(userId, month);
-    
-    if (!settings) return false;
+    try {
+      // Get or create conversion record
+      const conversion = await this.getOrCreateConversion(userId, month);
+      if (!conversion) return false;
 
-    const conversionAmount = manualHours * settings.overtime_conversion_rate;
+      // Get conversion settings
+      const settings = await this.getEffectiveConversionSettings(userId, month);
+      if (!settings?.enable_overtime_conversion) return false;
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('company_id')
-      .eq('user_id', userId)
-      .single();
+      // Calculate new manual conversion hours (current + delta)
+      const newManualHours = Math.max(0, conversion.manual_conversion_hours + deltaHours);
+      const newTotalHours = conversion.automatic_conversion_hours + newManualHours;
+      const newAmount = newTotalHours * settings.overtime_conversion_rate;
 
-    if (!profile) return false;
+      // Update the conversion record
+      const { error } = await supabase
+        .from('employee_overtime_conversions')
+        .update({
+          manual_conversion_hours: newManualHours,
+          total_conversion_hours: newTotalHours,
+          conversion_amount: newAmount,
+          notes,
+          updated_by: (await supabase.auth.getUser()).data.user?.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversion.id);
 
-    const { error } = await supabase
-      .from('employee_overtime_conversions')
-      .upsert({
-        user_id: userId,
-        month: monthStart,
-        manual_conversion_hours: manualHours,
-        conversion_amount: conversionAmount,
-        notes,
-        updated_by: userId,
-        created_by: userId,
-        company_id: profile.company_id
-      }, {
-        onConflict: 'user_id,month'
-      });
-
-    return !error;
+      return !error;
+    } catch (error) {
+      console.error('Error applying manual conversion:', error);
+      return false;
+    }
   }
 
   /**

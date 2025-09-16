@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { BenefitsService } from '@/services/BenefitsService';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
+import { distributePayrollOvertime, applyPayrollOvertimeDistribution } from '@/utils/payrollOvertimeDistribution';
 import { getEmployeeSettingsForDate } from '@/utils/temporalEmployeeSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -243,7 +244,7 @@ export default function PayrollDashboard() {
         };
       }));
 
-      // Subtract converted overtime from displayed totals
+      // Apply overtime conversion with proportional distribution
       for (const employee of processedData) {
         try {
           const conversionCalc = await OvertimeConversionService.calculateConversionDetails(
@@ -252,8 +253,23 @@ export default function PayrollDashboard() {
             employee.totals.overtime
           );
           
-          // Only show remaining overtime after conversions, with proper fallback
-          employee.totals.overtime = conversionCalc?.remaining_overtime_hours ?? employee.totals.overtime ?? 0;
+          if (conversionCalc.converted_hours > 0) {
+            // Distribute converted hours proportionally across days with overtime
+            const distributions = distributePayrollOvertime(
+              employee.daily_data,
+              conversionCalc.converted_hours
+            );
+            
+            // Apply the distribution to daily data
+            employee.daily_data = applyPayrollOvertimeDistribution(
+              employee.daily_data,
+              distributions
+            );
+
+            // Recalculate total overtime after distribution
+            employee.totals.overtime = Object.values(employee.daily_data)
+              .reduce((sum, day) => sum + day.overtime, 0);
+          }
         } catch (error) {
           console.warn('Error calculating overtime conversion for employee', employee.employee_id, error);
           // Ensure we have a valid number as fallback

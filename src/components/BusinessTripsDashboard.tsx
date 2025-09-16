@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
+import { distributeConvertedOvertime, applyOvertimeDistribution } from '@/utils/overtimeDistribution';
 import * as ExcelJS from 'exceljs';
 import { calculateMealBenefits } from '@/utils/mealBenefitsCalculator';
 
@@ -403,7 +404,7 @@ const BusinessTripsDashboard = () => {
 
         const totalBusinessTripAmount = saturdayAmount + dailyAllowanceAmount;
 
-        // Calculate overtime conversions for this employee
+        // Apply overtime conversion with proportional distribution
         let overtimeConversionHours = 0;
         let overtimeConversionAmount = 0;
         
@@ -415,6 +416,26 @@ const BusinessTripsDashboard = () => {
           );
           overtimeConversionHours = conversionCalc.converted_hours;
           overtimeConversionAmount = conversionCalc.conversion_amount;
+          
+          // Distribute converted hours proportionally if there are conversions
+          if (conversionCalc.converted_hours > 0) {
+            const distributions = distributeConvertedOvertime(
+              dailyData,
+              conversionCalc.converted_hours
+            );
+            
+            const updatedDailyData = applyOvertimeDistribution(
+              dailyData,
+              distributions
+            );
+            
+            // Update the dailyData reference
+            Object.assign(dailyData, updatedDailyData);
+
+            // Recalculate total overtime after distribution
+            totalOvertime = Object.values(dailyData)
+              .reduce((sum, day) => sum + (day.overtime || 0), 0);
+          }
         } catch (error) {
           console.warn('Error calculating overtime conversion for employee', profile.user_id, error);
         }
