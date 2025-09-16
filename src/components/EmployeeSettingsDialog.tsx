@@ -36,6 +36,10 @@ interface EmployeeSettings {
   daily_allowance_amount: number | null;
   daily_allowance_policy: string | null;
   daily_allowance_min_hours: number | null;
+  // Entry tolerance fields
+  enable_entry_tolerance?: boolean | null;
+  standard_start_time?: string | null;
+  entry_tolerance_minutes?: number | null;
 }
 
 interface CompanySettings {
@@ -52,6 +56,10 @@ interface CompanySettings {
   daily_allowance_amount: number;
   daily_allowance_policy: string;
   daily_allowance_min_hours: number;
+  // Entry tolerance fields
+  enable_entry_tolerance?: boolean;
+  standard_start_time?: string;
+  entry_tolerance_minutes?: number;
 }
 
 interface EmployeeSettingsDialogProps {
@@ -86,6 +94,10 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
     daily_allowance_amount: null,
     daily_allowance_policy: null,
     daily_allowance_min_hours: null,
+    // Entry tolerance fields
+    enable_entry_tolerance: null,
+    standard_start_time: null,
+    entry_tolerance_minutes: null,
   });
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [companies, setCompanies] = useState<Array<{id: string, name: string}>>([]);
@@ -160,6 +172,10 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
           daily_allowance_amount: null,
           daily_allowance_policy: null,
           daily_allowance_min_hours: null,
+          // Entry tolerance fields
+          enable_entry_tolerance: null,
+          standard_start_time: null,
+          entry_tolerance_minutes: null,
         });
       }
     } catch (error) {
@@ -278,6 +294,10 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
       daily_allowance_amount: null,
       daily_allowance_policy: null,
       daily_allowance_min_hours: null,
+      // Entry tolerance fields  
+      enable_entry_tolerance: null,
+      standard_start_time: null,
+      entry_tolerance_minutes: null,
     });
     setHasChanges(true);
   };
@@ -769,9 +789,115 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
               </CardContent>
             </Card>
           )}
-        </div>
+        {/* Entry Tolerance System */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Sistema di Tolleranza Orario</CardTitle>
+            <CardDescription>
+              Configurazione personalizzata per la tolleranza orario ingresso
+              {companySettings && (
+                <span> (Aziendale: {companySettings.enable_entry_tolerance ? 'Abilitato' : 'Disabilitato'}
+                {companySettings.enable_entry_tolerance && ` - ${companySettings.standard_start_time} ±${companySettings.entry_tolerance_minutes}min`})</span>
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <Label>Sistema di Tolleranza</Label>
+                <Select
+                  value={settings.enable_entry_tolerance === null ? 'company_default' : (settings.enable_entry_tolerance ? 'enabled' : 'disabled')}
+                  onValueChange={(value) => {
+                    if (value === 'company_default') {
+                      updateSetting('enable_entry_tolerance', null);
+                    } else {
+                      updateSetting('enable_entry_tolerance', value === 'enabled');
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={companySettings ? `Default: ${companySettings.enable_entry_tolerance ? 'Abilitato' : 'Disabilitato'}` : 'Seleziona'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="company_default">Usa Default Aziendale</SelectItem>
+                    <SelectItem value="enabled">Abilitato per questo dipendente</SelectItem>
+                    <SelectItem value="disabled">Disabilitato per questo dipendente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-        {/* Data di Applicazione Modifiche */}
+              {/* Show custom fields only if enabled for this employee or using company default with tolerance enabled */}
+              {(settings.enable_entry_tolerance === true || 
+                (settings.enable_entry_tolerance === null && companySettings?.enable_entry_tolerance)) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border rounded-lg bg-muted/20">
+                  <div>
+                    <Label htmlFor="emp_standard_start_time">
+                      Orario Standard Personalizzato (HH:MM)
+                    </Label>
+                    <Input
+                      id="emp_standard_start_time"
+                      type="time"
+                      value={settings.standard_start_time || ''}
+                      onChange={(e) => updateSetting('standard_start_time', e.target.value || null)}
+                      placeholder={companySettings?.standard_start_time || '08:00'}
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Effettivo: {getEffectiveValue(settings.standard_start_time, companySettings?.standard_start_time) || '08:00'}
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="emp_entry_tolerance_minutes">
+                      Tolleranza Personalizzata (Minuti)
+                    </Label>
+                    <Input
+                      id="emp_entry_tolerance_minutes"
+                      type="number"
+                      min="0"
+                      max="60"
+                      step="1"
+                      value={settings.entry_tolerance_minutes || ''}
+                      onChange={(e) => updateSetting('entry_tolerance_minutes', parseInt(e.target.value) || null)}
+                      placeholder={companySettings?.entry_tolerance_minutes?.toString() || '10'}
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Effettivo: ±{getEffectiveValue(settings.entry_tolerance_minutes, companySettings?.entry_tolerance_minutes) || 10} minuti
+                    </p>
+                  </div>
+                  
+                  <div className="col-span-full">
+                    <Alert>
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription className="text-sm">
+                        <strong>Funzionamento:</strong> Gli orari di ingresso entro la tolleranza verranno normalizzati all'orario standard nelle dashboard.
+                        <br />
+                        <strong>Esempio:</strong> Orario {getEffectiveValue(settings.standard_start_time, companySettings?.standard_start_time) || '08:00'}, tolleranza ±{getEffectiveValue(settings.entry_tolerance_minutes, companySettings?.entry_tolerance_minutes) || 10} min
+                        <br />
+                        <em>I timesheet originali restano invariati, la normalizzazione si applica solo nelle viste.</em>
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                </div>
+              )}
+
+              {companySettings && (
+                <div className="p-3 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    <strong>Impostazioni aziendali:</strong> {
+                      companySettings.enable_entry_tolerance 
+                        ? `Abilitato - Orario ${companySettings.standard_start_time || '08:00'} con tolleranza ±${companySettings.entry_tolerance_minutes || 10} minuti`
+                        : 'Disabilitato'
+                    }
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Application Date Selection */}
         <Card className="border-orange-200 bg-orange-50/50">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -870,6 +996,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
             </div>
           </CardContent>
         </Card>
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

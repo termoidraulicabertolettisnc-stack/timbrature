@@ -21,6 +21,10 @@ export interface TemporalEmployeeSettings {
   business_trip_rate_without_meal?: number;
   contract_working_days?: string;
   saturday_hourly_rate?: number;
+  // Entry tolerance fields
+  enable_entry_tolerance?: boolean;
+  standard_start_time?: string;
+  entry_tolerance_minutes?: number;
   valid_from: string;
   valid_to?: string;
   created_at: string;

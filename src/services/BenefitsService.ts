@@ -1,4 +1,5 @@
 import { calculateMealBenefitsTemporal, calculateMealBenefits, MealBenefits } from '@/utils/mealBenefitsCalculator';
+import { applyEntryTolerance, shouldApplyEntryTolerance } from '@/utils/entryToleranceUtils';
 
 export interface TimesheetData {
   start_time: string | null;
@@ -17,6 +18,10 @@ export interface EmployeeSettings {
   daily_allowance_min_hours?: number;
   lunch_break_type?: string;
   saturday_handling?: string;
+  // Entry tolerance fields
+  enable_entry_tolerance?: boolean;
+  standard_start_time?: string;
+  entry_tolerance_minutes?: number;
 }
 
 export interface CompanySettings {
@@ -25,6 +30,10 @@ export interface CompanySettings {
   default_daily_allowance_min_hours?: number;
   lunch_break_type?: string;
   saturday_handling?: string;
+  // Entry tolerance fields
+  enable_entry_tolerance?: boolean;
+  standard_start_time?: string;
+  entry_tolerance_minutes?: number;
 }
 
 /**
@@ -58,6 +67,39 @@ export class BenefitsService {
       'Consider providing user_id and date for accurate temporal calculation.'
     );
     return calculateMealBenefits(timesheet, employeeSettings, companySettings);
+  }
+
+  /**
+   * Apply entry tolerance to timesheet data for display purposes
+   * This method should be used in dashboards and views, NOT for storing data
+   */
+  static applyEntryToleranceForDisplay(
+    timesheet: TimesheetData,
+    employeeSettings?: EmployeeSettings,
+    companySettings?: CompanySettings
+  ): TimesheetData {
+    // Only apply tolerance to start_time, and only for display
+    if (!timesheet.start_time) {
+      return timesheet;
+    }
+
+    const toleranceConfig = shouldApplyEntryTolerance(employeeSettings, companySettings);
+    
+    if (!toleranceConfig.enabled || !toleranceConfig.standardTime || toleranceConfig.tolerance === undefined) {
+      return timesheet;
+    }
+
+    const adjustedStartTime = applyEntryTolerance(
+      new Date(timesheet.start_time),
+      toleranceConfig.standardTime,
+      toleranceConfig.tolerance
+    );
+
+    // Return new timesheet object with adjusted start_time
+    return {
+      ...timesheet,
+      start_time: adjustedStartTime.toISOString()
+    };
   }
 
   /**

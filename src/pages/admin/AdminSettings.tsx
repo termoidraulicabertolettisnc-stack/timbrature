@@ -28,6 +28,10 @@ interface CompanySettings {
   default_daily_allowance_amount: number | null;
   default_daily_allowance_min_hours: number | null;
   meal_voucher_min_hours: number | null;
+  // Entry tolerance fields
+  enable_entry_tolerance?: boolean | null;
+  standard_start_time?: string | null;
+  entry_tolerance_minutes?: number | null;
 }
 
 export default function AdminSettings() {
@@ -47,6 +51,10 @@ export default function AdminSettings() {
     default_daily_allowance_amount: null,
     default_daily_allowance_min_hours: null,
     meal_voucher_min_hours: null,
+    // Entry tolerance fields
+    enable_entry_tolerance: null,
+    standard_start_time: null,
+    entry_tolerance_minutes: null,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -116,6 +124,10 @@ export default function AdminSettings() {
         daily_allowance_policy: 'disabled' as const,
         daily_allowance_min_hours: 6,
         meal_voucher_min_hours: 6,
+        // Entry tolerance defaults
+        enable_entry_tolerance: false,
+        standard_start_time: '08:00:00',
+        entry_tolerance_minutes: 10,
       };
 
       const { data, error } = await supabase
@@ -155,6 +167,10 @@ export default function AdminSettings() {
           default_daily_allowance_amount: settings.default_daily_allowance_amount,
           default_daily_allowance_min_hours: settings.default_daily_allowance_min_hours,
           meal_voucher_min_hours: settings.meal_voucher_min_hours,
+          // Entry tolerance fields
+          enable_entry_tolerance: settings.enable_entry_tolerance,
+          standard_start_time: settings.standard_start_time,
+          entry_tolerance_minutes: settings.entry_tolerance_minutes,
         })
         .eq('id', settings.id);
 
@@ -584,6 +600,95 @@ export default function AdminSettings() {
                   placeholder="46.48"
                 />
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Entry Tolerance System */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Sistema di Tolleranza Orario
+            </CardTitle>
+            <CardDescription>
+              Configurazione per la normalizzazione degli orari di ingresso nelle dashboard
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <input
+                  id="enable_entry_tolerance"
+                  type="checkbox"
+                  checked={settings.enable_entry_tolerance || false}
+                  onChange={(e) => updateSetting('enable_entry_tolerance', e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="enable_entry_tolerance">Abilita Sistema di Tolleranza Orario</Label>
+              </div>
+              
+              {settings.enable_entry_tolerance && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border rounded-lg bg-muted/20">
+                  <div>
+                    <Label htmlFor="standard_start_time">
+                      Orario Standard di Inizio (HH:MM)
+                      <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="standard_start_time"
+                      type="time"
+                      value={settings.standard_start_time || '08:00'}
+                      onChange={(e) => updateSetting('standard_start_time', e.target.value)}
+                      className="mt-1"
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Orario di riferimento per la tolleranza
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="entry_tolerance_minutes">
+                      Tolleranza in Minuti
+                      <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="entry_tolerance_minutes"
+                      type="number"
+                      min="0"
+                      max="60"
+                      step="1"
+                      value={settings.entry_tolerance_minutes || ''}
+                      onChange={(e) => updateSetting('entry_tolerance_minutes', parseInt(e.target.value) || null)}
+                      placeholder="10"
+                      className="mt-1"
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      ±{settings.entry_tolerance_minutes || 10} minuti dall'orario standard
+                    </p>
+                  </div>
+                  
+                  <div className="col-span-full">
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        <strong>Come funziona:</strong> Se un dipendente entra entro ±{settings.entry_tolerance_minutes || 10} minuti dall'orario standard ({settings.standard_start_time || '08:00'}), 
+                        nelle dashboard l'orario verrà normalizzato a {settings.standard_start_time || '08:00'}. 
+                        <br />
+                        <strong>Esempio:</strong> Con orario standard 08:00 e tolleranza 10 minuti:
+                        <br />
+                        • 07:55 → 08:00 (normalizzato)
+                        • 08:05 → 08:00 (normalizzato)  
+                        • 07:45 → 07:45 (fuori tolleranza, resta invariato)
+                        <br />
+                        <em>I timesheet originali non vengono mai modificati.</em>
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

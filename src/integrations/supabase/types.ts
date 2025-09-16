@@ -174,6 +174,8 @@ export type Database = {
           daily_allowance_policy: string | null
           default_daily_allowance_amount: number | null
           default_daily_allowance_min_hours: number | null
+          enable_entry_tolerance: boolean | null
+          entry_tolerance_minutes: number | null
           id: string
           lunch_break_type: Database["public"]["Enums"]["lunch_break_type"]
           meal_allowance_policy:
@@ -188,6 +190,7 @@ export type Database = {
           overtime_monthly_compensation: boolean | null
           saturday_handling: Database["public"]["Enums"]["saturday_type"]
           saturday_hourly_rate: number | null
+          standard_start_time: string | null
           standard_weekly_hours: Json | null
           updated_at: string
         }
@@ -201,6 +204,8 @@ export type Database = {
           daily_allowance_policy?: string | null
           default_daily_allowance_amount?: number | null
           default_daily_allowance_min_hours?: number | null
+          enable_entry_tolerance?: boolean | null
+          entry_tolerance_minutes?: number | null
           id?: string
           lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
           meal_allowance_policy?:
@@ -215,6 +220,7 @@ export type Database = {
           overtime_monthly_compensation?: boolean | null
           saturday_handling?: Database["public"]["Enums"]["saturday_type"]
           saturday_hourly_rate?: number | null
+          standard_start_time?: string | null
           standard_weekly_hours?: Json | null
           updated_at?: string
         }
@@ -228,6 +234,8 @@ export type Database = {
           daily_allowance_policy?: string | null
           default_daily_allowance_amount?: number | null
           default_daily_allowance_min_hours?: number | null
+          enable_entry_tolerance?: boolean | null
+          entry_tolerance_minutes?: number | null
           id?: string
           lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
           meal_allowance_policy?:
@@ -242,6 +250,7 @@ export type Database = {
           overtime_monthly_compensation?: boolean | null
           saturday_handling?: Database["public"]["Enums"]["saturday_type"]
           saturday_hourly_rate?: number | null
+          standard_start_time?: string | null
           standard_weekly_hours?: Json | null
           updated_at?: string
         }
@@ -308,6 +317,8 @@ export type Database = {
           daily_allowance_amount: number | null
           daily_allowance_min_hours: number | null
           daily_allowance_policy: string | null
+          enable_entry_tolerance: boolean | null
+          entry_tolerance_minutes: number | null
           id: string
           lunch_break_type:
             | Database["public"]["Enums"]["lunch_break_type"]
@@ -325,6 +336,7 @@ export type Database = {
           overtime_monthly_compensation: boolean | null
           saturday_handling: Database["public"]["Enums"]["saturday_type"] | null
           saturday_hourly_rate: number | null
+          standard_start_time: string | null
           standard_weekly_hours: Json | null
           updated_at: string
           updated_by: string | null
@@ -342,6 +354,8 @@ export type Database = {
           daily_allowance_amount?: number | null
           daily_allowance_min_hours?: number | null
           daily_allowance_policy?: string | null
+          enable_entry_tolerance?: boolean | null
+          entry_tolerance_minutes?: number | null
           id?: string
           lunch_break_type?:
             | Database["public"]["Enums"]["lunch_break_type"]
@@ -361,6 +375,7 @@ export type Database = {
             | Database["public"]["Enums"]["saturday_type"]
             | null
           saturday_hourly_rate?: number | null
+          standard_start_time?: string | null
           standard_weekly_hours?: Json | null
           updated_at?: string
           updated_by?: string | null
@@ -378,6 +393,8 @@ export type Database = {
           daily_allowance_amount?: number | null
           daily_allowance_min_hours?: number | null
           daily_allowance_policy?: string | null
+          enable_entry_tolerance?: boolean | null
+          entry_tolerance_minutes?: number | null
           id?: string
           lunch_break_type?:
             | Database["public"]["Enums"]["lunch_break_type"]
@@ -397,6 +414,7 @@ export type Database = {
             | Database["public"]["Enums"]["saturday_type"]
             | null
           saturday_hourly_rate?: number | null
+          standard_start_time?: string | null
           standard_weekly_hours?: Json | null
           updated_at?: string
           updated_by?: string | null
