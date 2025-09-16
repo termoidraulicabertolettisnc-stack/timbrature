@@ -10,7 +10,7 @@ import { Settings, Clock, Coffee, Calendar, Moon, Gift, Save, AlertCircle } from
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { syncEmployeeSettingsStructure } from '@/utils/syncEmployeeSettings';
-import OvertimeConversionProcessor from '@/components/OvertimeConversionProcessor';
+
 
 interface CompanySettings {
   id?: string;
@@ -801,7 +801,7 @@ export default function AdminSettings() {
         </Card>
         
         {/* Overtime Conversions Processing */}
-        <OvertimeConversionProcessor />
+        
       </div>
     </div>
   );
