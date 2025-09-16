@@ -58,6 +58,10 @@ export const syncEmployeeSettingsStructure = async (companyId: string) => {
         meal_allowance_policy: empSetting.meal_allowance_policy !== undefined ? empSetting.meal_allowance_policy : null,
         daily_allowance_min_hours: empSetting.daily_allowance_min_hours !== undefined ? empSetting.daily_allowance_min_hours : null,
         meal_voucher_min_hours: empSetting.meal_voucher_min_hours !== undefined ? empSetting.meal_voucher_min_hours : null,
+        // Nuovi campi di conversione straordinari
+        enable_overtime_conversion: empSetting.enable_overtime_conversion !== undefined ? empSetting.enable_overtime_conversion : null,
+        overtime_conversion_rate: empSetting.overtime_conversion_rate !== undefined ? empSetting.overtime_conversion_rate : null,
+        overtime_conversion_limit: empSetting.overtime_conversion_limit !== undefined ? empSetting.overtime_conversion_limit : null,
         updated_at: new Date().toISOString()
       };
 
@@ -132,6 +136,10 @@ export const createDefaultEmployeeSettings = async (
       meal_allowance_policy: null,
       daily_allowance_min_hours: null,
       meal_voucher_min_hours: null,
+      // Nuovi campi di conversione straordinari
+      enable_overtime_conversion: null,
+      overtime_conversion_rate: null,
+      overtime_conversion_limit: null,
     };
 
     const { data, error } = await supabase
