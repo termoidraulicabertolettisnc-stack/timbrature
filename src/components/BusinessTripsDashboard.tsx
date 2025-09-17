@@ -1016,81 +1016,96 @@ const BusinessTripsDashboard = () => {
                         <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs px-2 py-1 border-r">
                           <span className="text-orange-700 font-bold">T</span> - {employee.employee_name}
                         </TableCell>
-                        {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                          const day = i + 1;
-                          const dayKey = String(day).padStart(2, '0');
-                          const isBusinessTrip = employee.daily_data[dayKey]?.business_trip;
-                          const isHol = isHoliday(day);
-                          const isSun = isSunday(day);
-                          
-                          return (
-                            <TableCell 
-                              key={day} 
-                              className={`text-center px-0.5 py-1 text-xs ${
-                                isHol || isSun ? 'bg-red-50' : ''
-                              } ${isBusinessTrip ? 'bg-orange-100' : ''}`}
-                            >
-                              {isBusinessTrip ? (
-                                <span className="text-orange-700 font-bold text-xs">T</span>
-                              ) : ''}
-                            </TableCell>
-                          );
-                        })}
+                         {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                           const day = i + 1;
+                           const dayKey = String(day).padStart(2, '0');
+                           const isBusinessTrip = employee.daily_data[dayKey]?.business_trip;
+                           const isHol = isHoliday(day);
+                           const isSun = isSunday(day);
+                           
+                           // Calculate daily business trip hours (distribute total hours across business trip days)
+                           const totalBusinessTripDays = Object.values(employee.daily_data).filter(d => d?.business_trip).length;
+                           const dailyBusinessTripHours = totalBusinessTripDays > 0 && isBusinessTrip 
+                             ? (employee.totals.business_trip_hours / totalBusinessTripDays).toFixed(1)
+                             : null;
+                           
+                           return (
+                             <TableCell 
+                               key={day} 
+                               className={`text-center px-0.5 py-1 text-xs ${
+                                 isHol || isSun ? 'bg-red-50' : ''
+                               } ${isBusinessTrip ? 'bg-orange-100' : ''}`}
+                             >
+                               {isBusinessTrip ? (
+                                 <TooltipProvider>
+                                   <Tooltip>
+                                     <TooltipTrigger asChild>
+                                       <span className="text-orange-700 font-bold text-xs cursor-help">T</span>
+                                     </TooltipTrigger>
+                                     <TooltipContent>
+                                       <p>Ore trasferta: {dailyBusinessTripHours}h</p>
+                                     </TooltipContent>
+                                   </Tooltip>
+                                 </TooltipProvider>
+                               ) : ''}
+                             </TableCell>
+                           );
+                         })}
                         <TableCell className="text-center font-bold text-orange-700 text-xs p-1 bg-gray-50 border-l">
                           {employee.totals.business_trip_hours.toFixed(1)}
                         </TableCell>
                         <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <TableCell className="text-center text-xs p-1 bg-orange-50 cursor-help">
-                                <div className="flex flex-col">
-                                  <span className="font-bold text-orange-700">
-                                    €{employee.totals.business_trip_amount.toFixed(2)}
-                                  </span>
-                                  <span className="text-xs opacity-75">
-                                    {employee.totals.business_trip_hours.toFixed(1)}h
-                                  </span>
+                         <TooltipProvider>
+                           <Tooltip>
+                             <TooltipTrigger asChild>
+                               <TableCell className="text-center text-xs p-1 bg-orange-50 cursor-help relative">
+                                 <div className="flex flex-col">
+                                   <span className="font-bold text-orange-700">
+                                     €{employee.totals.business_trip_amount.toFixed(2)}
+                                   </span>
+                                   <span className="text-xs opacity-75">
+                                     {employee.totals.business_trip_hours.toFixed(1)}h
+                                   </span>
+                                 </div>
+                               </TableCell>
+                             </TooltipTrigger>
+                              <TooltipContent className="max-w-xs z-50" side="left" sideOffset={5}>
+                                <div className="space-y-1 text-xs">
+                                  <p className="font-semibold">Dettaglio calcolo:</p>
+                                  {employee.totals.business_trip_breakdown.saturday_hours > 0 && (
+                                    <p>
+                                      Sabati: {employee.totals.business_trip_breakdown.saturday_hours.toFixed(1)}h × tariffa = 
+                                      €{employee.totals.business_trip_breakdown.saturday_amount.toFixed(2)}
+                                    </p>
+                                  )}
+                                  {employee.totals.business_trip_breakdown.daily_allowance_days > 0 && (
+                                    <p>
+                                      Indennità: {employee.totals.business_trip_breakdown.daily_allowance_days} giorni × 
+                                      €{(employee.totals.business_trip_breakdown.daily_allowance_amount / employee.totals.business_trip_breakdown.daily_allowance_days).toFixed(2)} = 
+                                      €{employee.totals.business_trip_breakdown.daily_allowance_amount.toFixed(2)}
+                                    </p>
+                                  )}
+                                  {employee.totals.business_trip_breakdown.overtime_conversion_hours > 0 && (
+                                    <p>
+                                      Conversioni: {employee.totals.business_trip_breakdown.overtime_conversion_hours.toFixed(1)}h × tariffa = 
+                                      €{employee.totals.business_trip_breakdown.overtime_conversion_amount.toFixed(2)}
+                                    </p>
+                                  )}
+                                  <p className="font-semibold pt-1 border-t">
+                                    Totale: €{employee.totals.business_trip_amount.toFixed(2)}
+                                  </p>
+                                  <p className="font-semibold text-blue-600 pt-1 border-t">
+                                    Normalizzazione: {employee.totals.standardized_business_trip_days} gg × €{employee.totals.daily_business_trip_rate.toFixed(2)}/gg
+                                  </p>
                                 </div>
-                              </TableCell>
-                            </TooltipTrigger>
-                             <TooltipContent className="max-w-xs">
-                               <div className="space-y-1 text-xs">
-                                 <p className="font-semibold">Dettaglio calcolo:</p>
-                                 {employee.totals.business_trip_breakdown.saturday_hours > 0 && (
-                                   <p>
-                                     Sabati: {employee.totals.business_trip_breakdown.saturday_hours.toFixed(1)}h × tariffa = 
-                                     €{employee.totals.business_trip_breakdown.saturday_amount.toFixed(2)}
-                                   </p>
-                                 )}
-                                 {employee.totals.business_trip_breakdown.daily_allowance_days > 0 && (
-                                   <p>
-                                     Indennità: {employee.totals.business_trip_breakdown.daily_allowance_days} giorni × 
-                                     €{(employee.totals.business_trip_breakdown.daily_allowance_amount / employee.totals.business_trip_breakdown.daily_allowance_days).toFixed(2)} = 
-                                     €{employee.totals.business_trip_breakdown.daily_allowance_amount.toFixed(2)}
-                                   </p>
-                                 )}
-                                 {employee.totals.business_trip_breakdown.overtime_conversion_hours > 0 && (
-                                   <p>
-                                     Conversioni: {employee.totals.business_trip_breakdown.overtime_conversion_hours.toFixed(1)}h × tariffa = 
-                                     €{employee.totals.business_trip_breakdown.overtime_conversion_amount.toFixed(2)}
-                                   </p>
-                                 )}
-                                 <p className="font-semibold pt-1 border-t">
-                                   Totale: €{employee.totals.business_trip_amount.toFixed(2)}
-                                 </p>
-                                 <p className="font-semibold text-blue-600 pt-1 border-t">
-                                   Normalizzazione: {employee.totals.standardized_business_trip_days} gg × €{employee.totals.daily_business_trip_rate.toFixed(2)}/gg
-                                 </p>
-                               </div>
-                             </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <TableCell className="text-center text-xs p-1 bg-orange-50">
-                          <span className="font-bold text-blue-600">
-                            {employee.totals.standardized_business_trip_days}
-                          </span>
-                        </TableCell>
+                              </TooltipContent>
+                           </Tooltip>
+                         </TooltipProvider>
+                         <TableCell className="text-center text-xs p-1 bg-orange-50 min-w-[3rem]">
+                           <span className="font-bold text-blue-600">
+                             {employee.totals.standardized_business_trip_days}
+                           </span>
+                         </TableCell>
                          <TableCell className="text-center text-xs p-1 bg-blue-50">
                            <span className="font-bold text-blue-600">
                              €{employee.totals.daily_business_trip_rate.toFixed(2)}
