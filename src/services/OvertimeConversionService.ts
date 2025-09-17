@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
-import { format, startOfMonth } from "date-fns";
-import type { OvertimeConversion, OvertimeConversionSettings, OvertimeConversionCalculation, MonthlyOvertimeData } from "@/types/overtime-conversion";
+import { format, startOfMonth, endOfMonth } from "date-fns";
+import type { OvertimeConversion, OvertimeConversionSettings, OvertimeConversionCalculation } from "@/types/overtime-conversion";
 
 export class OvertimeConversionService {
   /**
@@ -24,30 +24,42 @@ export class OvertimeConversionService {
     const normalizedDate = this.normalizeMonth(date);
     
     // Get employee-specific settings first
-    const { data: employeeSettings } = await supabase
+    const { data: employeeSettings, error: employeeError } = await supabase
       .from('employee_settings')
       .select('enable_overtime_conversion, overtime_conversion_rate, overtime_conversion_limit')
       .eq('user_id', userId)
       .lte('valid_from', normalizedDate)
-      .or(`valid_to.is.null,valid_to.gt.${normalizedDate}`)
+      .or(`valid_to.is.null,valid_to.gt.${encodeURIComponent(normalizedDate)}`)
       .order('valid_from', { ascending: false })
       .maybeSingle();
 
+    if (employeeError) {
+      console.error('Error fetching employee settings:', employeeError);
+    }
+
     // Get user's company_id first
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('company_id')
       .eq('user_id', userId)
       .single();
 
+    if (profileError) {
+      console.error('Error fetching user profile:', profileError);
+    }
+
     if (!profile?.company_id) return null;
 
     // Get company settings as fallback
-    const { data: companySettings } = await supabase
+    const { data: companySettings, error: companyError } = await supabase
       .from('company_settings')
       .select('enable_overtime_conversion, default_overtime_conversion_rate, default_overtime_conversion_limit')
       .eq('company_id', profile.company_id)
       .maybeSingle();
+
+    if (companyError) {
+      console.error('Error fetching company settings:', companyError);
+    }
 
     if (!companySettings?.enable_overtime_conversion) {
       return null; // Conversion disabled at company level
@@ -109,11 +121,15 @@ export class OvertimeConversionService {
     }
 
     // Get company_id for the user
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('company_id')
       .eq('user_id', userId)
       .single();
+
+    if (profileError) {
+      console.error('Error fetching user profile for conversion creation:', profileError);
+    }
 
     if (!profile) return null;
 
@@ -166,7 +182,7 @@ export class OvertimeConversionService {
           manual_conversion_hours: newManualHours,
           conversion_amount: newAmount,
           notes,
-          updated_by: (await supabase.auth.getUser()).data.user?.id,
+          updated_by: (await supabase.auth.getUser()).data.user?.id ?? userId,
           updated_at: new Date().toISOString()
         })
         .eq('id', conversion.id);
@@ -235,10 +251,10 @@ export class OvertimeConversionService {
     month: string, 
     companyId?: string
   ): Promise<{ processed: number; errors: string[] }> {
-    const monthStart = format(startOfMonth(new Date(month + '-01')), 'yyyy-MM-dd');
-    const [year, monthNum] = month.split('-');
-    const startDate = `${year}-${monthNum}-01`;
-    const endDate = `${year}-${monthNum}-${new Date(parseInt(year), parseInt(monthNum), 0).getDate()}`;
+    const monthStart = this.normalizeMonth(month);
+    const monthDate = new Date(monthStart);
+    const startDate = monthStart;
+    const endDate = format(endOfMonth(monthDate), 'yyyy-MM-dd');
     
     let processed = 0;
     const errors: string[] = [];
@@ -281,8 +297,8 @@ export class OvertimeConversionService {
           
           // Get conversion settings
           const settings = await this.getEffectiveConversionSettings(user.user_id, startDate);
-          if (!settings?.enable_overtime_conversion || !settings.overtime_conversion_limit) {
-            continue; // Skip if conversion is disabled or no limit set
+          if (!settings?.enable_overtime_conversion) {
+            continue; // Skip if conversion is disabled
           }
           
           // Calculate automatic conversion
@@ -294,8 +310,8 @@ export class OvertimeConversionService {
           
           if (automaticConversion.hours <= 0) continue; // Skip if no conversion needed
           
-          // Get or create conversion record
-          const existingConversion = await this.getOrCreateConversion(user.user_id, month);
+          // Get or create conversion record - use consistent monthStart
+          const existingConversion = await this.getOrCreateConversion(user.user_id, monthStart);
           if (!existingConversion) {
             errors.push(`Could not create conversion record for ${user.first_name} ${user.last_name}`);
             continue;
@@ -310,7 +326,7 @@ export class OvertimeConversionService {
               automatic_conversion_hours: automaticConversion.hours,
               conversion_amount: totalAmount,
               updated_at: new Date().toISOString(),
-              updated_by: (await supabase.auth.getUser()).data.user?.id
+              updated_by: (await supabase.auth.getUser()).data.user?.id ?? user.user_id
             })
             .eq('id', existingConversion.id);
           
