@@ -303,9 +303,8 @@ const BusinessTripsDashboard = () => {
       await OvertimeConversionService.processAutomaticConversions(selectedMonth, me!.company_id);
 
       // Import temporal funcs once
-      const [{ getEmployeeSettingsForDate }, { calculateMealBenefitsTemporal }, { BenefitsService }, { MealVoucherConversionService }] = await Promise.all([
+      const [{ getEmployeeSettingsForDate }, { BenefitsService }, { MealVoucherConversionService }] = await Promise.all([
         import('@/utils/temporalEmployeeSettings'),
-        import('@/utils/mealBenefitsCalculator'),
         import('@/services/BenefitsService'),
         import('@/services/MealVoucherConversionService'),
       ]);
@@ -366,7 +365,8 @@ const BusinessTripsDashboard = () => {
               saturdayAmount += tot * effectiveSaturdayRate;
             }
 
-            const mealBenefits = await calculateMealBenefitsTemporal(
+            // Use BenefitsService which includes conversion logic
+            const mealBenefits = await BenefitsService.calculateMealBenefits(
               ts,
               temporalSettings
                 ? {
@@ -374,6 +374,7 @@ const BusinessTripsDashboard = () => {
                     meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
                     daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
                     lunch_break_type: temporalSettings.lunch_break_type,
+                    saturday_handling: temporalSettings.saturday_handling,
                   }
                 : undefined,
               companySettingsForEmployee,
@@ -389,6 +390,7 @@ const BusinessTripsDashboard = () => {
                 || 10;
               dailyAllowanceAmount += effectiveDailyAllowanceAmount;
             }
+            // Only count meal vouchers that haven't been converted
             if (mealBenefits.mealVoucher) mealVoucherDays++;
             if (temporalMealVoucherAmount && temporalMealVoucherAmount !== defaultMealVoucherAmount) {
               defaultMealVoucherAmount = temporalMealVoucherAmount;
@@ -465,30 +467,26 @@ const BusinessTripsDashboard = () => {
               
               const temporalSettingsForDay = await getEmployeeSettingsForDate(ts.user_id, ts.date);
               
-              // Check if this specific day is converted to allowance
-              const isConvertedToAllowance = conversionMap[ts.date] === true;
+              // Use BenefitsService to get accurate meal benefits (includes conversion logic)
+              const mealBenefits = await BenefitsService.calculateMealBenefits(
+                ts,
+                temporalSettingsForDay
+                  ? {
+                      meal_allowance_policy: temporalSettingsForDay.meal_allowance_policy,
+                      meal_voucher_min_hours: temporalSettingsForDay.meal_voucher_min_hours,
+                      daily_allowance_min_hours: temporalSettingsForDay.daily_allowance_min_hours,
+                      lunch_break_type: temporalSettingsForDay.lunch_break_type,
+                      saturday_handling: temporalSettingsForDay.saturday_handling,
+                    }
+                  : undefined,
+                companySettingsForEmployee,
+                ts.date,
+              );
               
-              if (!isConvertedToAllowance) {
-                const mealBenefits = await BenefitsService.calculateMealBenefits(
-                  ts,
-                  temporalSettingsForDay
-                    ? {
-                        meal_allowance_policy: temporalSettingsForDay.meal_allowance_policy,
-                        meal_voucher_min_hours: temporalSettingsForDay.meal_voucher_min_hours,
-                        daily_allowance_min_hours: temporalSettingsForDay.daily_allowance_min_hours,
-                        lunch_break_type: temporalSettingsForDay.lunch_break_type,
-                        saturday_handling: temporalSettingsForDay.saturday_handling,
-                      }
-                    : undefined,
-                  companySettingsForEmployee,
-                  ts.date,
-                );
-                
-                if (mealBenefits.mealVoucher) {
-                  daysWithMealVoucher++;
-                }
+              // Count days with meal voucher (after accounting for conversions)
+              if (mealBenefits.mealVoucher) {
+                daysWithMealVoucher++;
               }
-              // Se convertito, non conta come day with meal voucher
               
               totalWorkingDays++;
             }
