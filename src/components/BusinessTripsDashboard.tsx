@@ -369,10 +369,34 @@ const BusinessTripsDashboard = () => {
   const totalMealVoucherConversions = businessTripData.reduce((sum, emp) => sum + emp.meal_voucher_conversions.amount, 0);
   const grandTotal = totalSaturdayAmount + totalDailyAllowanceAmount + totalOvertimeConversions + totalMealVoucherConversions;
   
-  // Calculate business trip days and daily average
-  const totalBusinessTripDays = businessTripData.reduce((sum, emp) => 
-    sum + Math.ceil(emp.saturday_trips.hours / 8) + emp.daily_allowances.days, 0);
-  const averageDailyRate = totalBusinessTripDays > 0 ? grandTotal / totalBusinessTripDays : 0;
+  // Calculate business trip days and daily rate according to business rules
+  const calculateBusinessTripDaysAndRate = () => {
+    const totalBusinessTripAmount = totalSaturdayAmount + totalDailyAllowanceAmount;
+    
+    if (totalBusinessTripAmount === 0) {
+      return { totalDays: 0, dailyRate: 0 };
+    }
+    
+    // Get total meal voucher conversion days (days with higher rate €46.48)
+    const totalConversionDays = businessTripData.reduce((sum, emp) => sum + emp.meal_voucher_conversions.days, 0);
+    
+    // Assume remaining days use standard rate €30.98
+    // We need to calculate based on the rates from company settings
+    const standardRate = 30.98; // business_trip_rate_with_meal
+    const conversionRate = 46.48; // business_trip_rate_without_meal
+    
+    // Calculate days: divide total by max single trip amount (rounded up)
+    // For simplicity, using weighted calculation based on conversion ratio
+    const estimatedStandardDays = Math.max(0, Math.ceil((totalBusinessTripAmount - (totalConversionDays * conversionRate)) / standardRate));
+    const totalDays = estimatedStandardDays + totalConversionDays;
+    
+    // Calculate daily rate: total amount / total days
+    const dailyRate = totalDays > 0 ? totalBusinessTripAmount / totalDays : 0;
+    
+    return { totalDays, dailyRate };
+  };
+  
+  const { totalDays: totalBusinessTripDays, dailyRate: businessTripDailyRate } = calculateBusinessTripDaysAndRate();
 
   return (
     <div className="space-y-6">
@@ -434,12 +458,12 @@ const BusinessTripsDashboard = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">€/Giorno Medio</CardTitle>
+            <CardTitle className="text-sm font-medium">Importo/Giorno</CardTitle>
             <TrendingDown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">€{averageDailyRate.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Importo medio</p>
+            <div className="text-2xl font-bold">€{businessTripDailyRate.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">Importo giornaliero trasferte</p>
           </CardContent>
         </Card>
 
