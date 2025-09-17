@@ -245,19 +245,28 @@ export class OvertimeConversionService {
   }
 
   /**
-   * Process automatic conversions for a specific month and company
+   * Processa automaticamente le conversioni straordinari per tutti gli utenti attivi di un'azienda
+   * per un determinato mese, includendo la validazione dei giorni lavorati
    */
   static async processAutomaticConversions(
-    month: string, 
+    month: string,
     companyId?: string
-  ): Promise<{ processed: number; errors: string[] }> {
+  ): Promise<{ processed: number; errors: string[]; validationResult?: any }> {
+    const startTime = Date.now();
+    console.log(`🔄 [OvertimeConversion] Inizio processamento conversioni automatiche per ${month}`, {
+      companyId,
+      startTime: new Date(startTime)
+    });
+
     const monthStart = this.normalizeMonth(month);
     const monthDate = new Date(monthStart);
     const startDate = monthStart;
     const endDate = format(endOfMonth(monthDate), 'yyyy-MM-dd');
-    
-    let processed = 0;
-    const errors: string[] = [];
+
+    const result: { processed: number; errors: string[]; validationResult?: any } = {
+      processed: 0,
+      errors: []
+    };
     
     try {
       // Determine which users to process
@@ -266,14 +275,14 @@ export class OvertimeConversionService {
         .select('user_id, company_id, first_name, last_name')
         .eq('is_active', true);
       
-      if (companyId) {
-        usersQuery = usersQuery.eq('company_id', companyId);
-      }
-      
-      const { data: users, error: usersError } = await usersQuery;
-      if (usersError) throw usersError;
-      
-      if (!users || users.length === 0) return { processed: 0, errors: [] };
+          if (companyId) {
+            usersQuery = usersQuery.eq('company_id', companyId);
+          }
+          
+          const { data: users, error: usersError } = await usersQuery;
+          if (usersError) throw usersError;
+          
+          if (!users || users.length === 0) return result;
       
       // Get all timesheets for the month
       const { data: timesheets, error: timesheetsError } = await supabase
@@ -312,10 +321,10 @@ export class OvertimeConversionService {
           
           // Get or create conversion record - use consistent monthStart
           const existingConversion = await this.getOrCreateConversion(user.user_id, monthStart);
-          if (!existingConversion) {
-            errors.push(`Could not create conversion record for ${user.first_name} ${user.last_name}`);
-            continue;
-          }
+            if (!existingConversion) {
+              result.errors.push(`Could not create conversion record for ${user.first_name} ${user.last_name}`);
+              continue;
+            }
           
           // Update automatic conversion hours (preserve manual hours)
           const totalAmount = (automaticConversion.hours + existingConversion.manual_conversion_hours) * settings.overtime_conversion_rate;
@@ -330,24 +339,48 @@ export class OvertimeConversionService {
             })
             .eq('id', existingConversion.id);
           
-          if (updateError) {
-            errors.push(`Error updating conversion for ${user.first_name} ${user.last_name}: ${updateError.message}`);
-            continue;
-          }
+            if (updateError) {
+              result.errors.push(`Error updating conversion for ${user.first_name} ${user.last_name}: ${updateError.message}`);
+              continue;
+            }
           
-          processed++;
+          result.processed++;
           console.log(`✅ Processed automatic conversion for ${user.first_name} ${user.last_name}: ${automaticConversion.hours}h = €${automaticConversion.amount.toFixed(2)}`);
           
         } catch (userError) {
-          errors.push(`Error processing ${user.first_name} ${user.last_name}: ${userError}`);
+          result.errors.push(`Error processing ${user.first_name} ${user.last_name}: ${userError}`);
         }
       }
       
     } catch (error) {
-      errors.push(`System error: ${error}`);
+      result.errors.push(`System error: ${error}`);
     }
     
-    return { processed, errors };
+    console.log(`✅ [OvertimeConversion] Processamento completato per ${month}:`, {
+      processed: result.processed,
+      errors: result.errors.length,
+      totalTime: Date.now() - startTime
+    });
+
+    // Applica validazione e correzioni automatiche se c'è un companyId specifico
+    if (companyId && result.processed > 0) {
+      try {
+        console.log(`🔍 [OvertimeConversion] Inizio validazione automatica per company ${companyId}`);
+        const { BusinessTripValidationService } = await import('./BusinessTripValidationService');
+        const validationResult = await BusinessTripValidationService.validateAndCorrectConversions(companyId, month);
+        
+        if (validationResult.correctionsMade) {
+          console.log(`⚠️ [OvertimeConversion] Correzioni automatiche applicate:`, validationResult.corrections);
+        }
+        
+        result.validationResult = validationResult;
+      } catch (validationError) {
+        console.error('❌ [OvertimeConversion] Errore durante la validazione:', validationError);
+        result.errors.push(`Validation error: ${validationError}`);
+      }
+    }
+
+    return result;
   }
 
   /**

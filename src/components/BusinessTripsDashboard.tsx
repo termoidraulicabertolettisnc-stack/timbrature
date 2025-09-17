@@ -13,6 +13,7 @@ import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog'
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
 import { MealVoucherConversionService, MealVoucherConversion } from '@/services/MealVoucherConversionService';
 import { DayConversionToggle } from '@/components/DayConversionToggle';
+import { useToast } from '@/hooks/use-toast';
 
 interface BusinessTripData {
   employee_id: string;
@@ -51,6 +52,7 @@ interface BusinessTripData {
 
 const BusinessTripsDashboard = () => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [businessTripData, setBusinessTripData] = useState<BusinessTripData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -84,8 +86,42 @@ const BusinessTripsDashboard = () => {
   };
 
   const fetchBusinessTripData = async () => {
+    if (!user) return;
+    
+    setLoading(true);
     try {
-      setLoading(true);
+      console.log(`🚀 [BusinessTripsDashboard] Inizio caricamento dati per ${selectedMonth}`);
+      
+      // Prima esegui le conversioni automatiche con validazione
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (profile) {
+        console.log(`⚙️ [BusinessTripsDashboard] Processamento conversioni automatiche per company ${profile.company_id}`);
+        try {
+          const conversionResult = await OvertimeConversionService.processAutomaticConversions(
+            selectedMonth, 
+            profile.company_id
+          );
+          
+          if (conversionResult.validationResult?.correctionsMade) {
+            console.log(`✅ [BusinessTripsDashboard] Correzioni automatiche applicate:`, 
+              conversionResult.validationResult.corrections);
+            
+            toast({
+              title: "Correzioni Automatiche",
+              description: `Applicate ${conversionResult.validationResult.corrections.length} correzioni per rispettare i limiti dei giorni lavorati`,
+              variant: "default",
+            });
+          }
+        } catch (conversionError) {
+          console.error('❌ [BusinessTripsDashboard] Errore nelle conversioni automatiche:', conversionError);
+        }
+      }
+
       const [year, month] = selectedMonth.split('-');
       const startDate = `${year}-${month}-01`;
       const endDate = `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`;
@@ -135,8 +171,8 @@ const BusinessTripsDashboard = () => {
         .in('company_id', profiles.map((p) => p.company_id));
       if (companySettingsError) throw companySettingsError;
 
-      // Process automatic conversions once per company
-      await OvertimeConversionService.processAutomaticConversions(selectedMonth, me!.company_id);
+      // Process automatic conversions once per company (già fatto sopra con validazione)
+      // await OvertimeConversionService.processAutomaticConversions(selectedMonth, me!.company_id);
 
       // Import services
       const [{ getEmployeeSettingsForDate }, { BenefitsService }, { MealVoucherConversionService }] = await Promise.all([
