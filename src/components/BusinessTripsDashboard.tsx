@@ -446,38 +446,28 @@ const BusinessTripsDashboard = () => {
 
         const finalBusinessTripAmount = totalBusinessTripAmount + overtimeConversionAmount;
 
-        // Calculate business trip days and daily rate correctly
+        // Calculate standardized business trip days and daily rate
         let standardizedBusinessTripDays = 0;
         let dailyBusinessTripRate = 0;
         
         if (finalBusinessTripAmount > 0) {
-          // Count actual business trip days worked (not based on calculations)
-          let actualBusinessTripDays = 0;
-          for (let day = 1; day <= getDaysInMonth(); day++) {
-            const dayKey = String(day).padStart(2, '0');
-            const dayData = dailyData[dayKey];
-            if (dayData?.business_trip) {
-              actualBusinessTripDays++;
-            }
-          }
+          // Determine the maximum daily business trip value for this employee
+          // Use the same logic as meal benefits calculation to determine the correct rate
+          const { BenefitsService } = await import('@/services/BenefitsService');
+          const { getEmployeeSettingsForDate } = await import('@/utils/temporalEmployeeSettings');
           
           // Get temporal settings for this employee
-          const { getEmployeeSettingsForDate } = await import('@/utils/temporalEmployeeSettings');
           const temporalSettings = await getEmployeeSettingsForDate(profile.user_id, `${selectedMonth}-01`);
           
-          // Determine rates based on employee settings
-          const rateWithMeal = temporalSettings?.business_trip_rate_with_meal || companySettingsForEmployee?.business_trip_rate_with_meal || 30.98;
-          const rateWithoutMeal = temporalSettings?.business_trip_rate_without_meal || companySettingsForEmployee?.business_trip_rate_without_meal || 46.48;
-          
-          // Find if employee has meal benefits by checking a working day
+          // Find a regular working day for this employee to test meal benefit eligibility
           const testTimesheet = employeeTimesheets.find(ts => {
             const date = new Date(ts.date);
-            return date.getDay() !== 6 && ts.total_hours && ts.total_hours > 0;
+            return date.getDay() !== 6 && ts.total_hours && ts.total_hours > 0; // Not Saturday and has worked hours
           });
           
           let hasMealBenefits = false;
           if (testTimesheet) {
-            const { BenefitsService } = await import('@/services/BenefitsService');
+            // Use the same BenefitsService logic to determine if employee has meal benefits
             const mealBenefits = await BenefitsService.calculateMealBenefits(
               testTimesheet,
               temporalSettings ? {
@@ -493,11 +483,18 @@ const BusinessTripsDashboard = () => {
             hasMealBenefits = mealBenefits.mealVoucher;
           }
           
-          // Use appropriate rate
-          dailyBusinessTripRate = hasMealBenefits ? rateWithMeal : rateWithoutMeal;
+          // Determine rates
+          const rateWithMeal = temporalSettings?.business_trip_rate_with_meal || companySettingsForEmployee?.business_trip_rate_with_meal || 30.98;
+          const rateWithoutMeal = temporalSettings?.business_trip_rate_without_meal || companySettingsForEmployee?.business_trip_rate_without_meal || 46.48;
           
-          // Show actual business trip days worked
-          standardizedBusinessTripDays = actualBusinessTripDays;
+          // Use appropriate rate based on actual meal benefit eligibility (same logic as rest of app)
+          const maxDailyValue = hasMealBenefits ? rateWithMeal : rateWithoutMeal;
+          
+          // Passaggio 1: Calculate standardized business trip days (rounded up)
+          standardizedBusinessTripDays = Math.ceil(totalBusinessTripAmount / maxDailyValue);
+          
+          // Passaggio 2: Calculate daily business trip rate
+          dailyBusinessTripRate = totalBusinessTripAmount / standardizedBusinessTripDays;
         }
 
         return {
