@@ -1054,7 +1054,7 @@ const BusinessTripsDashboard = () => {
                          <TooltipProvider>
                            <Tooltip>
                              <TooltipTrigger asChild>
-                               <TableCell className="text-center text-xs p-1 bg-orange-50 cursor-help relative">
+                               <TableCell className="text-center text-xs p-1 bg-orange-50 cursor-help">
                                  <div className="flex flex-col">
                                    <span className="font-bold text-orange-700">
                                      €{employee.totals.business_trip_amount.toFixed(2)}
@@ -1065,7 +1065,7 @@ const BusinessTripsDashboard = () => {
                                  </div>
                                </TableCell>
                              </TooltipTrigger>
-                              <TooltipContent className="max-w-xs z-50" side="left" sideOffset={5}>
+                              <TooltipContent className="max-w-xs z-[100]" side="top" sideOffset={10} align="center" avoidCollisions={true}>
                                 <div className="space-y-1 text-xs">
                                   <p className="font-semibold">Dettaglio calcolo:</p>
                                   {employee.totals.business_trip_breakdown.saturday_hours > 0 && (
@@ -1097,7 +1097,7 @@ const BusinessTripsDashboard = () => {
                               </TooltipContent>
                            </Tooltip>
                          </TooltipProvider>
-                         <TableCell className="text-center text-xs p-1 bg-orange-50 min-w-[3rem]">
+                         <TableCell className="text-center text-xs p-1 bg-orange-50">
                            <span className="font-bold text-blue-600">
                              {employee.totals.standardized_business_trip_days}
                            </span>
