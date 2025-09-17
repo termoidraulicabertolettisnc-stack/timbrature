@@ -611,6 +611,33 @@ const BusinessTripsDashboard = () => {
           }
         }
 
+        // CRITICAL FIX: Handle non-converted overtime hours that should be added back to overtime total
+        const nonConvertedHours = overtimeConversionHours - constrainedOvertimeConversionHours;
+        if (nonConvertedHours > 0) {
+          // Add non-converted hours back to overtime total
+          totalOvertime += nonConvertedHours;
+          
+          console.log(`User ${profile.user_id}: Adding ${nonConvertedHours.toFixed(2)} non-converted hours back to overtime`);
+          
+          // Redistribute non-converted hours proportionally to days with remaining overtime
+          const daysWithOvertime = Object.entries(dailyData)
+            .filter(([_, data]) => data.overtime && data.overtime > 0);
+          
+          if (daysWithOvertime.length > 0) {
+            const totalRemainingOvertime = daysWithOvertime.reduce((sum, [_, data]) => sum + (data.overtime || 0), 0);
+            
+            if (totalRemainingOvertime > 0) {
+              for (const [day, data] of daysWithOvertime) {
+                if (data.overtime && data.overtime > 0) {
+                  const proportion = data.overtime / totalRemainingOvertime;
+                  const additionalHours = nonConvertedHours * proportion;
+                  dailyData[day].overtime = data.overtime + additionalHours;
+                }
+              }
+            }
+          }
+        }
+
         return {
           employee_id: profile.user_id,
           employee_name: `${profile.first_name} ${profile.last_name}`,
