@@ -444,11 +444,17 @@ const BusinessTripsDashboard = () => {
           console.warn('Error calculating overtime conversion for employee', profile.user_id, error);
         }
 
-        const finalBusinessTripAmount = totalBusinessTripAmount + overtimeConversionAmount;
+        let finalBusinessTripAmount = totalBusinessTripAmount + overtimeConversionAmount;
 
-        // Calculate standardized business trip days and daily rate
+        // Calculate working days constraint
+        const { calculateWorkingDays } = await import('@/utils/workingDaysCalculator');
+        const workingDaysResult = await calculateWorkingDays(profile.user_id, selectedMonth, employeeTimesheets);
+        
+        // Calculate standardized business trip days and daily rate with working days constraint
         let standardizedBusinessTripDays = 0;
         let dailyBusinessTripRate = 0;
+        let constrainedOvertimeConversionHours = overtimeConversionHours;
+        let constrainedOvertimeConversionAmount = overtimeConversionAmount;
         
         if (finalBusinessTripAmount > 0) {
           // Determine the maximum daily business trip value for this employee
@@ -490,30 +496,86 @@ const BusinessTripsDashboard = () => {
           // Use appropriate rate based on actual meal benefit eligibility (same logic as rest of app)
           const maxDailyValue = hasMealBenefits ? rateWithMeal : rateWithoutMeal;
           
-          // Passaggio 1: Calculate standardized business trip days (rounded up)
-          standardizedBusinessTripDays = Math.ceil(finalBusinessTripAmount / maxDailyValue);
+          // Calculate unconstrained business trip days
+          const unconstrainedBusinessTripDays = Math.ceil(finalBusinessTripAmount / maxDailyValue);
           
-          // Passaggio 2: Calculate daily business trip rate
-          dailyBusinessTripRate = finalBusinessTripAmount / standardizedBusinessTripDays;
+          // Apply working days constraint
+          const maxAllowedBusinessTripDays = workingDaysResult.actualWorkingDays;
+          
+          if (unconstrainedBusinessTripDays > maxAllowedBusinessTripDays) {
+            console.log(`BusinessTripsDashboard - Employee ${profile.first_name} ${profile.last_name}: Constraining business trip days from ${unconstrainedBusinessTripDays} to ${maxAllowedBusinessTripDays}`);
+            
+            // Constrain business trip days to actual working days
+            standardizedBusinessTripDays = maxAllowedBusinessTripDays;
+            
+            // Calculate the maximum allowable business trip amount
+            const maxAllowableAmount = maxAllowedBusinessTripDays * maxDailyValue;
+            
+            // If the overtime conversion amount pushes us over the limit, reduce it
+            const fixedAmount = totalBusinessTripAmount;
+            if (maxAllowableAmount < fixedAmount) {
+              // This shouldn't happen as Saturday amounts + allowances should be within limits
+              // But if it does, keep the fixed amounts and reduce overtime conversion to 0
+              constrainedOvertimeConversionAmount = 0;
+              constrainedOvertimeConversionHours = 0;
+              finalBusinessTripAmount = fixedAmount;
+            } else {
+              // Reduce overtime conversion amount to fit within constraint
+              const availableForConversion = maxAllowableAmount - fixedAmount;
+              constrainedOvertimeConversionAmount = Math.min(overtimeConversionAmount, availableForConversion);
+              
+              // Calculate proportional hours reduction
+              if (overtimeConversionAmount > 0) {
+                constrainedOvertimeConversionHours = overtimeConversionHours * (constrainedOvertimeConversionAmount / overtimeConversionAmount);
+              }
+              
+              finalBusinessTripAmount = fixedAmount + constrainedOvertimeConversionAmount;
+            }
+            
+            // Update overtime conversion if it was reduced
+            if (constrainedOvertimeConversionAmount < overtimeConversionAmount) {
+              try {
+                // Apply the constraint by adjusting the manual conversion
+                const hoursDelta = constrainedOvertimeConversionHours - overtimeConversionHours;
+                if (Math.abs(hoursDelta) > 0.01) { // Only update if there's a meaningful difference
+                  await OvertimeConversionService.applyManualConversion(
+                    profile.user_id,
+                    selectedMonth,
+                    hoursDelta,
+                    `Ridotto automaticamente per rispettare limite giorni lavorati (${maxAllowedBusinessTripDays} giorni)`
+                  );
+                }
+              } catch (error) {
+                console.warn('Error applying working days constraint to overtime conversion:', error);
+              }
+            }
+            
+            // Calculate constrained daily rate
+            dailyBusinessTripRate = finalBusinessTripAmount / standardizedBusinessTripDays;
+          } else {
+            // No constraint needed
+            standardizedBusinessTripDays = unconstrainedBusinessTripDays;
+            dailyBusinessTripRate = finalBusinessTripAmount / standardizedBusinessTripDays;
+          }
         }
 
         return {
           employee_id: profile.user_id,
           employee_name: `${profile.first_name} ${profile.last_name}`,
           daily_data: dailyData,
-          totals: { 
+            totals: { 
             ordinary: totalOrdinary, 
             overtime: totalOvertime,
             absence_totals: absenceTotals,
-            business_trip_hours: businessTripHours + overtimeConversionHours,
+            business_trip_hours: businessTripHours + constrainedOvertimeConversionHours,
             business_trip_amount: finalBusinessTripAmount,
             business_trip_breakdown: {
               saturday_hours: saturdayHours,
               saturday_amount: saturdayAmount,
               daily_allowance_days: dailyAllowanceDays,
               daily_allowance_amount: dailyAllowanceAmount,
-              overtime_conversion_hours: overtimeConversionHours,
-              overtime_conversion_amount: overtimeConversionAmount,
+              overtime_conversion_hours: constrainedOvertimeConversionHours,
+              overtime_conversion_amount: constrainedOvertimeConversionAmount,
             },
             standardized_business_trip_days: standardizedBusinessTripDays,
             daily_business_trip_rate: dailyBusinessTripRate,

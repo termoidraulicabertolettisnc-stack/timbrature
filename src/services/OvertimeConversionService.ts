@@ -75,7 +75,25 @@ export class OvertimeConversionService {
       return { hours: 0, amount: 0 };
     }
 
-    const conversionHours = Math.max(0, totalOvertimeHours - settings.overtime_conversion_limit);
+    let conversionLimit = settings.overtime_conversion_limit;
+
+    // Apply working days constraint
+    try {
+      const { calculateWorkingDays } = await import('@/utils/workingDaysCalculator');
+      const workingDaysResult = await calculateWorkingDays(userId, month);
+      
+      // Calculate maximum convertible hours based on working days constraint
+      // Each working day can potentially be converted to business trip
+      const maxConvertibleHours = workingDaysResult.actualWorkingDays * 8; // Assume 8 hours per day max
+      
+      // Use the smaller of the user's limit and the working days constraint
+      conversionLimit = Math.min(conversionLimit, maxConvertibleHours);
+    } catch (error) {
+      console.warn('Error calculating working days constraint for overtime conversion:', error);
+      // Continue with original logic if working days calculation fails
+    }
+
+    const conversionHours = Math.max(0, totalOvertimeHours - conversionLimit);
     const conversionAmount = conversionHours * settings.overtime_conversion_rate;
 
     return { hours: conversionHours, amount: conversionAmount };
