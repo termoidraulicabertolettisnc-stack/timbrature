@@ -249,7 +249,6 @@ const BusinessTripsDashboard = () => {
       const [year, month] = selectedMonth.split('-');
       const startDate = `${year}-${month}-01`;
       const endDate = `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`;
-      const monthStart = `${selectedMonth}-01`;
 
       // Multi-tenant safety: scope by current user's company
       const { data: me, error: meError } = await supabase
@@ -296,8 +295,8 @@ const BusinessTripsDashboard = () => {
         .in('company_id', profiles.map((p) => p.company_id));
       if (companySettingsError) throw companySettingsError;
 
-      // Process automatic conversions once per company
-      await OvertimeConversionService.processAutomaticConversions(monthStart, me!.company_id);
+      // Process automatic conversions once per company - pass selectedMonth format (YYYY-MM)
+      await OvertimeConversionService.processAutomaticConversions(selectedMonth, me!.company_id);
 
       // Import temporal funcs once
       const [{ getEmployeeSettingsForDate }, { calculateMealBenefitsTemporal }, { BenefitsService }] = await Promise.all([
@@ -407,7 +406,7 @@ const BusinessTripsDashboard = () => {
           try {
             const conversionCalc = await OvertimeConversionService.calculateConversionDetails(
               profile.user_id,
-              monthStart,
+              selectedMonth,
               totalOvertime,
             );
             overtimeConversionHours = conversionCalc.converted_hours;
@@ -493,7 +492,7 @@ const BusinessTripsDashboard = () => {
                   if (Math.abs(hoursDelta) > 0.01) {
                     await OvertimeConversionService.applyManualConversion(
                       profile.user_id,
-                      monthStart,
+                      selectedMonth,
                       hoursDelta,
                       `Ridotto automaticamente per rispettare limite giorni lavorati (${maxAllowedDays} giorni)`,
                     );
