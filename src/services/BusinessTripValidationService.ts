@@ -19,13 +19,27 @@ export interface BusinessTripValidationResult {
 
 export class BusinessTripValidationService {
   /**
+   * Helper method to normalize month string to YYYY-MM-DD format
+   */
+  private static normalizeMonth(month: string): string {
+    // Handle both "YYYY-MM" and "YYYY-MM-DD" formats
+    if (month.length === 7) { // YYYY-MM format
+      return `${month}-01`;
+    }
+    // If already YYYY-MM-DD, return first day of month
+    const date = new Date(month);
+    date.setDate(1);
+    return date.toISOString().slice(0, 10);
+  }
+
+  /**
    * SISTEMA DI VALIDAZIONE E CORREZIONE AUTOMATICA CONVERSIONI STRAORDINARI
    * 
    * Questo servizio risolve il problema delle conversioni straordinari che generano
    * più giorni trasferta dei giorni effettivamente lavorati da un dipendente.
    * 
    * LOGICA DI FUNZIONAMENTO:
-   * 1. Calcola i giorni lavorati effettivi (ore ordinarie + straordinarie)
+   * 1. Calcola i giorni lavorati effettivi (solo giorni effettivi, non trasferte esistenti)
    * 2. Stima i giorni trasferta basandosi sulle conversioni straordinari
    * 3. Se giorni trasferta > giorni lavorati, applica correzioni automatiche
    * 4. De-converte le ore straordinarie necessarie per rispettare il limite
@@ -121,9 +135,9 @@ export class BusinessTripValidationService {
   }> {
     console.log(`👤 [BusinessTripValidation] Validazione utente ${userId} per ${month}`);
     
-    // Calcola i giorni lavorati effettivi
+    // Calcola i giorni lavorati effettivi (solo giorni realmente lavorati, escludendo trasferte esistenti)
     const workingDaysResult = await calculateWorkingDays(userId, month);
-    const effectiveWorkingDays = workingDaysResult.actualWorkingDays + workingDaysResult.businessTripDays;
+    const effectiveWorkingDays = workingDaysResult.actualWorkingDays;
     
     console.log(`📊 [BusinessTripValidation] Giorni lavorati per utente ${userId}:`, {
       actualWorkingDays: workingDaysResult.actualWorkingDays,
@@ -144,7 +158,7 @@ export class BusinessTripValidationService {
       };
     }
 
-    const originalTotalConversion = conversion.total_conversion_hours;
+    const originalTotalConversion = conversion.total_conversion_hours ?? 0;
     
     // Ottieni le impostazioni di conversione
     const settings = await OvertimeConversionService.getEffectiveConversionSettings(userId, month);
@@ -224,12 +238,16 @@ export class BusinessTripValidationService {
 
     if (!profile) return 0;
 
-    // Ottieni le impostazioni (prima dipendente, poi aziendali)
+    // Ottieni le impostazioni dipendente valide per la data specificata
+    const normalizedMonth = this.normalizeMonth(month);
     const { data: empSettings } = await supabase
       .from('employee_settings')
       .select('business_trip_rate_with_meal, business_trip_rate_without_meal')
       .eq('user_id', userId)
-      .eq('valid_from', month.substring(0, 10))
+      .lte('valid_from', normalizedMonth)
+      .or(`valid_to.is.null,valid_to.gt.${normalizedMonth}`)
+      .order('valid_from', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     let rateWithMeal = 30.98;
@@ -310,7 +328,7 @@ export class BusinessTripValidationService {
       deconversionHours
     });
 
-    return Math.ceil(deconversionHours * 100) / 100; // Arrotonda a 2 decimali
+    return Math.round(deconversionHours * 100) / 100; // Arrotonda a 2 decimali (più neutro)
   }
 
   /**
@@ -322,7 +340,8 @@ export class BusinessTripValidationService {
   }
 
   /**
-   * Applica la correzione alla conversione straordinari
+   * Applica la correzione alla conversione straordinari con logica migliorata
+   * Garantisce che il target di correzione venga raggiunto agendo prima sulle manuali poi sulle automatiche
    */
   private static async applyCorrection(
     userId: string, 
@@ -330,18 +349,56 @@ export class BusinessTripValidationService {
     correctedConversion: number,
     deconvertedHours: number
   ): Promise<void> {
-    const notes = `Auto-correzione: de-convertite ${deconvertedHours} ore per rispettare il limite dei giorni lavorati`;
+    const normalizedMonth = this.normalizeMonth(month);
+    const notes = `Auto-correzione: de-convertite ${deconvertedHours.toFixed(2)}h per limite giorni lavorati`;
     
     console.log(`💾 [BusinessTripValidation] Applicazione correzione:`, {
       userId,
-      month,
+      month: normalizedMonth,
       correctedConversion,
       deconvertedHours,
       notes
     });
 
-    // Usa il servizio esistente per applicare la correzione
-    const deltaHours = -(deconvertedHours); // Negativo per de-convertire
-    await OvertimeConversionService.applyManualConversion(userId, month, deltaHours, notes);
+    // Ottieni la conversione corrente per calcolare il delta preciso
+    const conversion = await OvertimeConversionService.getOrCreateConversion(userId, normalizedMonth);
+    if (!conversion) {
+      console.error('❌ [BusinessTripValidation] Impossibile trovare conversione per applicare correzione');
+      return;
+    }
+
+    const currentTotal = conversion.total_conversion_hours ?? 0;
+    const currentManual = conversion.manual_conversion_hours ?? 0;
+    const currentAutomatic = conversion.automatic_conversion_hours ?? 0;
+
+    // Calcola il delta necessario per raggiungere il target
+    const targetDelta = correctedConversion - currentTotal;
+    
+    console.log(`🔧 [BusinessTripValidation] Delta correzione:`, {
+      currentTotal,
+      currentManual,
+      currentAutomatic,
+      correctedConversion,
+      targetDelta
+    });
+
+    // Se il delta è negativo (dobbiamo de-convertire), agiamo prima sulle manuali
+    if (targetDelta < 0) {
+      const maxManualReduction = -currentManual; // Massimo che possiamo togliere dalle manuali
+      const manualDelta = Math.max(targetDelta, maxManualReduction);
+      
+      // Applica la correzione manuale
+      if (Math.abs(manualDelta) >= 0.01) {
+        await OvertimeConversionService.applyManualConversion(userId, normalizedMonth, manualDelta, notes);
+      }
+      
+      // Se non bastano le manuali, registra il problema (per ora non agiamo sulle automatiche)
+      if (Math.abs(manualDelta) < Math.abs(targetDelta)) {
+        console.warn(`⚠️ [BusinessTripValidation] Correzione parziale: ridotte solo ${Math.abs(manualDelta).toFixed(2)}h di ${Math.abs(targetDelta).toFixed(2)}h richieste`);
+      }
+    } else if (targetDelta > 0) {
+      // Se il delta è positivo, aggiungiamo alle manuali
+      await OvertimeConversionService.applyManualConversion(userId, normalizedMonth, targetDelta, notes);
+    }
   }
 }
