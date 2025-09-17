@@ -191,14 +191,16 @@ export class OvertimeConversionService {
         currentTotalHours: conversion.total_conversion_hours
       });
 
-      // Calculate new manual conversion hours (current + delta)
-      const newManualHours = Math.max(0, conversion.manual_conversion_hours + deltaHours);
+      // Calculate new manual conversion hours - ALLOW NEGATIVE VALUES to offset automatic conversions
+      const newManualHours = conversion.manual_conversion_hours + deltaHours;
       // CORREZIONE: total_conversion_hours è ora calcolato automaticamente dal database
-      const newAmount = (conversion.automatic_conversion_hours + newManualHours) * settings.overtime_conversion_rate;
+      const totalHours = conversion.automatic_conversion_hours + newManualHours;
+      const newAmount = Math.max(0, totalHours) * settings.overtime_conversion_rate;
 
       console.log(`💾 [OvertimeConversion] Aggiornamento con:`, {
         newManualHours,
         newAmount,
+        totalHours,
         calculatedFrom: `${conversion.automatic_conversion_hours} + ${newManualHours} * ${settings.overtime_conversion_rate}`
       });
 
@@ -376,17 +378,27 @@ export class OvertimeConversionService {
               continue;
             }
           
-          // Update automatic conversion hours (preserve manual hours)
-          const totalAmount = (automaticConversion.hours + existingConversion.manual_conversion_hours) * settings.overtime_conversion_rate;
+          // Update automatic conversion hours (preserve manual hours UNLESS they are negative adjustments)
+          const hasManualAdjustment = existingConversion.manual_conversion_hours !== 0;
+          const totalAmount = hasManualAdjustment ? 
+            (automaticConversion.hours + existingConversion.manual_conversion_hours) * settings.overtime_conversion_rate :
+            automaticConversion.hours * settings.overtime_conversion_rate;
+          
+          // Only update automatic conversions if there's no manual adjustment
+          const updateData: any = {
+            conversion_amount: Math.max(0, totalAmount),
+            updated_at: new Date().toISOString(),
+            updated_by: (await supabase.auth.getUser()).data.user?.id ?? user.user_id
+          };
+          
+          // Only overwrite automatic hours if there's no manual intervention
+          if (!hasManualAdjustment) {
+            updateData.automatic_conversion_hours = automaticConversion.hours;
+          }
           
           const { error: updateError } = await supabase
             .from('employee_overtime_conversions')
-            .update({
-              automatic_conversion_hours: automaticConversion.hours,
-              conversion_amount: totalAmount,
-              updated_at: new Date().toISOString(),
-              updated_by: (await supabase.auth.getUser()).data.user?.id ?? user.user_id
-            })
+            .update(updateData)
             .eq('id', existingConversion.id);
           
             if (updateError) {
@@ -395,7 +407,7 @@ export class OvertimeConversionService {
             }
           
           result.processed++;
-          console.log(`✅ Processed automatic conversion for ${user.first_name} ${user.last_name}: ${automaticConversion.hours}h = €${automaticConversion.amount.toFixed(2)}`);
+          console.log(`✅ Processed automatic conversion for ${user.first_name} ${user.last_name}: ${hasManualAdjustment ? 'preserved manual adjustment' : automaticConversion.hours + 'h'} = €${Math.max(0, totalAmount).toFixed(2)}`);
           
         } catch (userError) {
           result.errors.push(`Error processing ${user.first_name} ${user.last_name}: ${userError}`);
