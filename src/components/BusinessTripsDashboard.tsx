@@ -382,8 +382,11 @@ const BusinessTripsDashboard = () => {
 
             if (mealBenefits.dailyAllowance) {
               dailyAllowanceDays += 1;
-              const effectiveDailyAllowanceAmount =
-                temporalSettings?.daily_allowance_amount || companySettingsForEmployee?.default_daily_allowance_amount || 10;
+              // Usa l'importo specifico dal meal benefits (che considera le conversioni)
+              const effectiveDailyAllowanceAmount = mealBenefits.dailyAllowanceAmount 
+                || temporalSettings?.daily_allowance_amount 
+                || companySettingsForEmployee?.default_daily_allowance_amount 
+                || 10;
               dailyAllowanceAmount += effectiveDailyAllowanceAmount;
             }
             if (mealBenefits.mealVoucher) mealVoucherDays++;

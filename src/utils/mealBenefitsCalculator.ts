@@ -31,6 +31,9 @@ export interface MealBenefits {
   mealVoucher: boolean;
   dailyAllowance: boolean;
   workedHours: number;
+  // Importi monetari specifici
+  mealVoucherAmount?: number;
+  dailyAllowanceAmount?: number;
 }
 
 /**
@@ -47,7 +50,13 @@ export function calculateMealBenefits(
   const workedHours = calculateWorkedHours(timesheet, employeeSettings, companySettings);
   
   if (workedHours === 0) {
-    return { mealVoucher: false, dailyAllowance: false, workedHours: 0 };
+    return { 
+      mealVoucher: false, 
+      dailyAllowance: false, 
+      workedHours: 0,
+      mealVoucherAmount: 0,
+      dailyAllowanceAmount: 0 
+    };
   }
 
   // Check if it's Saturday and configured as "trasferta"
@@ -62,7 +71,13 @@ export function calculateMealBenefits(
       
       // If Saturday is configured as "trasferta", no meal benefits
       if (saturdayHandling === 'trasferta') {
-        return { mealVoucher: false, dailyAllowance: false, workedHours };
+        return { 
+          mealVoucher: false, 
+          dailyAllowance: false, 
+          workedHours,
+          mealVoucherAmount: 0,
+          dailyAllowanceAmount: 0 
+        };
       }
     }
   }
@@ -73,7 +88,13 @@ export function calculateMealBenefits(
                  'disabled';
 
   if (policy === 'disabled') {
-    return { mealVoucher: false, dailyAllowance: false, workedHours };
+    return { 
+      mealVoucher: false, 
+      dailyAllowance: false, 
+      workedHours,
+      mealVoucherAmount: 0,
+      dailyAllowanceAmount: 0 
+    };
   }
 
   // Get minimum hours requirements
@@ -88,12 +109,18 @@ export function calculateMealBenefits(
   // Check if minimum hours are met
   const meetsMealVoucherMinimum = workedHours >= mealVoucherMinHours;
   const meetsDailyAllowanceMinimum = workedHours >= dailyAllowanceMinHours;
-
+  
   // Calculate benefits based on policy
   const mealVoucher = (policy === 'meal_vouchers_only' || policy === 'both') && meetsMealVoucherMinimum;
   const dailyAllowance = (policy === 'daily_allowance' || policy === 'both') && meetsDailyAllowanceMinimum;
 
-  return { mealVoucher, dailyAllowance, workedHours };
+  return { 
+    mealVoucher, 
+    dailyAllowance, 
+    workedHours,
+    mealVoucherAmount: mealVoucher ? 8.00 : 0,  // Default amounts
+    dailyAllowanceAmount: dailyAllowance ? 10.00 : 0
+  };
 }
 
 /**
