@@ -196,7 +196,7 @@ export class OvertimeConversionService {
   static async calculateConversionDetails(
     userId: string,
     month: string,
-    originalOvertimeHours: number
+    currentOvertimeHours: number // Rinominato per chiarezza - sono gli straordinari attuali già ridotti
   ): Promise<OvertimeConversionCalculation> {
     const normalizedMonth = this.normalizeMonth(month);
     const settings = await this.getEffectiveConversionSettings(userId, normalizedMonth);
@@ -204,9 +204,9 @@ export class OvertimeConversionService {
 
     if (!settings?.enable_overtime_conversion || !conversion) {
       return {
-        original_overtime_hours: originalOvertimeHours,
+        original_overtime_hours: currentOvertimeHours,
         converted_hours: 0,
-        remaining_overtime_hours: originalOvertimeHours,
+        remaining_overtime_hours: currentOvertimeHours,
         conversion_amount: 0,
         conversion_rate: settings?.overtime_conversion_rate || 0,
         explanation: "Conversione disabilitata"
@@ -214,7 +214,10 @@ export class OvertimeConversionService {
     }
 
     const totalConvertedHours = conversion.total_conversion_hours || 0;
-    const remainingOvertimeHours = Math.max(0, originalOvertimeHours - totalConvertedHours);
+    
+    // CORREZIONE: ricostruire il valore originale pre-conversioni
+    const originalOvertimeHours = currentOvertimeHours + totalConvertedHours;
+    const remainingOvertimeHours = currentOvertimeHours; // Quello che rimane ora
     const conversionAmount = totalConvertedHours * settings.overtime_conversion_rate;
 
     let explanation = `${totalConvertedHours}h × ${settings.overtime_conversion_rate}€/h = ${conversionAmount.toFixed(2)}€`;
@@ -228,7 +231,7 @@ export class OvertimeConversionService {
     }
 
     return {
-      original_overtime_hours: originalOvertimeHours,
+      original_overtime_hours: originalOvertimeHours, // Valore corretto ricostruito
       converted_hours: totalConvertedHours,
       remaining_overtime_hours: remainingOvertimeHours,
       conversion_amount: conversionAmount,
