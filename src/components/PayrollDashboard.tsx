@@ -244,38 +244,9 @@ export default function PayrollDashboard() {
         };
       }));
 
-      // Apply overtime conversion with proportional distribution
-      for (const employee of processedData) {
-        try {
-          const conversionCalc = await OvertimeConversionService.calculateConversionDetails(
-            employee.employee_id,
-            selectedMonth,
-            employee.totals.overtime
-          );
-          
-          if (conversionCalc.converted_hours > 0) {
-            // Distribute converted hours proportionally across days with overtime
-            const distributions = distributePayrollOvertime(
-              employee.daily_data,
-              conversionCalc.converted_hours
-            );
-            
-            // Apply the distribution to daily data
-            employee.daily_data = applyPayrollOvertimeDistribution(
-              employee.daily_data,
-              distributions
-            );
-
-            // Recalculate total overtime after distribution
-            employee.totals.overtime = Object.values(employee.daily_data)
-              .reduce((sum, day) => sum + day.overtime, 0);
-          }
-        } catch (error) {
-          console.warn('Error calculating overtime conversion for employee', employee.employee_id, error);
-          // Ensure we have a valid number as fallback
-          employee.totals.overtime = employee.totals.overtime ?? 0;
-        }
-      }
+      // I timesheets sono già stati aggiornati dal TimesheetOvertimeDistributionService
+      // Non serve applicare nuovamente la distribuzione qui nel PayrollDashboard
+      // I dati sono già corretti dal database
 
       setPayrollData(processedData);
     } catch (error) {
