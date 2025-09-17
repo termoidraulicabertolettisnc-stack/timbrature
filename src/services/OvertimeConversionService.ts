@@ -71,32 +71,20 @@ export class OvertimeConversionService {
     const normalizedMonth = this.normalizeMonth(month);
     const settings = await this.getEffectiveConversionSettings(userId, normalizedMonth);
     
-    if (!settings?.enable_overtime_conversion || !settings.overtime_conversion_limit) {
+    if (!settings?.enable_overtime_conversion) {
       return { hours: 0, amount: 0 };
     }
 
-    let conversionLimit = settings.overtime_conversion_limit;
-
-    // Apply working days constraint
-    try {
-      const { calculateWorkingDays } = await import('@/utils/workingDaysCalculator');
-      const workingDaysResult = await calculateWorkingDays(userId, month);
-      
-      // Calculate maximum convertible hours based on working days constraint
-      // Each working day can potentially be converted to business trip
-      const maxConvertibleHours = workingDaysResult.actualWorkingDays * 8; // Assume 8 hours per day max
-      
-      // Use the smaller of the user's limit and the working days constraint
-      conversionLimit = Math.min(conversionLimit, maxConvertibleHours);
-    } catch (error) {
-      console.warn('Error calculating working days constraint for overtime conversion:', error);
-      // Continue with original logic if working days calculation fails
+    // If user has a custom limit set, respect it absolutely
+    // Only convert hours that EXCEED the limit (not up to the limit)
+    if (settings.overtime_conversion_limit) {
+      const conversionHours = Math.max(0, totalOvertimeHours - settings.overtime_conversion_limit);
+      const conversionAmount = conversionHours * settings.overtime_conversion_rate;
+      return { hours: conversionHours, amount: conversionAmount };
     }
 
-    const conversionHours = Math.max(0, totalOvertimeHours - conversionLimit);
-    const conversionAmount = conversionHours * settings.overtime_conversion_rate;
-
-    return { hours: conversionHours, amount: conversionAmount };
+    // Fallback: if no limit is set, don't convert anything automatically
+    return { hours: 0, amount: 0 };
   }
 
   /**
