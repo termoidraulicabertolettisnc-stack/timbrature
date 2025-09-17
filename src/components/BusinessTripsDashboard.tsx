@@ -11,13 +11,14 @@ import { Calendar, Download, Users, MapPin, TrendingDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
-import { MealVoucherConversionService } from '@/services/MealVoucherConversionService';
+import { MealVoucherConversionService, MealVoucherConversion } from '@/services/MealVoucherConversionService';
 import { DayConversionToggle } from '@/components/DayConversionToggle';
 import { distributeConvertedOvertime, applyOvertimeDistribution } from '@/utils/overtimeDistribution';
 
 interface BusinessTripData {
   employee_id: string;
   employee_name: string;
+  company_id: string;
   daily_data: { [day: string]: { ordinary: number; overtime: number; absence: string | null; business_trip: boolean; business_trip_hours: number } };
   totals: { 
     ordinary: number; 
@@ -44,7 +45,7 @@ const BusinessTripsDashboard = () => {
   const { user } = useAuth();
   const [businessTripData, setBusinessTripData] = useState<BusinessTripData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [allConversions, setAllConversions] = useState<{[key: string]: any[]}>({});
+  const [allConversions, setAllConversions] = useState<{[key: string]: MealVoucherConversion[]}>({});
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -619,6 +620,7 @@ const BusinessTripsDashboard = () => {
           return {
             employee_id: profile.user_id,
             employee_name: `${profile.first_name} ${profile.last_name}`,
+            company_id: profile.company_id,
             daily_data: dailyData,
             totals: {
               ordinary: totalOrdinary,
@@ -1165,7 +1167,7 @@ const BusinessTripsDashboard = () => {
                                       userId={employee.employee_id}
                                       userName={employee.employee_name}
                                       date={dateString}
-                                      companyId={employee.employee_id} // TODO: get actual company_id
+                                      companyId={employee.company_id}
                                       isConverted={isConvertedToAllowance}
                                       onConversionUpdated={fetchBusinessTripData}
                                       size="sm"
