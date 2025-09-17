@@ -4,32 +4,49 @@ import type { OvertimeConversion, OvertimeConversionSettings, OvertimeConversion
 
 export class OvertimeConversionService {
   /**
+   * Helper method to normalize month string to YYYY-MM-DD format
+   */
+  private static normalizeMonth(month: string): string {
+    // Handle both "YYYY-MM" and "YYYY-MM-DD" formats
+    if (month.length === 7) { // YYYY-MM format
+      return format(startOfMonth(new Date(month + '-01')), 'yyyy-MM-dd');
+    }
+    return format(startOfMonth(new Date(month)), 'yyyy-MM-dd');
+  }
+
+  /**
    * Get effective overtime conversion settings for a user at a specific date
    */
   static async getEffectiveConversionSettings(
     userId: string, 
     date: string
   ): Promise<OvertimeConversionSettings | null> {
+    const normalizedDate = this.normalizeMonth(date);
+    
     // Get employee-specific settings first
     const { data: employeeSettings } = await supabase
       .from('employee_settings')
       .select('enable_overtime_conversion, overtime_conversion_rate, overtime_conversion_limit')
       .eq('user_id', userId)
-      .lte('valid_from', date)
-      .or(`valid_to.is.null,valid_to.gt.${date}`)
+      .lte('valid_from', normalizedDate)
+      .or(`valid_to.is.null,valid_to.gt.${normalizedDate}`)
       .order('valid_from', { ascending: false })
-      .limit(1)
       .maybeSingle();
+
+    // Get user's company_id first
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', userId)
+      .single();
+
+    if (!profile?.company_id) return null;
 
     // Get company settings as fallback
     const { data: companySettings } = await supabase
       .from('company_settings')
       .select('enable_overtime_conversion, default_overtime_conversion_rate, default_overtime_conversion_limit')
-      .eq('company_id', (await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('user_id', userId)
-        .single()).data?.company_id || '')
+      .eq('company_id', profile.company_id)
       .maybeSingle();
 
     if (!companySettings?.enable_overtime_conversion) {
@@ -51,7 +68,8 @@ export class OvertimeConversionService {
     month: string, 
     totalOvertimeHours: number
   ): Promise<{ hours: number; amount: number }> {
-    const settings = await this.getEffectiveConversionSettings(userId, month);
+    const normalizedMonth = this.normalizeMonth(month);
+    const settings = await this.getEffectiveConversionSettings(userId, normalizedMonth);
     
     if (!settings?.enable_overtime_conversion || !settings.overtime_conversion_limit) {
       return { hours: 0, amount: 0 };
@@ -70,12 +88,12 @@ export class OvertimeConversionService {
     userId: string, 
     month: string
   ): Promise<OvertimeConversion | null> {
-    const monthStart = format(startOfMonth(new Date(month + '-01')), 'yyyy-MM-dd');
+    const monthStart = this.normalizeMonth(month);
     
-    // Try to get existing record
+    // Try to get existing record with explicit field selection
     const { data: existing } = await supabase
       .from('employee_overtime_conversions')
-      .select('*')
+      .select('id, user_id, company_id, month, automatic_conversion_hours, manual_conversion_hours, total_conversion_hours, conversion_amount, notes, created_at, updated_at, created_by, updated_by')
       .eq('user_id', userId)
       .eq('month', monthStart)
       .maybeSingle();
@@ -121,12 +139,14 @@ export class OvertimeConversionService {
     notes?: string
   ): Promise<boolean> {
     try {
+      const normalizedMonth = this.normalizeMonth(month);
+      
       // Get or create conversion record
-      const conversion = await this.getOrCreateConversion(userId, month);
+      const conversion = await this.getOrCreateConversion(userId, normalizedMonth);
       if (!conversion) return false;
 
       // Get conversion settings
-      const settings = await this.getEffectiveConversionSettings(userId, month);
+      const settings = await this.getEffectiveConversionSettings(userId, normalizedMonth);
       if (!settings?.enable_overtime_conversion) return false;
 
       // Calculate new manual conversion hours (current + delta)
@@ -160,8 +180,9 @@ export class OvertimeConversionService {
     month: string,
     originalOvertimeHours: number
   ): Promise<OvertimeConversionCalculation> {
-    const settings = await this.getEffectiveConversionSettings(userId, month);
-    const conversion = await this.getOrCreateConversion(userId, month);
+    const normalizedMonth = this.normalizeMonth(month);
+    const settings = await this.getEffectiveConversionSettings(userId, normalizedMonth);
+    const conversion = await this.getOrCreateConversion(userId, normalizedMonth);
 
     if (!settings?.enable_overtime_conversion || !conversion) {
       return {
@@ -258,7 +279,7 @@ export class OvertimeConversionService {
           // Calculate automatic conversion
           const automaticConversion = await this.calculateAutomaticConversion(
             user.user_id, 
-            month, 
+            monthStart, 
             totalOvertimeHours
           );
           
@@ -337,7 +358,7 @@ export class OvertimeConversionService {
     companyId: string, 
     month: string
   ): Promise<OvertimeConversion[]> {
-    const monthStart = format(startOfMonth(new Date(month + '-01')), 'yyyy-MM-dd');
+    const monthStart = this.normalizeMonth(month);
     
     const { data } = await supabase
       .from('employee_overtime_conversions')
