@@ -16,7 +16,7 @@ export class OvertimeConversionService {
       .select('enable_overtime_conversion, overtime_conversion_rate, overtime_conversion_limit')
       .eq('user_id', userId)
       .lte('valid_from', date)
-      .or(`valid_to.is.null,valid_to.gte.${date}`)
+      .or(`valid_to.is.null,valid_to.gt.${date}`)
       .order('valid_from', { ascending: false })
       .limit(1)
       .maybeSingle();
