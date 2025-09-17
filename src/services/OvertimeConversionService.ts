@@ -153,7 +153,7 @@ export class OvertimeConversionService {
 
   /**
    * Apply manual conversion adjustment (positive for conversion, negative for de-conversion)
-   * CORREZIONE: Migliorata gestione errori e logging
+   * CORREZIONE: Migliorata gestione errori e logging + distribuzione su timesheets
    */
   static async applyManualConversion(
     userId: string, 
@@ -191,6 +191,9 @@ export class OvertimeConversionService {
         currentTotalHours: conversion.total_conversion_hours
       });
 
+      // Store old total for timesheet distribution calculation
+      const oldTotalConversionHours = conversion.total_conversion_hours || 0;
+
       // Calculate new manual conversion hours - ALLOW NEGATIVE VALUES to offset automatic conversions
       const newManualHours = conversion.manual_conversion_hours + deltaHours;
       // CORREZIONE: total_conversion_hours è ora calcolato automaticamente dal database
@@ -219,6 +222,20 @@ export class OvertimeConversionService {
       if (error) {
         console.error(`❌ [OvertimeConversion] Errore aggiornamento database:`, error);
         return false;
+      }
+
+      // Aggiorna gli straordinari nei timesheets proporzionalmente
+      const { TimesheetOvertimeDistributionService } = await import('./TimesheetOvertimeDistribution');
+      const newTotalConversionHours = Math.max(0, totalHours);
+      
+      // Se c'è un cambiamento nelle conversioni totali, aggiorna i timesheets
+      if (Math.abs(newTotalConversionHours - oldTotalConversionHours) > 0.01) {
+        console.log(`🔄 [OvertimeConversion] Aggiornamento timesheets per conversioni:`, {
+          oldTotal: oldTotalConversionHours,
+          newTotal: newTotalConversionHours
+        });
+        
+        await TimesheetOvertimeDistributionService.synchronizeOvertimeWithConversions(userId, normalizedMonth);
       }
 
       console.log(`✅ [OvertimeConversion] Conversione applicata con successo per ${userId}`);
