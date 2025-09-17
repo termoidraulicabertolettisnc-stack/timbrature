@@ -11,6 +11,8 @@ import { Calendar, Download, Users, MapPin, TrendingDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
+import { MealVoucherConversionService } from '@/services/MealVoucherConversionService';
+import { DayConversionToggle } from '@/components/DayConversionToggle';
 import { distributeConvertedOvertime, applyOvertimeDistribution } from '@/utils/overtimeDistribution';
 
 interface BusinessTripData {
@@ -42,6 +44,7 @@ const BusinessTripsDashboard = () => {
   const { user } = useAuth();
   const [businessTripData, setBusinessTripData] = useState<BusinessTripData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [allConversions, setAllConversions] = useState<{[key: string]: any[]}>({});
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -299,11 +302,16 @@ const BusinessTripsDashboard = () => {
       await OvertimeConversionService.processAutomaticConversions(selectedMonth, me!.company_id);
 
       // Import temporal funcs once
-      const [{ getEmployeeSettingsForDate }, { calculateMealBenefitsTemporal }, { BenefitsService }] = await Promise.all([
+      const [{ getEmployeeSettingsForDate }, { calculateMealBenefitsTemporal }, { BenefitsService }, { MealVoucherConversionService }] = await Promise.all([
         import('@/utils/temporalEmployeeSettings'),
         import('@/utils/mealBenefitsCalculator'),
         import('@/services/BenefitsService'),
+        import('@/services/MealVoucherConversionService'),
       ]);
+
+      // Carica tutte le conversioni buoni pasto per il periodo
+      const allConversionsData = await MealVoucherConversionService.getConversionsForUsers(userIds, startDate, endDate);
+      setAllConversions(allConversionsData);
 
       // Build per-employee dataset
       const processedData: BusinessTripData[] = await Promise.all(
@@ -311,6 +319,8 @@ const BusinessTripsDashboard = () => {
           const employeeTimesheets = (timesheets || []).filter((t) => t.user_id === profile.user_id);
           const employeeAbsences = (absences || []).filter((a) => a.user_id === profile.user_id);
           const companySettingsForEmployee = companySettings?.find((cs) => cs.company_id === profile.company_id);
+          const employeeConversions = allConversionsData[profile.user_id] || [];
+          const conversionMap = MealVoucherConversionService.createConversionMap(employeeConversions);
 
           const dailyData: BusinessTripData['daily_data'] = {};
           let totalOrdinary = 0;
@@ -440,24 +450,49 @@ const BusinessTripsDashboard = () => {
               return d.getDay() !== 6 && ts.total_hours && ts.total_hours > 0;
             });
 
-            let hasMealBenefits = false;
-            if (testTimesheet) {
-              const mealBenefits = await (await import('@/services/BenefitsService')).BenefitsService.calculateMealBenefits(
-                testTimesheet,
-                temporalSettings
-                  ? {
-                      meal_allowance_policy: temporalSettings.meal_allowance_policy,
-                      meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
-                      daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
-                      lunch_break_type: temporalSettings.lunch_break_type,
-                      saturday_handling: temporalSettings.saturday_handling,
-                    }
-                  : undefined,
-                companySettingsForEmployee,
-                testTimesheet.date,
-              );
-              hasMealBenefits = mealBenefits.mealVoucher;
+            // Calcola il tasso di business trip basato sui meal benefits giornalieri
+            // Considera sia i benefits normali che le conversioni specifiche per giorno
+            let daysWithMealVoucher = 0;
+            let totalWorkingDays = 0;
+            
+            for (const ts of employeeTimesheets) {
+              const date = new Date(`${ts.date}T00:00:00`);
+              if (date.getDay() === 6) continue; // Skip Saturdays per business trips
+              
+              const temporalSettingsForDay = await getEmployeeSettingsForDate(ts.user_id, ts.date);
+              
+              // Check if this specific day is converted to allowance
+              const isConvertedToAllowance = conversionMap[ts.date] === true;
+              
+              if (!isConvertedToAllowance) {
+                const mealBenefits = await BenefitsService.calculateMealBenefits(
+                  ts,
+                  temporalSettingsForDay
+                    ? {
+                        meal_allowance_policy: temporalSettingsForDay.meal_allowance_policy,
+                        meal_voucher_min_hours: temporalSettingsForDay.meal_voucher_min_hours,
+                        daily_allowance_min_hours: temporalSettingsForDay.daily_allowance_min_hours,
+                        lunch_break_type: temporalSettingsForDay.lunch_break_type,
+                        saturday_handling: temporalSettingsForDay.saturday_handling,
+                      }
+                    : undefined,
+                  companySettingsForEmployee,
+                  ts.date,
+                );
+                
+                if (mealBenefits.mealVoucher) {
+                  daysWithMealVoucher++;
+                }
+              }
+              // Se convertito, non conta come day with meal voucher
+              
+              totalWorkingDays++;
             }
+            
+            // Calcola tasso medio pesato
+            // Se la maggior parte dei giorni ha meal voucher (e non sono convertiti), usa rateWithMeal
+            // Altrimenti usa rateWithoutMeal
+            const hasMealBenefits = totalWorkingDays > 0 && (daysWithMealVoucher / totalWorkingDays) > 0.5;
 
             const rateWithMeal =
               temporalSettings?.business_trip_rate_with_meal || companySettingsForEmployee?.business_trip_rate_with_meal || 30.98;
@@ -517,24 +552,42 @@ const BusinessTripsDashboard = () => {
               const d = new Date(`${ts.date}T00:00:00`);
               return d.getDay() !== 6 && ts.total_hours && ts.total_hours > 0;
             });
-            let hasMealBenefits = false;
-            if (testTimesheet) {
-              const mealBenefits = await (await import('@/services/BenefitsService')).BenefitsService.calculateMealBenefits(
-                testTimesheet,
-                temporalSettings
-                  ? {
-                      meal_allowance_policy: temporalSettings.meal_allowance_policy,
-                      meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
-                      daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
-                      lunch_break_type: temporalSettings.lunch_break_type,
-                      saturday_handling: temporalSettings.saturday_handling,
-                    }
-                  : undefined,
-                companySettingsForEmployee,
-                testTimesheet.date,
-              );
-              hasMealBenefits = mealBenefits.mealVoucher;
+            // Calcola il tasso di business trip basato sui meal benefits giornalieri (anche per adjusted hours)
+            let daysWithMealVoucherAdjusted = 0;
+            let totalWorkingDaysAdjusted = 0;
+            
+            for (const ts of employeeTimesheets) {
+              const date = new Date(`${ts.date}T00:00:00`);
+              if (date.getDay() === 6) continue; // Skip Saturdays per business trips
+              
+              const temporalSettingsForDay = await getEmployeeSettingsForDate(ts.user_id, ts.date);
+              const isConvertedToAllowance = conversionMap[ts.date] === true;
+              
+              if (!isConvertedToAllowance) {
+                const mealBenefits = await BenefitsService.calculateMealBenefits(
+                  ts,
+                  temporalSettingsForDay
+                    ? {
+                        meal_allowance_policy: temporalSettingsForDay.meal_allowance_policy,
+                        meal_voucher_min_hours: temporalSettingsForDay.meal_voucher_min_hours,
+                        daily_allowance_min_hours: temporalSettingsForDay.daily_allowance_min_hours,
+                        lunch_break_type: temporalSettingsForDay.lunch_break_type,
+                        saturday_handling: temporalSettingsForDay.saturday_handling,
+                      }
+                    : undefined,
+                  companySettingsForEmployee,
+                  ts.date,
+                );
+                
+                if (mealBenefits.mealVoucher) {
+                  daysWithMealVoucherAdjusted++;
+                }
+              }
+              
+              totalWorkingDaysAdjusted++;
             }
+            
+            const hasMealBenefits = totalWorkingDaysAdjusted > 0 && (daysWithMealVoucherAdjusted / totalWorkingDaysAdjusted) > 0.5;
             const rateWithMeal =
               temporalSettings?.business_trip_rate_with_meal || companySettingsForEmployee?.business_trip_rate_with_meal || 30.98;
             const rateWithoutMeal =
@@ -825,6 +878,16 @@ const BusinessTripsDashboard = () => {
                           <p>Gestione conversioni straordinari</p>
                         </TooltipContent>
                       </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <TableHead className="text-center w-12 min-w-[3rem] text-xs font-medium bg-purple-50 px-1">
+                            BP/IND
+                          </TableHead>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Conversione Buoni Pasto ↔ Indennità</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </TableRow>
                   </TableHeader>
 
@@ -1068,6 +1131,74 @@ const BusinessTripsDashboard = () => {
                             </TableCell>
                           </TableRow>
                         )}
+
+                        {/* Meal Voucher Conversion Row */}
+                        <TableRow className="hover:bg-purple-50/50 border-t border-dashed">
+                          <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs px-2 py-1 border-r">
+                            <span className="text-purple-700 font-bold">BP</span> - {employee.employee_name}
+                          </TableCell>
+                          {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                            const day = i + 1;
+                            const dayKey = String(day).padStart(2, '0');
+                            const [year, month] = selectedMonth.split('-');
+                            const dateString = `${year}-${month}-${dayKey}`;
+                            const hasData = employee.daily_data[dayKey] && (
+                              (employee.daily_data[dayKey].ordinary || 0) > 0 ||
+                              (employee.daily_data[dayKey].overtime || 0) > 0
+                            );
+                            const isHol = isHoliday(day);
+                            const isSun = isSunday(day);
+                            const isConvertedToAllowance = allConversions[employee.employee_id]?.some(
+                              conv => conv.date === dateString && conv.converted_to_allowance
+                            ) || false;
+
+                            return (
+                              <TableCell
+                                key={day}
+                                className={`text-center px-0.5 py-1 text-xs ${
+                                  isHol || isSun ? 'bg-red-50' : ''
+                                }`}
+                              >
+                                {hasData ? (
+                                  <div className="flex justify-center">
+                                    <DayConversionToggle
+                                      userId={employee.employee_id}
+                                      userName={employee.employee_name}
+                                      date={dateString}
+                                      companyId={employee.employee_id} // TODO: get actual company_id
+                                      isConverted={isConvertedToAllowance}
+                                      onConversionUpdated={fetchBusinessTripData}
+                                      size="sm"
+                                    />
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                              </TableCell>
+                            );
+                          })}
+                          <TableCell className="text-center text-xs p-1 bg-gray-50 border-l">
+                            <div className="flex flex-col items-center text-xs">
+                              <span className="text-purple-700 font-bold">
+                                {allConversions[employee.employee_id]?.filter(c => c.converted_to_allowance).length || 0}
+                              </span>
+                              <span className="text-gray-500 text-xs">conv.</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                          <TableCell className="text-center text-xs p-1 bg-orange-50">-</TableCell>
+                          <TableCell className="text-center text-xs p-1 bg-orange-50">-</TableCell>
+                          <TableCell className="text-center text-xs p-1 bg-blue-50">-</TableCell>
+                          <TableCell className="text-center text-xs p-1 bg-green-50">-</TableCell>
+                          <TableCell className="text-center text-xs p-1 bg-purple-50">
+                            <div className="flex flex-col items-center text-xs">
+                              <span className="text-green-600 font-bold">
+                                {allConversions[employee.employee_id]?.length || 0}
+                              </span>
+                              <span className="text-gray-500 text-xs">tot</span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
                       </React.Fragment>
                     ))}
                   </TableBody>

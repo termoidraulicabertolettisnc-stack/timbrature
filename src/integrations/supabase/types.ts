@@ -315,6 +315,45 @@ export type Database = {
         }
         Relationships: []
       }
+      employee_meal_voucher_conversions: {
+        Row: {
+          company_id: string
+          converted_to_allowance: boolean
+          created_at: string
+          created_by: string
+          date: string
+          id: string
+          notes: string | null
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          converted_to_allowance?: boolean
+          created_at?: string
+          created_by: string
+          date: string
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          converted_to_allowance?: boolean
+          created_at?: string
+          created_by?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       employee_overtime_conversions: {
         Row: {
           automatic_conversion_hours: number | null

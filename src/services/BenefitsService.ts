@@ -1,5 +1,6 @@
 import { calculateMealBenefitsTemporal, calculateMealBenefits, MealBenefits } from '@/utils/mealBenefitsCalculator';
 import { applyEntryTolerance, shouldApplyEntryTolerance } from '@/utils/entryToleranceUtils';
+import { MealVoucherConversionService } from './MealVoucherConversionService';
 
 export interface TimesheetData {
   start_time: string | null;
@@ -44,6 +45,7 @@ export class BenefitsService {
   /**
    * Calculate meal benefits for a timesheet (async with temporal support)
    * This is the PRIMARY method that should be used
+   * Now includes meal voucher conversion logic
    */
   static async calculateMealBenefits(
     timesheet: TimesheetData,
@@ -51,22 +53,50 @@ export class BenefitsService {
     companySettings?: CompanySettings,
     targetDate?: string
   ): Promise<MealBenefits> {
-    // If we have user_id and date, use temporal calculation
+    let benefits: MealBenefits;
+    
+    // Calculate base meal benefits
     if (timesheet.user_id && (targetDate || timesheet.date)) {
-      return await calculateMealBenefitsTemporal(
+      benefits = await calculateMealBenefitsTemporal(
         timesheet, 
         employeeSettings, 
         companySettings, 
         targetDate
       );
+    } else {
+      // Fallback to synchronous calculation (for backward compatibility)
+      console.warn(
+        '⚠️ Using synchronous meal benefits calculation. ' +
+        'Consider providing user_id and date for accurate temporal calculation.'
+      );
+      benefits = calculateMealBenefits(timesheet, employeeSettings, companySettings);
     }
-    
-    // Fallback to synchronous calculation (for backward compatibility)
-    console.warn(
-      '⚠️ Using synchronous meal benefits calculation. ' +
-      'Consider providing user_id and date for accurate temporal calculation.'
-    );
-    return calculateMealBenefits(timesheet, employeeSettings, companySettings);
+
+    // Check for meal voucher conversions if we have user_id and date
+    if (timesheet.user_id && (targetDate || timesheet.date)) {
+      const conversionDate = targetDate || timesheet.date;
+      
+      try {
+        const isConverted = await MealVoucherConversionService.isConvertedToAllowance(
+          timesheet.user_id,
+          conversionDate
+        );
+
+        if (isConverted) {
+          // Convert meal voucher to daily allowance
+          benefits = {
+            ...benefits,
+            mealVoucher: false,      // Nessun buono pasto
+            dailyAllowance: true     // Indennità attivata
+          };
+        }
+      } catch (error) {
+        console.error('Error checking meal voucher conversion:', error);
+        // In caso di errore, mantieni il calcolo originale
+      }
+    }
+
+    return benefits;
   }
 
   /**
