@@ -74,6 +74,15 @@ const BusinessTripsDashboard = () => {
     return new Date(parseInt(year), parseInt(month), 0).getDate();
   };
 
+  const getDateInfo = (day: number) => {
+    const [year, month] = selectedMonth.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, day);
+    const dayName = date.toLocaleDateString('it-IT', { weekday: 'short' });
+    const isSunday = date.getDay() === 0;
+    const isSaturday = date.getDay() === 6;
+    return { dayName, isSunday, isSaturday };
+  };
+
   const fetchBusinessTripData = async () => {
     try {
       setLoading(true);
@@ -359,6 +368,11 @@ const BusinessTripsDashboard = () => {
   const totalOvertimeConversions = businessTripData.reduce((sum, emp) => sum + emp.overtime_conversions.amount, 0);
   const totalMealVoucherConversions = businessTripData.reduce((sum, emp) => sum + emp.meal_voucher_conversions.amount, 0);
   const grandTotal = totalSaturdayAmount + totalDailyAllowanceAmount + totalOvertimeConversions + totalMealVoucherConversions;
+  
+  // Calculate business trip days and daily average
+  const totalBusinessTripDays = businessTripData.reduce((sum, emp) => 
+    sum + Math.ceil(emp.saturday_trips.hours / 8) + emp.daily_allowances.days, 0);
+  const averageDailyRate = totalBusinessTripDays > 0 ? grandTotal / totalBusinessTripDays : 0;
 
   return (
     <div className="space-y-6">
@@ -395,7 +409,7 @@ const BusinessTripsDashboard = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Dipendenti</CardTitle>
@@ -409,23 +423,34 @@ const BusinessTripsDashboard = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Trasferte Sabato</CardTitle>
+            <CardTitle className="text-sm font-medium">Giorni Trasferta</CardTitle>
             <MapPin className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">€{totalSaturdayAmount.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">{totalSaturdayHours.toFixed(1)} ore totali</p>
+            <div className="text-2xl font-bold">{totalBusinessTripDays}</div>
+            <p className="text-xs text-muted-foreground">Giorni totali</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Indennità Giornaliere</CardTitle>
+            <CardTitle className="text-sm font-medium">€/Giorno Medio</CardTitle>
             <TrendingDown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">€{totalDailyAllowanceAmount.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">{totalDailyAllowanceDays} giorni</p>
+            <div className="text-2xl font-bold">€{averageDailyRate.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">Importo medio</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Indennità + Sabati</CardTitle>
+            <MapPin className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">€{(totalSaturdayAmount + totalDailyAllowanceAmount).toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">Trasferte dirette</p>
           </CardContent>
         </Card>
 
@@ -436,7 +461,7 @@ const BusinessTripsDashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">€{grandTotal.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Incluse tutte le tipologie</p>
+            <p className="text-xs text-muted-foreground">Incluse conversioni</p>
           </CardContent>
         </Card>
       </div>
@@ -457,20 +482,52 @@ const BusinessTripsDashboard = () => {
           ) : (
             <TooltipProvider>
               <div className="rounded-md border overflow-x-auto">
-                <Table>
+                <Table className="text-sm">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="min-w-[200px]">Dipendente</TableHead>
-                      <TableHead className="min-w-[120px]">Tipo</TableHead>
-                      {Array.from({ length: getDaysInMonth() }, (_, i) => (
-                        <TableHead key={i + 1} className="w-8 text-center text-xs">
-                          {i + 1}
-                        </TableHead>
-                      ))}
-                      <TableHead className="text-right min-w-[80px]">Totale</TableHead>
-                      <TableHead className="text-right min-w-[100px]">Buoni Pasto</TableHead>
-                      <TableHead className="text-right min-w-[100px]">Importo</TableHead>
-                      <TableHead className="min-w-[120px]">Azioni</TableHead>
+                      <TableHead className="min-w-[180px] py-2">Dipendente</TableHead>
+                      <TableHead className="min-w-[100px] py-2">Tipo</TableHead>
+                      {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                        const { isSunday, isSaturday } = getDateInfo(i + 1);
+                        return (
+                          <TableHead 
+                            key={i + 1} 
+                            className={`w-7 text-center text-xs py-1 px-1 ${
+                              isSunday ? 'bg-red-100 text-red-700' : 
+                              isSaturday ? 'bg-orange-100 text-orange-700' : ''
+                            }`}
+                          >
+                            {i + 1}
+                          </TableHead>
+                        );
+                      })}
+                      <TableHead className="text-right min-w-[70px] py-2">Totale</TableHead>
+                      <TableHead className="text-right min-w-[80px] py-2">Buoni</TableHead>
+                      <TableHead className="text-right min-w-[80px] py-2">Importo</TableHead>
+                      <TableHead className="min-w-[100px] py-2">Azioni</TableHead>
+                    </TableRow>
+                    {/* Weekday names row */}
+                    <TableRow>
+                      <TableHead className="py-1"></TableHead>
+                      <TableHead className="py-1"></TableHead>
+                      {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                        const { dayName, isSunday, isSaturday } = getDateInfo(i + 1);
+                        return (
+                          <TableHead 
+                            key={i + 1} 
+                            className={`w-7 text-center text-xs py-1 px-1 ${
+                              isSunday ? 'bg-red-100 text-red-700' : 
+                              isSaturday ? 'bg-orange-100 text-orange-700' : ''
+                            }`}
+                          >
+                            {dayName}
+                          </TableHead>
+                        );
+                      })}
+                      <TableHead className="py-1"></TableHead>
+                      <TableHead className="py-1"></TableHead>
+                      <TableHead className="py-1"></TableHead>
+                      <TableHead className="py-1"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -478,49 +535,61 @@ const BusinessTripsDashboard = () => {
                       <React.Fragment key={employee.employee_id}>
                         {/* Ordinary hours row */}
                         <TableRow>
-                          <TableCell className="font-medium">{employee.employee_name}</TableCell>
-                          <TableCell className="text-sm text-blue-600">Ordinarie</TableCell>
+                          <TableCell className="font-medium py-1">{employee.employee_name}</TableCell>
+                          <TableCell className="text-sm text-blue-600 py-1">Ordinarie</TableCell>
                           {Array.from({ length: getDaysInMonth() }, (_, i) => {
                             const dayKey = String(i + 1).padStart(2, '0');
                             const ordinary = employee.daily_data[dayKey]?.ordinary || 0;
+                            const { isSunday, isSaturday } = getDateInfo(i + 1);
                             return (
-                              <TableCell key={i + 1} className="text-center text-xs">
+                              <TableCell 
+                                key={i + 1} 
+                                className={`text-center text-xs py-1 px-1 ${
+                                  isSunday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                }`}
+                              >
                                 {ordinary > 0 ? ordinary.toFixed(1) : ''}
                               </TableCell>
                             );
                           })}
-                          <TableCell className="text-right font-medium">
+                          <TableCell className="text-right font-medium py-1">
                             {employee.totals.ordinary.toFixed(1)}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right py-1">
                             {employee.meal_vouchers > 0 
                               ? `${employee.meal_vouchers} (€${employee.meal_voucher_amount.toFixed(2)})`
                               : ''
                             }
                           </TableCell>
-                          <TableCell className="text-right">€0.00</TableCell>
-                          <TableCell></TableCell>
+                          <TableCell className="text-right py-1">€0.00</TableCell>
+                          <TableCell className="py-1"></TableCell>
                         </TableRow>
 
                         {/* Overtime hours row */}
                         <TableRow>
-                          <TableCell></TableCell>
-                          <TableCell className="text-sm text-amber-600">Straordinarie</TableCell>
+                          <TableCell className="py-1"></TableCell>
+                          <TableCell className="text-sm text-amber-600 py-1">Straordinarie</TableCell>
                           {Array.from({ length: getDaysInMonth() }, (_, i) => {
                             const dayKey = String(i + 1).padStart(2, '0');
                             const overtime = employee.daily_data[dayKey]?.overtime || 0;
+                            const { isSunday, isSaturday } = getDateInfo(i + 1);
                             return (
-                              <TableCell key={i + 1} className="text-center text-xs">
+                              <TableCell 
+                                key={i + 1} 
+                                className={`text-center text-xs py-1 px-1 ${
+                                  isSunday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                }`}
+                              >
                                 {overtime > 0 ? overtime.toFixed(1) : ''}
                               </TableCell>
                             );
                           })}
-                          <TableCell className="text-right font-medium">
+                          <TableCell className="text-right font-medium py-1">
                             {employee.totals.overtime.toFixed(1)}
                           </TableCell>
-                          <TableCell className="text-right"></TableCell>
-                          <TableCell className="text-right">€0.00</TableCell>
-                          <TableCell>
+                          <TableCell className="text-right py-1"></TableCell>
+                          <TableCell className="text-right py-1">€0.00</TableCell>
+                          <TableCell className="py-1">
                             {employee.totals.overtime > 0 && (
                               <Button
                                 variant="outline"
@@ -541,23 +610,29 @@ const BusinessTripsDashboard = () => {
                         {Object.entries(employee.totals.absence_totals).map(([absenceType, hours]) => (
                           hours > 0 && (
                             <TableRow key={`${employee.employee_id}-${absenceType}`}>
-                              <TableCell></TableCell>
-                              <TableCell className="text-sm text-gray-600">{absenceType}</TableCell>
+                              <TableCell className="py-1"></TableCell>
+                              <TableCell className="text-sm text-gray-600 py-1">{absenceType}</TableCell>
                               {Array.from({ length: getDaysInMonth() }, (_, i) => {
                                 const dayKey = String(i + 1).padStart(2, '0');
                                 const absence = employee.daily_data[dayKey]?.absence;
+                                const { isSunday, isSaturday } = getDateInfo(i + 1);
                                 return (
-                                  <TableCell key={i + 1} className="text-center text-xs">
+                                  <TableCell 
+                                    key={i + 1} 
+                                    className={`text-center text-xs py-1 px-1 ${
+                                      isSunday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                    }`}
+                                  >
                                     {absence === absenceType ? absence.charAt(0).toUpperCase() : ''}
                                   </TableCell>
                                 );
                               })}
-                              <TableCell className="text-right font-medium">
+                              <TableCell className="text-right font-medium py-1">
                                 {hours.toFixed(1)}
                               </TableCell>
-                              <TableCell className="text-right"></TableCell>
-                              <TableCell className="text-right">€0.00</TableCell>
-                              <TableCell></TableCell>
+                              <TableCell className="text-right py-1"></TableCell>
+                              <TableCell className="text-right py-1">€0.00</TableCell>
+                              <TableCell className="py-1"></TableCell>
                             </TableRow>
                           )
                         ))}
@@ -565,102 +640,128 @@ const BusinessTripsDashboard = () => {
                         {/* Saturday trips row */}
                         {employee.saturday_trips.hours > 0 && (
                           <TableRow className="bg-orange-50">
-                            <TableCell></TableCell>
-                            <TableCell className="text-sm font-medium text-orange-700">TS - Trasferte Sabato</TableCell>
+                            <TableCell className="py-1"></TableCell>
+                            <TableCell className="text-sm font-medium text-orange-700 py-1">TS - Trasferte Sabato</TableCell>
                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
                               const dayKey = String(i + 1).padStart(2, '0');
                               const hours = employee.saturday_trips.daily_data[dayKey] || 0;
+                              const { isSunday, isSaturday } = getDateInfo(i + 1);
                               return (
-                                <TableCell key={i + 1} className="text-center text-xs font-medium">
+                                <TableCell 
+                                  key={i + 1} 
+                                  className={`text-center text-xs font-medium py-1 px-1 ${
+                                    isSunday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-orange-50'
+                                  }`}
+                                >
                                   {hours > 0 ? hours.toFixed(1) : ''}
                                 </TableCell>
                               );
                             })}
-                            <TableCell className="text-right font-bold text-orange-700">
+                            <TableCell className="text-right font-bold text-orange-700 py-1">
                               {employee.saturday_trips.hours.toFixed(1)}
                             </TableCell>
-                            <TableCell className="text-right"></TableCell>
-                            <TableCell className="text-right font-bold text-orange-700">
+                            <TableCell className="text-right py-1"></TableCell>
+                            <TableCell className="text-right font-bold text-orange-700 py-1">
                               €{employee.saturday_trips.amount.toFixed(2)}
                             </TableCell>
-                            <TableCell></TableCell>
+                            <TableCell className="py-1"></TableCell>
                           </TableRow>
                         )}
 
                         {/* Daily allowances row */}
                         {employee.daily_allowances.days > 0 && (
                           <TableRow className="bg-blue-50">
-                            <TableCell></TableCell>
-                            <TableCell className="text-sm font-medium text-blue-700">TI - Trasferte Indennità</TableCell>
+                            <TableCell className="py-1"></TableCell>
+                            <TableCell className="text-sm font-medium text-blue-700 py-1">TI - Trasferte Indennità</TableCell>
                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
                               const dayKey = String(i + 1).padStart(2, '0');
                               const hasAllowance = employee.daily_allowances.daily_data[dayKey];
+                              const { isSunday, isSaturday } = getDateInfo(i + 1);
                               return (
-                                <TableCell key={i + 1} className="text-center text-xs font-medium">
+                                <TableCell 
+                                  key={i + 1} 
+                                  className={`text-center text-xs font-medium py-1 px-1 ${
+                                    isSunday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-blue-50'
+                                  }`}
+                                >
                                   {hasAllowance ? 'TI' : ''}
                                 </TableCell>
                               );
                             })}
-                            <TableCell className="text-right font-bold text-blue-700">
+                            <TableCell className="text-right font-bold text-blue-700 py-1">
                               {employee.daily_allowances.days}
                             </TableCell>
-                            <TableCell className="text-right"></TableCell>
-                            <TableCell className="text-right font-bold text-blue-700">
+                            <TableCell className="text-right py-1"></TableCell>
+                            <TableCell className="text-right font-bold text-blue-700 py-1">
                               €{employee.daily_allowances.amount.toFixed(2)}
                             </TableCell>
-                            <TableCell></TableCell>
+                            <TableCell className="py-1"></TableCell>
                           </TableRow>
                         )}
 
                         {/* Overtime conversions row */}
                         {employee.overtime_conversions.hours > 0 && (
                           <TableRow className="bg-green-50">
-                            <TableCell></TableCell>
-                            <TableCell className="text-sm font-medium text-green-700">CS - Conversioni Straordinari</TableCell>
-                            {Array.from({ length: getDaysInMonth() }, (_, i) => (
-                              <TableCell key={i + 1} className="text-center text-xs">
-                                {i === 0 ? 'Mensile' : ''}
-                              </TableCell>
-                            ))}
-                            <TableCell className="text-right font-bold text-green-700">
+                            <TableCell className="py-1"></TableCell>
+                            <TableCell className="text-sm font-medium text-green-700 py-1">CS - Conversioni Straordinari</TableCell>
+                            {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                              const { isSunday, isSaturday } = getDateInfo(i + 1);
+                              return (
+                                <TableCell 
+                                  key={i + 1} 
+                                  className={`text-center text-xs py-1 px-1 ${
+                                    isSunday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-green-50'
+                                  }`}
+                                >
+                                  {/* Removed "Mensile" text */}
+                                </TableCell>
+                              );
+                            })}
+                            <TableCell className="text-right font-bold text-green-700 py-1">
                               {employee.overtime_conversions.hours.toFixed(1)}
                             </TableCell>
-                            <TableCell className="text-right"></TableCell>
-                            <TableCell className="text-right font-bold text-green-700">
+                            <TableCell className="text-right py-1"></TableCell>
+                            <TableCell className="text-right font-bold text-green-700 py-1">
                               €{employee.overtime_conversions.amount.toFixed(2)}
                             </TableCell>
-                            <TableCell></TableCell>
+                            <TableCell className="py-1"></TableCell>
                           </TableRow>
                         )}
 
                         {/* Meal voucher conversions row */}
                         {employee.meal_voucher_conversions.days > 0 && (
                           <TableRow className="bg-purple-50">
-                            <TableCell></TableCell>
-                            <TableCell className="text-sm font-medium text-purple-700">CB - Conversioni Buoni Pasto</TableCell>
+                            <TableCell className="py-1"></TableCell>
+                            <TableCell className="text-sm font-medium text-purple-700 py-1">CB - Conversioni Buoni Pasto</TableCell>
                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
                               const dayKey = String(i + 1).padStart(2, '0');
                               const isConverted = employee.meal_voucher_conversions.daily_data[dayKey];
+                              const { isSunday, isSaturday } = getDateInfo(i + 1);
                               return (
-                                <TableCell key={i + 1} className="text-center text-xs font-medium">
+                                <TableCell 
+                                  key={i + 1} 
+                                  className={`text-center text-xs font-medium py-1 px-1 ${
+                                    isSunday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-purple-50'
+                                  }`}
+                                >
                                   {isConverted ? 'CB' : ''}
                                 </TableCell>
                               );
                             })}
-                            <TableCell className="text-right font-bold text-purple-700">
+                            <TableCell className="text-right font-bold text-purple-700 py-1">
                               {employee.meal_voucher_conversions.days}
                             </TableCell>
-                            <TableCell className="text-right"></TableCell>
-                            <TableCell className="text-right font-bold text-purple-700">
+                            <TableCell className="text-right py-1"></TableCell>
+                            <TableCell className="text-right font-bold text-purple-700 py-1">
                               €{employee.meal_voucher_conversions.amount.toFixed(2)}
                             </TableCell>
-                            <TableCell></TableCell>
+                            <TableCell className="py-1"></TableCell>
                           </TableRow>
                         )}
 
                         {/* Separator row */}
                         <TableRow>
-                          <TableCell colSpan={getDaysInMonth() + 6} className="h-2 border-b-2 border-gray-200"></TableCell>
+                          <TableCell colSpan={getDaysInMonth() + 6} className="h-1 border-b border-gray-200 py-1"></TableCell>
                         </TableRow>
                       </React.Fragment>
                     ))}
@@ -675,31 +776,79 @@ const BusinessTripsDashboard = () => {
       {/* Legend */}
       <Card>
         <CardHeader>
-          <CardTitle>Legenda</CardTitle>
+          <CardTitle>Legenda Completa</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-orange-200 rounded"></div>
-              <span><strong>TS</strong> - Trasferte Sabato</span>
+          <div className="space-y-4">
+            {/* Business trip types */}
+            <div>
+              <h4 className="text-sm font-medium mb-2">Tipologie di Trasferte</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-orange-200 rounded"></div>
+                  <span><strong>TS</strong> - Trasferte Sabato</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-blue-200 rounded"></div>
+                  <span><strong>TI</strong> - Trasferte Indennità</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-200 rounded"></div>
+                  <span><strong>CS</strong> - Conversioni Straordinari</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-purple-200 rounded"></div>
+                  <span><strong>CB</strong> - Conversioni Buoni Pasto</span>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-blue-200 rounded"></div>
-              <span><strong>TI</strong> - Trasferte Indennità</span>
+
+            {/* Absence types */}
+            <div>
+              <h4 className="text-sm font-medium mb-2">Tipologie di Assenze</h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm text-gray-600">
+                <div className="flex items-center gap-2">
+                  <span><strong>F</strong> - Ferie</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span><strong>M</strong> - Malattia</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span><strong>P</strong> - Permesso</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span><strong>S</strong> - Sciopero</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span><strong>I</strong> - Infortunio</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span><strong>A</strong> - Altra assenza</span>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-green-200 rounded"></div>
-              <span><strong>CS</strong> - Conversioni Straordinari</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-purple-200 rounded"></div>
-              <span><strong>CB</strong> - Conversioni Buoni Pasto</span>
+
+            {/* Day highlighting */}
+            <div>
+              <h4 className="text-sm font-medium mb-2">Evidenziazioni Giorni</h4>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-red-100 border border-red-300 rounded"></div>
+                  <span>Domeniche</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-orange-100 border border-orange-300 rounded"></div>
+                  <span>Sabati</span>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="mt-4 text-xs text-muted-foreground">
-            <p>• Ogni tipologia di trasferta è ora separata in righe distinte</p>
-            <p>• I calcoli sono semplificati e più trasparenti</p>
-            <p>• Il totale generale è la somma diretta delle tipologie</p>
+          
+          <div className="mt-4 pt-4 border-t text-xs text-muted-foreground space-y-1">
+            <p>• <strong>Giorni Trasferta:</strong> Somma di giorni indennità + giorni sabato (calcolati come ore/8)</p>
+            <p>• <strong>€/Giorno Medio:</strong> Importo totale diviso per giorni di trasferta</p>
+            <p>• <strong>Struttura Separata:</strong> Ogni tipologia ha una riga dedicata per maggiore chiarezza</p>
+            <p>• <strong>Conversioni:</strong> CS è mensile, CB e TI sono giornalieri</p>
           </div>
         </CardContent>
       </Card>
