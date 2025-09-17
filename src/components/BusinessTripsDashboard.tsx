@@ -15,7 +15,7 @@ import * as ExcelJS from 'exceljs';
 interface BusinessTripData {
   employee_id: string;
   employee_name: string;
-  daily_data: { [day: string]: { ordinary: number; overtime: number; absence: string | null; business_trip: boolean } };
+  daily_data: { [day: string]: { ordinary: number; overtime: number; absence: string | null; business_trip: boolean; business_trip_hours: number } };
   totals: { 
     ordinary: number; 
     overtime: number; 
@@ -305,7 +305,7 @@ const BusinessTripsDashboard = () => {
         const employeeAbsences = (absences || []).filter(a => a.user_id === profile.user_id);
         const companySettingsForEmployee = companySettings?.find(cs => cs.company_id === profile.company_id);
         
-        const dailyData: { [day: string]: { ordinary: number; overtime: number; absence: string | null; business_trip: boolean } } = {};
+        const dailyData: { [day: string]: { ordinary: number; overtime: number; absence: string | null; business_trip: boolean; business_trip_hours: number } } = {};
         let totalOrdinary = 0;
         let totalOvertime = 0;
         let absenceTotals: { [absenceType: string]: number } = {};
@@ -322,7 +322,7 @@ const BusinessTripsDashboard = () => {
         const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
         for (let day = 1; day <= daysInMonth; day++) {
           const dayKey = String(day).padStart(2, '0');
-          dailyData[dayKey] = { ordinary: 0, overtime: 0, absence: null, business_trip: false };
+          dailyData[dayKey] = { ordinary: 0, overtime: 0, absence: null, business_trip: false, business_trip_hours: 0 };
         }
 
         // Default values from company settings
@@ -393,6 +393,7 @@ const BusinessTripsDashboard = () => {
           dailyData[dayKey].ordinary = ordinary;
           dailyData[dayKey].overtime = overtime;
           dailyData[dayKey].business_trip = isBusinessTrip;
+          dailyData[dayKey].business_trip_hours = isBusinessTrip ? (ts.total_hours || 0) : 0;
           
           totalOrdinary += ordinary;
           totalOvertime += overtime;
@@ -1020,14 +1021,9 @@ const BusinessTripsDashboard = () => {
                            const day = i + 1;
                            const dayKey = String(day).padStart(2, '0');
                            const isBusinessTrip = employee.daily_data[dayKey]?.business_trip;
+                           const businessTripHours = employee.daily_data[dayKey]?.business_trip_hours || 0;
                            const isHol = isHoliday(day);
                            const isSun = isSunday(day);
-                           
-                           // Calculate daily business trip hours (distribute total hours across business trip days)
-                           const totalBusinessTripDays = Object.values(employee.daily_data).filter(d => d?.business_trip).length;
-                           const dailyBusinessTripHours = totalBusinessTripDays > 0 && isBusinessTrip 
-                             ? (employee.totals.business_trip_hours / totalBusinessTripDays).toFixed(1)
-                             : null;
                            
                            return (
                              <TableCell 
@@ -1043,7 +1039,7 @@ const BusinessTripsDashboard = () => {
                                        <span className="text-orange-700 font-bold text-xs cursor-help">T</span>
                                      </TooltipTrigger>
                                      <TooltipContent>
-                                       <p>Ore trasferta: {dailyBusinessTripHours}h</p>
+                                       <p>Ore trasferta: {businessTripHours.toFixed(1)}h</p>
                                      </TooltipContent>
                                    </Tooltip>
                                  </TooltipProvider>
