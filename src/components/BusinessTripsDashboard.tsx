@@ -491,10 +491,10 @@ const BusinessTripsDashboard = () => {
           const maxDailyValue = hasMealBenefits ? rateWithMeal : rateWithoutMeal;
           
           // Passaggio 1: Calculate standardized business trip days (rounded up)
-          standardizedBusinessTripDays = Math.ceil(totalBusinessTripAmount / maxDailyValue);
+          standardizedBusinessTripDays = Math.ceil(finalBusinessTripAmount / maxDailyValue);
           
           // Passaggio 2: Calculate daily business trip rate
-          dailyBusinessTripRate = totalBusinessTripAmount / standardizedBusinessTripDays;
+          dailyBusinessTripRate = finalBusinessTripAmount / standardizedBusinessTripDays;
         }
 
         return {
