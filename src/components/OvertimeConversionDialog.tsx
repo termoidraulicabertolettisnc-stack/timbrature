@@ -40,15 +40,20 @@ export function OvertimeConversionDialog({
   }, [open, userId, month]);
 
   const loadCurrentCalculation = async () => {
+    console.log(`🔍 [OvertimeConversionDialog] Caricamento calcolo per utente ${userId}, mese ${month}`, {
+      originalOvertimeHours
+    });
+    
     try {
       const calc = await OvertimeConversionService.calculateConversionDetails(
         userId,
         month,
         originalOvertimeHours
       );
+      console.log(`📊 [OvertimeConversionDialog] Calcolo caricato:`, calc);
       setCalculation(calc);
     } catch (error) {
-      console.error('Error loading conversion calculation:', error);
+      console.error('❌ [OvertimeConversionDialog] Errore caricamento calcolo:', error);
     }
   };
 
@@ -57,9 +62,18 @@ export function OvertimeConversionDialog({
 
     const hours = parseFloat(manualHours) || 0;
     
+    console.log(`💾 [OvertimeConversionDialog] Tentativo salvataggio:`, {
+      userId,
+      month,
+      hours,
+      calculation
+    });
+    
     // Verifica che non si stia tentando di de-convertire più ore di quelle convertite
     if (calculation && hours < 0 && Math.abs(hours) > calculation.converted_hours) {
-      toast.error(`Non puoi de-convertire più di ${calculation.converted_hours.toFixed(2)} ore già convertite`);
+      const errorMsg = `Non puoi de-convertire più di ${calculation.converted_hours.toFixed(2)} ore già convertite`;
+      console.error(`❌ [OvertimeConversionDialog] ${errorMsg}`);
+      toast.error(errorMsg);
       return;
     }
 
@@ -73,15 +87,17 @@ export function OvertimeConversionDialog({
       );
 
       if (success) {
+        console.log(`✅ [OvertimeConversionDialog] Conversione salvata con successo`);
         toast.success('Conversione straordinari salvata con successo');
         onSuccess?.();
         onOpenChange(false);
         resetForm();
       } else {
+        console.error(`❌ [OvertimeConversionDialog] Errore salvataggio conversione`);
         toast.error('Errore nel salvataggio della conversione');
       }
     } catch (error) {
-      console.error('Error saving conversion:', error);
+      console.error('❌ [OvertimeConversionDialog] Errore salvataggio conversione:', error);
       toast.error('Errore nel salvataggio della conversione');
     } finally {
       setLoading(false);
@@ -89,12 +105,14 @@ export function OvertimeConversionDialog({
   };
 
   const resetForm = () => {
+    console.log(`🔄 [OvertimeConversionDialog] Reset form`);
     setManualHours('');
     setNotes('');
     setCalculation(null);
   };
 
   const handleClose = () => {
+    console.log(`❌ [OvertimeConversionDialog] Chiusura dialog`);
     onOpenChange(false);
     resetForm();
   };

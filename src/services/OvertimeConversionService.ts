@@ -153,6 +153,7 @@ export class OvertimeConversionService {
 
   /**
    * Apply manual conversion adjustment (positive for conversion, negative for de-conversion)
+   * CORREZIONE: Migliorata gestione errori e logging
    */
   static async applyManualConversion(
     userId: string, 
@@ -160,22 +161,48 @@ export class OvertimeConversionService {
     deltaHours: number, 
     notes?: string
   ): Promise<boolean> {
+    console.log(`🔄 [OvertimeConversion] Applicazione conversione manuale:`, {
+      userId,
+      month,
+      deltaHours,
+      notes
+    });
+
     try {
       const normalizedMonth = this.normalizeMonth(month);
       
       // Get or create conversion record
       const conversion = await this.getOrCreateConversion(userId, normalizedMonth);
-      if (!conversion) return false;
+      if (!conversion) {
+        console.error(`❌ [OvertimeConversion] Impossibile creare/trovare record conversione per ${userId}`);
+        return false;
+      }
 
       // Get conversion settings
       const settings = await this.getEffectiveConversionSettings(userId, normalizedMonth);
-      if (!settings?.enable_overtime_conversion) return false;
+      if (!settings?.enable_overtime_conversion) {
+        console.error(`❌ [OvertimeConversion] Conversione disabilitata per utente ${userId}`);
+        return false;
+      }
+
+      console.log(`📋 [OvertimeConversion] Stato corrente conversione:`, {
+        currentManualHours: conversion.manual_conversion_hours,
+        currentAutomaticHours: conversion.automatic_conversion_hours,
+        currentTotalHours: conversion.total_conversion_hours
+      });
 
       // Calculate new manual conversion hours (current + delta)
       const newManualHours = Math.max(0, conversion.manual_conversion_hours + deltaHours);
+      // CORREZIONE: total_conversion_hours è ora calcolato automaticamente dal database
       const newAmount = (conversion.automatic_conversion_hours + newManualHours) * settings.overtime_conversion_rate;
 
-      // Update the conversion record (exclude total_conversion_hours as it's a generated column)
+      console.log(`💾 [OvertimeConversion] Aggiornamento con:`, {
+        newManualHours,
+        newAmount,
+        calculatedFrom: `${conversion.automatic_conversion_hours} + ${newManualHours} * ${settings.overtime_conversion_rate}`
+      });
+
+      // Update the conversion record (exclude total_conversion_hours as it's now a generated column)
       const { error } = await supabase
         .from('employee_overtime_conversions')
         .update({
@@ -187,26 +214,38 @@ export class OvertimeConversionService {
         })
         .eq('id', conversion.id);
 
-      return !error;
+      if (error) {
+        console.error(`❌ [OvertimeConversion] Errore aggiornamento database:`, error);
+        return false;
+      }
+
+      console.log(`✅ [OvertimeConversion] Conversione applicata con successo per ${userId}`);
+      return true;
     } catch (error) {
-      console.error('Error applying manual conversion:', error);
+      console.error('❌ [OvertimeConversion] Errore applicazione conversione manuale:', error);
       return false;
     }
   }
 
   /**
    * Calculate conversion details for display
+   * CORREZIONE: Ora calcola correttamente i valori originali e attuali
    */
   static async calculateConversionDetails(
     userId: string,
     month: string,
-    currentOvertimeHours: number // Rinominato per chiarezza - sono gli straordinari attuali già ridotti
+    currentOvertimeHours: number // Straordinari attuali dopo le conversioni (valore ridotto)
   ): Promise<OvertimeConversionCalculation> {
+    console.log(`🔍 [OvertimeConversion] Calcolo dettagli per utente ${userId}, mese ${month}`, {
+      currentOvertimeHours
+    });
+
     const normalizedMonth = this.normalizeMonth(month);
     const settings = await this.getEffectiveConversionSettings(userId, normalizedMonth);
     const conversion = await this.getOrCreateConversion(userId, normalizedMonth);
 
     if (!settings?.enable_overtime_conversion || !conversion) {
+      console.log(`❌ [OvertimeConversion] Conversione disabilitata per utente ${userId}`);
       return {
         original_overtime_hours: currentOvertimeHours,
         converted_hours: 0,
@@ -217,17 +256,28 @@ export class OvertimeConversionService {
       };
     }
 
+    // CORREZIONE: La colonna total_conversion_hours è ora calcolata automaticamente dal database
     const totalConvertedHours = conversion.total_conversion_hours || 0;
     
-    // CORREZIONE: ricostruire il valore originale pre-conversioni
+    // CORREZIONE: Il valore originale è la somma degli straordinari attuali + ore già convertite
     const originalOvertimeHours = currentOvertimeHours + totalConvertedHours;
     const remainingOvertimeHours = currentOvertimeHours; // Quello che rimane ora
     const conversionAmount = totalConvertedHours * settings.overtime_conversion_rate;
 
-    let explanation = `${totalConvertedHours}h × ${settings.overtime_conversion_rate}€/h = ${conversionAmount.toFixed(2)}€`;
+    console.log(`📊 [OvertimeConversion] Calcoli per utente ${userId}:`, {
+      currentOvertimeHours,
+      totalConvertedHours,
+      originalOvertimeHours,
+      remainingOvertimeHours,
+      conversionAmount,
+      automaticHours: conversion.automatic_conversion_hours,
+      manualHours: conversion.manual_conversion_hours
+    });
+
+    let explanation = `${totalConvertedHours.toFixed(2)}h × ${settings.overtime_conversion_rate}€/h = ${conversionAmount.toFixed(2)}€`;
     
     if (conversion.automatic_conversion_hours > 0 && conversion.manual_conversion_hours > 0) {
-      explanation += ` (Auto: ${conversion.automatic_conversion_hours}h + Manuale: ${conversion.manual_conversion_hours}h)`;
+      explanation += ` (Auto: ${conversion.automatic_conversion_hours.toFixed(2)}h + Manuale: ${conversion.manual_conversion_hours.toFixed(2)}h)`;
     } else if (conversion.automatic_conversion_hours > 0) {
       explanation += ` (Conversione automatica)`;
     } else if (conversion.manual_conversion_hours > 0) {
@@ -235,7 +285,7 @@ export class OvertimeConversionService {
     }
 
     return {
-      original_overtime_hours: originalOvertimeHours, // Valore corretto ricostruito
+      original_overtime_hours: originalOvertimeHours,
       converted_hours: totalConvertedHours,
       remaining_overtime_hours: remainingOvertimeHours,
       conversion_amount: conversionAmount,

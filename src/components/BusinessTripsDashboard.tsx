@@ -650,14 +650,15 @@ const BusinessTripsDashboard = () => {
                           <TableCell className="text-right py-1"></TableCell>
                           <TableCell className="text-right py-1">€0.00</TableCell>
                           <TableCell className="py-1">
-                            {employee.totals.overtime > 0 && (
+                            {/* CORREZIONE: Mostra sempre il tasto se le conversioni sono abilitate o se ci sono già conversioni */}
+                            {(employee.totals.overtime > 0 || employee.overtime_conversions.hours > 0) && (
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleOvertimeConversion(
                                   employee.employee_id,
                                   employee.employee_name,
-                                  employee.totals.overtime + employee.overtime_conversions.hours
+                                  employee.totals.overtime // CORREZIONE: Passa solo gli straordinari attuali (già ridotti)
                                 )}
                               >
                                 Conversioni
