@@ -6,13 +6,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Calendar, Download, Users, MapPin, TrendingDown } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
 import { distributeConvertedOvertime, applyOvertimeDistribution } from '@/utils/overtimeDistribution';
 import * as ExcelJS from 'exceljs';
-import { calculateMealBenefits } from '@/utils/mealBenefitsCalculator';
 
 interface BusinessTripData {
   employee_id: string;
@@ -221,8 +219,10 @@ const BusinessTripsDashboard = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `trasferte-${monthName.replace(' ', '-')}.xlsx`;
+    a.download = `trasferte-${monthName.replace(/\s+/g, '-')}.xlsx`;
+    document.body.appendChild(a);
     a.click();
+    a.remove();
     window.URL.revokeObjectURL(url);
   };
 
@@ -233,11 +233,21 @@ const BusinessTripsDashboard = () => {
       const startDate = `${year}-${month}-01`;
       const endDate = `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`;
 
-      // Get all employees in the company first
+      // CRITICAL FIX: Get user's company first to ensure multi-tenant security
+      const { data: me, error: meError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('user_id', user!.id)
+        .single();
+
+      if (meError) throw meError;
+
+      // Get only employees in the current user's company
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('user_id, first_name, last_name, company_id')
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .eq('company_id', me!.company_id);
 
       if (profilesError) throw profilesError;
 
@@ -270,15 +280,6 @@ const BusinessTripsDashboard = () => {
 
       if (absenceError) throw absenceError;
 
-      // Get employee settings for business trip calculation
-      const { data: employeeSettings, error: settingsError } = await supabase
-        .from('employee_settings')
-        .select('*')
-        .in('user_id', userIds)
-        .order('updated_at', { ascending: false });
-
-      if (settingsError) throw settingsError;
-
       // Get company settings for default values
       const { data: companySettings, error: companySettingsError } = await supabase
         .from('company_settings')
@@ -286,6 +287,17 @@ const BusinessTripsDashboard = () => {
         .in('company_id', profiles.map(p => p.company_id));
 
       if (companySettingsError) throw companySettingsError;
+
+      // CRITICAL FIX: Process automatic conversions once for the entire company
+      await OvertimeConversionService.processAutomaticConversions(selectedMonth, me!.company_id);
+
+      // Import temporal functions once outside the loop for performance
+      const [{ getEmployeeSettingsForDate }, { calculateMealBenefitsTemporal }, { BenefitsService }] = 
+        await Promise.all([
+          import('@/utils/temporalEmployeeSettings'),
+          import('@/utils/mealBenefitsCalculator'),
+          import('@/services/BenefitsService'),
+        ]);
 
       // Process data by employee using temporal settings
       const processedData: BusinessTripData[] = await Promise.all(profiles.map(async (profile) => {
@@ -325,7 +337,6 @@ const BusinessTripsDashboard = () => {
           const isSaturday = date.getDay() === 6;
           
           // Get temporal employee settings for this specific date
-          const { getEmployeeSettingsForDate } = await import('@/utils/temporalEmployeeSettings');
           const temporalSettings = await getEmployeeSettingsForDate(ts.user_id, ts.date);
           
           // Use temporal settings or fallback to company defaults
@@ -346,7 +357,6 @@ const BusinessTripsDashboard = () => {
           }
           
           // Calculate meal benefits using temporal calculation
-          const { calculateMealBenefitsTemporal } = await import('@/utils/mealBenefitsCalculator');
           const mealBenefits = await calculateMealBenefitsTemporal(
             ts,
             temporalSettings ? {
@@ -377,7 +387,8 @@ const BusinessTripsDashboard = () => {
             defaultMealVoucherAmount = temporalMealVoucherAmount;
           }
           
-          const ordinary = Math.max(0, (ts.total_hours || 0) - overtime);
+          // CRITICAL FIX: If it's a business trip, ordinary hours should be 0
+          const ordinary = isBusinessTrip ? 0 : Math.max(0, (ts.total_hours || 0) - overtime);
           
           dailyData[dayKey].ordinary = ordinary;
           dailyData[dayKey].overtime = overtime;
@@ -409,10 +420,7 @@ const BusinessTripsDashboard = () => {
         let overtimeConversionAmount = 0;
         
         try {
-          // First, process automatic conversions for this user if needed
-          await OvertimeConversionService.processUserAutomaticConversion(profile.user_id, selectedMonth);
-          
-          // Then get the conversion details (now including any automatic conversions)
+          // PERFORMANCE FIX: Only get conversion details (automatic conversions already processed above)
           const conversionCalc = await OvertimeConversionService.calculateConversionDetails(
             profile.user_id,
             selectedMonth,
@@ -564,9 +572,7 @@ const BusinessTripsDashboard = () => {
         
         // If we had to constrain the business trip days, we need to proportionally adjust the total hours
         if (finalBusinessTripAmount > 0 && standardizedBusinessTripDays > 0) {
-          // Calculate the original unconstrained days for comparison
-          const { BenefitsService } = await import('@/services/BenefitsService');
-          const { getEmployeeSettingsForDate } = await import('@/utils/temporalEmployeeSettings');
+          // Calculate the original unconstrained days for comparison (using already imported functions)
           
           const temporalSettings = await getEmployeeSettingsForDate(profile.user_id, `${selectedMonth}-01`);
           const testTimesheet = employeeTimesheets.find(ts => {
@@ -784,7 +790,7 @@ const BusinessTripsDashboard = () => {
               <Table className="text-xs min-w-fit">
                 <TableHeader className="sticky top-0 bg-background z-20">
                   <TableRow>
-                    <TableHead className="sticky left-0 bg-background z-30 w-40 min-w-40 text-xs font-medium border-r">
+                    <TableHead className="sticky left-0 bg-background z-30 w-40 min-w-[10rem] text-xs font-medium border-r">
                       Dipendente
                     </TableHead>
                     {Array.from({ length: getDaysInMonth() }, (_, i) => {
@@ -799,7 +805,7 @@ const BusinessTripsDashboard = () => {
                       return (
                         <TableHead 
                           key={day} 
-                          className={`text-center w-9 min-w-9 text-xs font-medium px-1 ${
+                          className={`text-center w-9 min-w-[2.25rem] text-xs font-medium px-1 ${
                             isHol || isSun ? 'bg-red-50' : ''
                           } ${dayOfWeek === 6 ? 'bg-orange-50' : ''}`}
                         >
@@ -810,12 +816,12 @@ const BusinessTripsDashboard = () => {
                         </TableHead>
                       );
                     })}
-                    <TableHead className="text-center w-10 min-w-10 text-xs font-medium bg-gray-50 border-l px-1">Tot</TableHead>
-                    <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-yellow-50 px-1">Buoni</TableHead>
+                     <TableHead className="text-center w-10 min-w-[2.5rem] text-xs font-medium bg-gray-50 border-l px-1">Tot</TableHead>
+                     <TableHead className="text-center w-12 min-w-[3rem] text-xs font-medium bg-yellow-50 px-1">Buoni</TableHead>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <TableHead className="text-center w-16 min-w-16 text-xs font-medium bg-orange-50 px-1">Imp. Tot.</TableHead>
+                          <TableHead className="text-center w-16 min-w-[4rem] text-xs font-medium bg-orange-50 px-1">Imp. Tot.</TableHead>
                         </TooltipTrigger>
                         <TooltipContent>
                           <p>Importo totale trasferte</p>
@@ -825,7 +831,7 @@ const BusinessTripsDashboard = () => {
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-orange-50 px-1">Gg Tr.</TableHead>
+                          <TableHead className="text-center w-12 min-w-[3rem] text-xs font-medium bg-orange-50 px-1">Gg Tr.</TableHead>
                         </TooltipTrigger>
                         <TooltipContent>
                           <p>Giorni trasferta normalizzati</p>
@@ -835,7 +841,7 @@ const BusinessTripsDashboard = () => {
                      <TooltipProvider>
                        <Tooltip>
                          <TooltipTrigger asChild>
-                           <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-orange-50 px-1">€/G</TableHead>
+                           <TableHead className="text-center w-12 min-w-[3rem] text-xs font-medium bg-orange-50 px-1">€/G</TableHead>
                          </TooltipTrigger>
                          <TooltipContent>
                            <p>Importo giornaliero trasferte</p>
@@ -845,7 +851,7 @@ const BusinessTripsDashboard = () => {
                      <TooltipProvider>
                        <Tooltip>
                          <TooltipTrigger asChild>
-                           <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-green-50 px-1">Conv.</TableHead>
+                           <TableHead className="text-center w-12 min-w-[3rem] text-xs font-medium bg-green-50 px-1">Conv.</TableHead>
                          </TooltipTrigger>
                          <TooltipContent>
                            <p>Gestione conversioni straordinari</p>
@@ -897,6 +903,7 @@ const BusinessTripsDashboard = () => {
                       <TableCell className="text-center text-xs p-1 bg-orange-50">-</TableCell>
                       <TableCell className="text-center text-xs p-1 bg-orange-50">-</TableCell>
                       <TableCell className="text-center text-xs p-1 bg-orange-50">-</TableCell>
+                      <TableCell className="text-center text-xs p-1 bg-green-50">-</TableCell>
                     </TableRow>
 
                     {/* Overtime Hours Row */}
