@@ -573,10 +573,10 @@ const BusinessTripsDashboard = () => {
                   <TableBody>
                     {businessTripData.map((employee) => (
                       <React.Fragment key={employee.employee_id}>
-                        {/* Ordinary hours row */}
+                         {/* Ordinary hours row */}
                         <TableRow>
                           <TableCell className="font-medium py-1">{employee.employee_name}</TableCell>
-                          <TableCell className="text-sm text-blue-600 py-1">Ordinarie</TableCell>
+                          <TableCell className="text-sm text-blue-600 py-1">O</TableCell>
                           {Array.from({ length: getDaysInMonth() }, (_, i) => {
                             const dayKey = String(i + 1).padStart(2, '0');
                             const ordinary = employee.daily_data[dayKey]?.ordinary || 0;
@@ -608,7 +608,7 @@ const BusinessTripsDashboard = () => {
                         {/* Overtime hours row */}
                         <TableRow>
                           <TableCell className="py-1"></TableCell>
-                          <TableCell className="text-sm text-amber-600 py-1">Straordinarie</TableCell>
+                          <TableCell className="text-sm text-amber-600 py-1">S</TableCell>
                           {Array.from({ length: getDaysInMonth() }, (_, i) => {
                             const dayKey = String(i + 1).padStart(2, '0');
                             const overtime = employee.daily_data[dayKey]?.overtime || 0;
@@ -682,7 +682,7 @@ const BusinessTripsDashboard = () => {
                         {employee.saturday_trips.hours > 0 && (
                           <TableRow className="bg-orange-50">
                             <TableCell className="py-1"></TableCell>
-                            <TableCell className="text-sm font-medium text-orange-700 py-1">TS - Trasferte Sabato</TableCell>
+                            <TableCell className="text-sm font-medium text-orange-700 py-1">TS</TableCell>
                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
                               const dayKey = String(i + 1).padStart(2, '0');
                               const hours = employee.saturday_trips.daily_data[dayKey] || 0;
@@ -713,7 +713,7 @@ const BusinessTripsDashboard = () => {
                         {employee.daily_allowances.days > 0 && (
                           <TableRow className="bg-blue-50">
                             <TableCell className="py-1"></TableCell>
-                            <TableCell className="text-sm font-medium text-blue-700 py-1">TI - Trasferte Indennità</TableCell>
+                            <TableCell className="text-sm font-medium text-blue-700 py-1">TI</TableCell>
                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
                               const dayKey = String(i + 1).padStart(2, '0');
                               const hasAllowance = employee.daily_allowances.daily_data[dayKey];
@@ -744,17 +744,24 @@ const BusinessTripsDashboard = () => {
                         {employee.overtime_conversions.hours > 0 && (
                           <TableRow className="bg-green-50">
                             <TableCell className="py-1"></TableCell>
-                            <TableCell className="text-sm font-medium text-green-700 py-1">CS - Conversioni Straordinari</TableCell>
+                            <TableCell className="text-sm font-medium text-green-700 py-1">CS</TableCell>
                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                              const dayKey = String(i + 1).padStart(2, '0');
                               const { isSunday, isSaturday } = getDateInfo(i + 1);
+                              // Calculate proportional conversion hours for this day
+                              const dayOvertimeHours = employee.daily_data[dayKey]?.overtime || 0;
+                              const totalOvertimeHours = employee.totals.overtime + employee.overtime_conversions.hours; // Original total before conversion
+                              const conversionHours = totalOvertimeHours > 0 && employee.overtime_conversions.hours > 0
+                                ? (dayOvertimeHours / totalOvertimeHours) * employee.overtime_conversions.hours
+                                : 0;
                               return (
                                 <TableCell 
                                   key={i + 1} 
-                                  className={`text-center text-xs py-1 px-1 ${
+                                  className={`text-center text-xs font-medium py-1 px-1 ${
                                     isSunday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-green-50'
                                   }`}
                                 >
-                                  {/* Removed "Mensile" text */}
+                                  {conversionHours > 0 ? conversionHours.toFixed(1) : ''}
                                 </TableCell>
                               );
                             })}
@@ -773,7 +780,7 @@ const BusinessTripsDashboard = () => {
                         {employee.meal_voucher_conversions.days > 0 && (
                           <TableRow className="bg-purple-50">
                             <TableCell className="py-1"></TableCell>
-                            <TableCell className="text-sm font-medium text-purple-700 py-1">CB - Conversioni Buoni Pasto</TableCell>
+                            <TableCell className="text-sm font-medium text-purple-700 py-1">CB</TableCell>
                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
                               const dayKey = String(i + 1).padStart(2, '0');
                               const isConverted = employee.meal_voucher_conversions.daily_data[dayKey];
@@ -821,6 +828,21 @@ const BusinessTripsDashboard = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
+            {/* Work type abbreviations */}
+            <div>
+              <h4 className="text-sm font-medium mb-2">Tipologie di Ore</h4>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-blue-200 rounded"></div>
+                  <span><strong>O</strong> - Ore Ordinarie</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-amber-200 rounded"></div>
+                  <span><strong>S</strong> - Ore Straordinarie</span>
+                </div>
+              </div>
+            </div>
+
             {/* Business trip types */}
             <div>
               <h4 className="text-sm font-medium mb-2">Tipologie di Trasferte</h4>
