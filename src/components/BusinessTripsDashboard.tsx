@@ -918,7 +918,7 @@ const BusinessTripsDashboard = () => {
                                size="sm"
                                onClick={() => handleMassConversion(employee.employee_id, employee.employee_name, employee.company_id)}
                              >
-                               Conversione Massiva
+                               Conversioni
                              </Button>
                            </TableCell>
                         </TableRow>
