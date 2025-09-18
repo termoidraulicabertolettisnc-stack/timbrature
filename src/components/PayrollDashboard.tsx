@@ -230,13 +230,45 @@ export default function PayrollDashboard() {
           absenceTotals[absenceType] += abs.hours || 8;
         });
 
+        // Apply overtime conversions (sync with BusinessTripsDashboard)
+        let finalOvertimeTotal = totalOvertime;
+        let finalDailyData = { ...dailyData };
+        
+        try {
+          const conversionCalc = await OvertimeConversionService.calculateConversionDetails(
+            profile.user_id,
+            selectedMonth,
+            totalOvertime,
+          );
+          
+          if (conversionCalc.converted_hours > 0) {
+            // Apply overtime distribution to daily data
+            const dailyDataForDistribution: { [day: string]: { ordinary: number; overtime: number; absence: string | null } } = {};
+            Object.keys(dailyData).forEach(day => {
+              dailyDataForDistribution[day] = {
+                ordinary: dailyData[day].ordinary,
+                overtime: dailyData[day].overtime,
+                absence: dailyData[day].absence
+              };
+            });
+            
+            const distributions = distributePayrollOvertime(dailyDataForDistribution, conversionCalc.converted_hours);
+            finalDailyData = applyPayrollOvertimeDistribution(dailyDataForDistribution, distributions);
+            
+            // Recalculate total overtime after conversions
+            finalOvertimeTotal = Object.values(finalDailyData).reduce((sum, data) => sum + (data.overtime || 0), 0);
+          }
+        } catch (error) {
+          console.error('Error applying overtime conversions for employee:', profile.user_id, error);
+        }
+
         return {
           employee_id: profile.user_id,
           employee_name: `${profile.first_name} ${profile.last_name}`,
-          daily_data: dailyData,
+          daily_data: finalDailyData,
           totals: { 
             ordinary: totalOrdinary ?? 0, 
-            overtime: totalOvertime ?? 0,
+            overtime: finalOvertimeTotal ?? 0,
             absence_totals: absenceTotals ?? {} 
           },
           meal_vouchers: mealVoucherDays ?? 0,
@@ -244,9 +276,8 @@ export default function PayrollDashboard() {
         };
       }));
 
-      // I timesheets sono già stati aggiornati dal TimesheetOvertimeDistributionService
-      // Non serve applicare nuovamente la distribuzione qui nel PayrollDashboard
-      // I dati sono già corretti dal database
+      // Overtime conversions are now applied per employee during processing
+      // This ensures synchronization with BusinessTripsDashboard
 
       setPayrollData(processedData);
     } catch (error) {
