@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -62,9 +64,22 @@ export default function AdminEmployees() {
   const loadEmployees = async () => {
     setLoading(true);
     try {
+      // Get current user's company first
+      const { data: me, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+        .single();
+
+      if (profileError || !me?.company_id) {
+        throw new Error('Impossibile determinare l\'azienda di appartenenza');
+      }
+
+      // Load only employees from the same company
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
+        .eq('company_id', me.company_id)
         .order('first_name');
 
       if (error) throw error;
@@ -93,56 +108,29 @@ export default function AdminEmployees() {
     }
 
     try {
-      // Get current user's company
-      const { data: currentProfile, error: profileError } = await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
-        .single();
-
-      if (profileError || !currentProfile?.company_id) {
-        throw new Error('Impossibile determinare l\'azienda di appartenenza');
-      }
-
-      // Generate a temporary password
-      const tempPassword = Math.random().toString(36).slice(-12) + 'A1!';
-      
-      // Create user account
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: tempPassword,
-        options: {
-          data: {
-            first_name: formData.first_name,
-            last_name: formData.last_name
-          }
+      // Call secure edge function to create employee
+      const response = await supabase.functions.invoke('create-employee', {
+        body: {
+          email: formData.email,
+          first_name: formData.first_name,
+          last_name: formData.last_name,
+          role: formData.role,
+          is_active: formData.is_active
         }
       });
 
-      if (authError) throw authError;
+      if (response.error) {
+        throw new Error(response.error);
+      }
 
-      if (authData.user) {
-        // Update the profile that was created by the trigger
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({
-            first_name: formData.first_name,
-            last_name: formData.last_name,
-            role: formData.role,
-            is_active: formData.is_active,
-            company_id: currentProfile.company_id
-          })
-          .eq('user_id', authData.user.id);
-
-        if (updateError) {
-          console.warn('Profile update error:', updateError);
-        }
+      const result = response.data;
+      if (!result.success) {
+        throw new Error(result.error || 'Errore sconosciuto');
       }
 
       toast({
         title: "Successo",
-        description: `Dipendente aggiunto con successo. Invia la password temporanea: ${tempPassword}`,
-        duration: 10000,
+        description: result.message || "Dipendente creato con successo. È stata inviata un'email di invito.",
       });
 
       setIsAddDialogOpen(false);
@@ -254,10 +242,11 @@ export default function AdminEmployees() {
   };
 
   const filteredEmployees = employees.filter(employee => {
+    const safe = (v?: string) => (v ?? '').toLowerCase();
     const matchesSearch = 
-      employee.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.email.toLowerCase().includes(searchTerm.toLowerCase());
+      safe(employee.first_name).includes(safe(searchTerm)) ||
+      safe(employee.last_name).includes(safe(searchTerm)) ||
+      safe(employee.email).includes(safe(searchTerm));
     
     const matchesRole = roleFilter === 'all' || employee.role === roleFilter;
     const matchesStatus = statusFilter === 'all' || 
@@ -501,7 +490,9 @@ export default function AdminEmployees() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {format(parseISO(employee.created_at), 'dd/MM/yyyy', { locale: it })}
+                        {employee.created_at
+                          ? format(parseISO(employee.created_at), 'dd/MM/yyyy', { locale: it })
+                          : '—'}
                       </TableCell>
                        <TableCell>
                          <div className="flex gap-2">
