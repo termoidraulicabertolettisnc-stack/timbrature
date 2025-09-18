@@ -832,35 +832,44 @@ const BusinessTripsDashboard = () => {
                         )}
 
                         {/* Meal voucher conversions row */}
-                        {employee.meal_voucher_conversions.days > 0 && (
-                          <TableRow className="bg-purple-50">
-                            <TableCell className="py-1"></TableCell>
-                            <TableCell className="text-sm font-medium text-purple-700 py-1">CB</TableCell>
-                            {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                              const dayKey = String(i + 1).padStart(2, '0');
-                              const isConverted = employee.meal_voucher_conversions.daily_data[dayKey];
-                               const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
-                               return (
-                                 <TableCell 
-                                   key={i + 1} 
-                                   className={`text-center text-xs font-medium py-1 px-1 ${
-                                     isSunday || isHoliday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-purple-50'
-                                   }`}
-                                 >
-                                   {isConverted ? 'CB' : ''}
-                                 </TableCell>
-                               );
-                            })}
-                            <TableCell className="text-right font-bold text-purple-700 py-1">
-                              {employee.meal_voucher_conversions.days}
-                            </TableCell>
-                            <TableCell className="text-right py-1"></TableCell>
-                            <TableCell className="text-right font-bold text-purple-700 py-1">
-                              €{employee.meal_voucher_conversions.amount.toFixed(2)}
-                            </TableCell>
-                            <TableCell className="py-1"></TableCell>
-                          </TableRow>
-                        )}
+                        <TableRow className="bg-purple-50">
+                          <TableCell className="py-1"></TableCell>
+                          <TableCell className="text-sm font-medium text-purple-700 py-1">CB</TableCell>
+                          {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                            const dayKey = String(i + 1).padStart(2, '0');
+                            const hasWorkedHours = (employee.daily_data[dayKey]?.ordinary || 0) > 0 || (employee.daily_data[dayKey]?.overtime || 0) > 0;
+                            const isConverted = employee.meal_voucher_conversions.daily_data[dayKey];
+                            const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                            return (
+                              <TableCell 
+                                key={i + 1} 
+                                className={`text-center text-xs py-1 px-1 ${
+                                  isSunday || isHoliday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-purple-50'
+                                }`}
+                              >
+                                {hasWorkedHours && (
+                                  <DayConversionToggle
+                                    userId={employee.employee_id}
+                                    userName={employee.employee_name}
+                                    date={`${selectedMonth.split('-')[0]}-${selectedMonth.split('-')[1]}-${dayKey}`}
+                                    companyId={employee.company_id}
+                                    isConverted={isConverted}
+                                    onConversionUpdated={fetchBusinessTripData}
+                                    size="sm"
+                                  />
+                                )}
+                              </TableCell>
+                            );
+                          })}
+                          <TableCell className="text-right font-bold text-purple-700 py-1">
+                            {employee.meal_voucher_conversions.days}
+                          </TableCell>
+                          <TableCell className="text-right py-1"></TableCell>
+                          <TableCell className="text-right font-bold text-purple-700 py-1">
+                            €{employee.meal_voucher_conversions.amount.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="py-1"></TableCell>
+                        </TableRow>
 
                         {/* Separator row */}
                         <TableRow>
