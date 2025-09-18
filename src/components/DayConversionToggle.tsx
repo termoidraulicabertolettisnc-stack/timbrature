@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
+import React, { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Receipt, DollarSign } from 'lucide-react';
 import { MealVoucherConversionDialog } from './MealVoucherConversionDialog';
+import { MealVoucherConversionService } from '@/services/MealVoucherConversionService';
 
 interface DayConversionToggleProps {
   userId: string;
@@ -24,35 +24,67 @@ export function DayConversionToggle({
   size = 'default'
 }: DayConversionToggleProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [conversionValue, setConversionValue] = useState<number>(0);
+
+  useEffect(() => {
+    const loadConversionValue = async () => {
+      try {
+        const conversion = await MealVoucherConversionService.getConversionForDate(userId, date);
+        if (conversion && conversion.converted_to_allowance) {
+          // Assuming 1 meal voucher conversion = 1 unit, but this could be configurable
+          setConversionValue(1);
+        } else {
+          setConversionValue(0);
+        }
+      } catch (error) {
+        console.error('Error loading conversion value:', error);
+        setConversionValue(0);
+      }
+    };
+
+    loadConversionValue();
+  }, [userId, date, isConverted]);
+
+  const handleCellClick = () => {
+    setDialogOpen(true);
+  };
+
+  const handleConversionUpdated = () => {
+    if (onConversionUpdated) {
+      onConversionUpdated();
+    }
+    // Reload the conversion value
+    const loadConversionValue = async () => {
+      try {
+        const conversion = await MealVoucherConversionService.getConversionForDate(userId, date);
+        if (conversion && conversion.converted_to_allowance) {
+          setConversionValue(1);
+        } else {
+          setConversionValue(0);
+        }
+      } catch (error) {
+        console.error('Error loading conversion value:', error);
+        setConversionValue(0);
+      }
+    };
+    loadConversionValue();
+  };
 
   return (
     <>
-      <Button
-        variant={isConverted ? "default" : "outline"}
-        size={size}
-        onClick={() => setDialogOpen(true)}
+      <div
+        onClick={handleCellClick}
         className={`
-          flex items-center gap-1 transition-all duration-150 font-normal
-          ${isConverted 
-            ? 'bg-green-500 hover:bg-green-600 text-white shadow-sm hover:shadow-md border-0' 
-            : 'bg-blue-50 hover:bg-blue-100 border border-blue-200 hover:border-blue-300 text-blue-600 hover:text-blue-700'
+          w-full h-full min-h-[24px] flex items-center justify-center cursor-pointer
+          transition-colors duration-150 text-xs font-medium
+          ${conversionValue > 0 
+            ? 'text-green-700 hover:bg-green-50' 
+            : 'text-gray-400 hover:bg-gray-50'
           }
-          ${size === 'sm' ? 'px-1.5 py-0.5 text-xs' : 'px-2 py-1 text-xs'}
-          rounded-md hover:scale-[1.02]
         `}
       >
-        {isConverted ? (
-          <>
-            <DollarSign className={`${size === 'sm' ? 'h-3 w-3' : 'h-4 w-4'} drop-shadow-sm`} />
-            {size === 'sm' ? 'IND' : 'Indennità'}
-          </>
-        ) : (
-          <>
-            <Receipt className={`${size === 'sm' ? 'h-3 w-3' : 'h-4 w-4'}`} />
-            {size === 'sm' ? 'BP' : 'Buono Pasto'}
-          </>
-        )}
-      </Button>
+        {conversionValue > 0 ? conversionValue : ''}
+      </div>
 
       <MealVoucherConversionDialog
         open={dialogOpen}
@@ -61,7 +93,7 @@ export function DayConversionToggle({
         userName={userName}
         date={date}
         companyId={companyId}
-        onConversionUpdated={onConversionUpdated}
+        onConversionUpdated={handleConversionUpdated}
       />
     </>
   );
