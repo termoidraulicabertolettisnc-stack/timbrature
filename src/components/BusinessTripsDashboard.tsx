@@ -55,6 +55,7 @@ const BusinessTripsDashboard = () => {
   const { toast } = useToast();
   const [businessTripData, setBusinessTripData] = useState<BusinessTripData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [holidays, setHolidays] = useState<string[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -82,7 +83,9 @@ const BusinessTripsDashboard = () => {
     const dayName = date.toLocaleDateString('it-IT', { weekday: 'short' });
     const isSunday = date.getDay() === 0;
     const isSaturday = date.getDay() === 6;
-    return { dayName, isSunday, isSaturday };
+    const dateString = `${year}-${month.padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const isHoliday = holidays.includes(dateString);
+    return { dayName, isSunday, isSaturday, isHoliday };
   };
 
   const fetchBusinessTripData = async () => {
@@ -113,6 +116,21 @@ const BusinessTripsDashboard = () => {
         .eq('user_id', user!.id)
         .single();
       if (meError) throw meError;
+
+      // Fetch holidays for the selected month
+      const { data: holidayData, error: holidayError } = await supabase
+        .from('company_holidays')
+        .select('date')
+        .eq('company_id', me!.company_id)
+        .gte('date', startDate)
+        .lte('date', endDate);
+      
+      if (holidayError) {
+        console.warn('Error fetching holidays:', holidayError);
+      }
+      
+      const holidayDates = holidayData?.map(h => h.date) || [];
+      setHolidays(holidayDates);
 
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
@@ -528,12 +546,12 @@ const BusinessTripsDashboard = () => {
                       <TableHead className="min-w-[180px] py-2">Dipendente</TableHead>
                       <TableHead className="min-w-[100px] py-2">Tipo</TableHead>
                       {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                        const { isSunday, isSaturday } = getDateInfo(i + 1);
+                        const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
                         return (
                           <TableHead 
                             key={i + 1} 
                             className={`w-7 text-center text-xs py-1 px-1 ${
-                              isSunday ? 'bg-red-100 text-red-700' : 
+                              isSunday || isHoliday ? 'bg-red-100 text-red-700' : 
                               isSaturday ? 'bg-orange-100 text-orange-700' : ''
                             }`}
                           >
@@ -551,12 +569,12 @@ const BusinessTripsDashboard = () => {
                       <TableHead className="py-1"></TableHead>
                       <TableHead className="py-1"></TableHead>
                       {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                        const { dayName, isSunday, isSaturday } = getDateInfo(i + 1);
+                        const { dayName, isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
                         return (
                           <TableHead 
                             key={i + 1} 
                             className={`w-7 text-center text-xs py-1 px-1 ${
-                              isSunday ? 'bg-red-100 text-red-700' : 
+                              isSunday || isHoliday ? 'bg-red-100 text-red-700' : 
                               isSaturday ? 'bg-orange-100 text-orange-700' : ''
                             }`}
                           >
@@ -580,17 +598,17 @@ const BusinessTripsDashboard = () => {
                           {Array.from({ length: getDaysInMonth() }, (_, i) => {
                             const dayKey = String(i + 1).padStart(2, '0');
                             const ordinary = employee.daily_data[dayKey]?.ordinary || 0;
-                            const { isSunday, isSaturday } = getDateInfo(i + 1);
-                            return (
-                              <TableCell 
-                                key={i + 1} 
-                                className={`text-center text-xs py-1 px-1 ${
-                                  isSunday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
-                                }`}
-                              >
-                                {ordinary > 0 ? ordinary.toFixed(1) : ''}
-                              </TableCell>
-                            );
+                             const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                             return (
+                               <TableCell 
+                                 key={i + 1} 
+                                 className={`text-center text-xs py-1 px-1 ${
+                                   isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                 }`}
+                               >
+                                 {ordinary > 0 ? ordinary.toFixed(1) : ''}
+                               </TableCell>
+                             );
                           })}
                           <TableCell className="text-right font-medium py-1">
                             {employee.totals.ordinary.toFixed(1)}
@@ -618,12 +636,12 @@ const BusinessTripsDashboard = () => {
                                ? (originalOvertime / originalTotalOvertimeHours) * employee.overtime_conversions.hours
                                : 0;
                              const reducedOvertime = Math.max(0, originalOvertime - proportionalConversion);
-                             const { isSunday, isSaturday } = getDateInfo(i + 1);
+                             const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
                              return (
                                <TableCell 
                                  key={i + 1} 
                                  className={`text-center text-xs py-1 px-1 ${
-                                   isSunday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                   isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
                                  }`}
                                >
                                  {reducedOvertime > 0 ? reducedOvertime.toFixed(1) : ''}
@@ -662,17 +680,17 @@ const BusinessTripsDashboard = () => {
                               {Array.from({ length: getDaysInMonth() }, (_, i) => {
                                 const dayKey = String(i + 1).padStart(2, '0');
                                 const absence = employee.daily_data[dayKey]?.absence;
-                                const { isSunday, isSaturday } = getDateInfo(i + 1);
-                                return (
-                                  <TableCell 
-                                    key={i + 1} 
-                                    className={`text-center text-xs py-1 px-1 ${
-                                      isSunday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
-                                    }`}
-                                  >
-                                    {absence === absenceType ? absence.charAt(0).toUpperCase() : ''}
-                                  </TableCell>
-                                );
+                                 const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                                 return (
+                                   <TableCell 
+                                     key={i + 1} 
+                                     className={`text-center text-xs py-1 px-1 ${
+                                       isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                     }`}
+                                   >
+                                     {absence === absenceType ? absence.charAt(0).toUpperCase() : ''}
+                                   </TableCell>
+                                 );
                               })}
                               <TableCell className="text-right font-medium py-1">
                                 {hours.toFixed(1)}
@@ -692,17 +710,17 @@ const BusinessTripsDashboard = () => {
                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
                               const dayKey = String(i + 1).padStart(2, '0');
                               const hours = employee.saturday_trips.daily_data[dayKey] || 0;
-                              const { isSunday, isSaturday } = getDateInfo(i + 1);
-                              return (
-                                <TableCell 
-                                  key={i + 1} 
-                                  className={`text-center text-xs font-medium py-1 px-1 ${
-                                    isSunday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-orange-50'
-                                  }`}
-                                >
-                                  {hours > 0 ? hours.toFixed(1) : ''}
-                                </TableCell>
-                              );
+                               const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                               return (
+                                 <TableCell 
+                                   key={i + 1} 
+                                   className={`text-center text-xs font-medium py-1 px-1 ${
+                                     isSunday || isHoliday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-orange-50'
+                                   }`}
+                                 >
+                                   {hours > 0 ? hours.toFixed(1) : ''}
+                                 </TableCell>
+                               );
                             })}
                             <TableCell className="text-right font-bold text-orange-700 py-1">
                               {employee.saturday_trips.hours.toFixed(1)}
@@ -723,17 +741,17 @@ const BusinessTripsDashboard = () => {
                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
                               const dayKey = String(i + 1).padStart(2, '0');
                               const hasAllowance = employee.daily_allowances.daily_data[dayKey];
-                              const { isSunday, isSaturday } = getDateInfo(i + 1);
-                              return (
-                                <TableCell 
-                                  key={i + 1} 
-                                  className={`text-center text-xs font-medium py-1 px-1 ${
-                                    isSunday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-blue-50'
-                                  }`}
-                                >
-                                  {hasAllowance ? 'TI' : ''}
-                                </TableCell>
-                              );
+                               const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                               return (
+                                 <TableCell 
+                                   key={i + 1} 
+                                   className={`text-center text-xs font-medium py-1 px-1 ${
+                                     isSunday || isHoliday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-blue-50'
+                                   }`}
+                                 >
+                                   {hasAllowance ? 'TI' : ''}
+                                 </TableCell>
+                               );
                             })}
                             <TableCell className="text-right font-bold text-blue-700 py-1">
                               {employee.daily_allowances.days}
@@ -753,7 +771,7 @@ const BusinessTripsDashboard = () => {
                             <TableCell className="text-sm font-medium text-green-700 py-1">CS</TableCell>
                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
                               const dayKey = String(i + 1).padStart(2, '0');
-                              const { isSunday, isSaturday } = getDateInfo(i + 1);
+                              const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
                                // Calculate proportional conversion hours for this day based on original overtime
                                const originalDayOvertimeHours = employee.daily_data[dayKey]?.overtime || 0;
                                const originalTotalOvertimeHours = employee.totals.overtime + employee.overtime_conversions.hours; // Original total before conversion
@@ -764,7 +782,7 @@ const BusinessTripsDashboard = () => {
                                 <TableCell 
                                   key={i + 1} 
                                   className={`text-center text-xs font-medium py-1 px-1 ${
-                                    isSunday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-green-50'
+                                    isSunday || isHoliday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-green-50'
                                   }`}
                                 >
                                   {conversionHours > 0 ? conversionHours.toFixed(1) : ''}
@@ -790,17 +808,17 @@ const BusinessTripsDashboard = () => {
                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
                               const dayKey = String(i + 1).padStart(2, '0');
                               const isConverted = employee.meal_voucher_conversions.daily_data[dayKey];
-                              const { isSunday, isSaturday } = getDateInfo(i + 1);
-                              return (
-                                <TableCell 
-                                  key={i + 1} 
-                                  className={`text-center text-xs font-medium py-1 px-1 ${
-                                    isSunday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-purple-50'
-                                  }`}
-                                >
-                                  {isConverted ? 'CB' : ''}
-                                </TableCell>
-                              );
+                               const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                               return (
+                                 <TableCell 
+                                   key={i + 1} 
+                                   className={`text-center text-xs font-medium py-1 px-1 ${
+                                     isSunday || isHoliday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-purple-50'
+                                   }`}
+                                 >
+                                   {isConverted ? 'CB' : ''}
+                                 </TableCell>
+                               );
                             })}
                             <TableCell className="text-right font-bold text-purple-700 py-1">
                               {employee.meal_voucher_conversions.days}
@@ -903,7 +921,7 @@ const BusinessTripsDashboard = () => {
               <div className="space-y-2 text-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-red-100 border border-red-300 rounded"></div>
-                  <span>Domeniche</span>
+                  <span>Domeniche e Festività</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-orange-100 border border-orange-300 rounded"></div>
