@@ -837,7 +837,7 @@ const BusinessTripsDashboard = () => {
             {/* Work type abbreviations */}
             <div>
               <h4 className="text-sm font-medium mb-2">Tipologie di Ore</h4>
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2 text-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-blue-200 rounded"></div>
                   <span><strong>O</strong> - Ore Ordinarie</span>
@@ -852,7 +852,7 @@ const BusinessTripsDashboard = () => {
             {/* Business trip types */}
             <div>
               <h4 className="text-sm font-medium mb-2">Tipologie di Trasferte</h4>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div className="space-y-2 text-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-orange-200 rounded"></div>
                   <span><strong>TS</strong> - Trasferte Sabato</span>
@@ -875,7 +875,7 @@ const BusinessTripsDashboard = () => {
             {/* Absence types */}
             <div>
               <h4 className="text-sm font-medium mb-2">Tipologie di Assenze</h4>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm text-gray-600">
+              <div className="space-y-2 text-sm text-gray-600">
                 <div className="flex items-center gap-2">
                   <span><strong>F</strong> - Ferie</span>
                 </div>
@@ -900,7 +900,7 @@ const BusinessTripsDashboard = () => {
             {/* Day highlighting */}
             <div>
               <h4 className="text-sm font-medium mb-2">Evidenziazioni Giorni</h4>
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2 text-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-red-100 border border-red-300 rounded"></div>
                   <span>Domeniche</span>
