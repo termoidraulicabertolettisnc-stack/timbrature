@@ -503,137 +503,80 @@ const BusinessTripsDashboard = () => {
   
   // Calculate business trip days according to business rules
   const calculateBusinessTripBreakdown = () => {
-    const CAP_STD = 46.48;   // senza BDP o con BDP convertito
-    const CAP_CON_BDP = 30.98; // con BDP non convertito
+    const CAP_STD = 46.48;
+    const CAP_BDP = 30.98;
     const BDP = 8.00;
 
-    let daysAt46_48 = 0;
-    let amountAt46_48 = 0;
-    let daysAt30_98 = 0;
-    let amountAt30_98 = 0;
+    // 1) Totale mese da distribuire (R) = TS + TI + CS + CB
+    let R = 0;
 
-    let totalAssigned = 0;        // Σ Assegnato_d (serve riconciliazione)
-    let totalCB = 0;              // Σ CB
-    let totalCS = 0;              // Σ CS (importo)
-    let totalTS = 0;              // Σ TS (importo)
-    let totalTI = 0;              // Σ TI (importo)
+    // 2) Conta giorni eleggibili a 46.48 e 30.98
+    let A46 = 0; // giorni eleggibili con CAP 46.48
+    let A30 = 0; // giorni eleggibili con CAP 30.98
 
-    businessTripData.forEach((emp) => {
-      // Dati utili
-      const rate = emp.saturday_rate || (emp.saturday_trips.hours > 0 ? (emp.saturday_trips.amount / emp.saturday_trips.hours) : 10);
-      const days = Object.keys(emp.daily_data); // "01".."31"
+    businessTripData.forEach(emp => {
+      // Somma importi per tipologia (mese)
+      const TS_total = emp.saturday_trips.amount || 0;
+      const TI_total = emp.daily_allowances.amount || 0;
+      const CS_total = emp.overtime_conversions.amount || 0;
+      const CB_total = emp.meal_voucher_conversions.amount || 0;
+      R += TS_total + TI_total + CS_total + CB_total;
 
-      // Ripartizione CS (importo) proporzionale alle ore straordinarie originali del giorno
-      const totalOTOriginal = emp.totals.overtime + emp.overtime_conversions.hours; // ore totali PRIMA della conversione
-      const csAmountTot = emp.overtime_conversions.amount || 0;
-
-      // Primo pass: calcolo dei "raw component per giorno" senza CS
-      const rawNoCS: Record<string, number> = {};
-      const capByDay: Record<string, number> = {};
-      const eligibleByDay: Record<string, boolean> = {};
-
-      days.forEach((dayKey) => {
-        const work = emp.daily_data[dayKey] || { ordinary: 0, overtime: 0, absence: null };
-
-        // Giorno eleggibile: ha ore oppure è sabato con gestione già in TS (saturday_trips.daily_data>0)
-        const tsHours = emp.saturday_trips.daily_data[dayKey] || 0;
+      // Giorni eleggibili del dipendente (ha ore o sabato TS)
+      const days = Object.keys(emp.daily_data);
+      days.forEach(d => {
+        const work = emp.daily_data[d] || { ordinary: 0, overtime: 0, absence: null };
+        const tsHours = emp.saturday_trips.daily_data[d] || 0;
         const eligible = (work.ordinary + work.overtime) > 0 || tsHours > 0;
-        eligibleByDay[dayKey] = eligible;
+        if (!eligible) return;
 
-        // CAP: 30,98 se BDP maturato e NON convertito; altrimenti 46,48
-        const hasBdpNotConverted = !!emp.meal_vouchers_daily_data?.[dayKey];
-        const hasCB = !!emp.meal_voucher_conversions.daily_data?.[dayKey];
+        // CAP del giorno: 30,98 se BDP maturato e NON convertito; altrimenti 46,48
+        const hasCB = !!emp.meal_voucher_conversions.daily_data?.[d];
+        const hasBdpNotConverted = !!emp.meal_vouchers_daily_data?.[d];
+        const cap = (hasBdpNotConverted && !hasCB) ? CAP_BDP : CAP_STD;
 
-        const cap = (hasBdpNotConverted && !hasCB) ? CAP_CON_BDP : CAP_STD;
-        capByDay[dayKey] = cap;
-
-        // Componenti "base" del giorno
-        const tsEuro = tsHours * rate;
-        const tiEuro = emp.daily_allowances_amounts?.[dayKey] || 0;
-        const cbEuro = hasCB ? BDP : 0;
-
-        rawNoCS[dayKey] = tsEuro + tiEuro + cbEuro;
-
-        // Accumuli per tipologia
-        totalTS += tsEuro;
-        totalTI += tiEuro;
-        totalCB += cbEuro;
+        if (cap === CAP_STD) A46 += 1;
+        else A30 += 1; // CAP_BDP
       });
-
-      // Secondo pass: distribuisci CS sugli unici giorni con capienza residua, proporzionalmente alle ore S del giorno
-      const csPerDay: Record<string, number> = {};
-      days.forEach((dayKey) => csPerDay[dayKey] = 0);
-
-      if (csAmountTot > 0 && totalOTOriginal > 0) {
-        // quota teorica ∝ straordinario originale del giorno
-        const quotaTeorica: Record<string, number> = {};
-        let quotaTeoricaSum = 0;
-
-        days.forEach((dayKey) => {
-          const otOriginalDay = emp.daily_data[dayKey]?.overtime || 0;
-          const q = (otOriginalDay / totalOTOriginal) * csAmountTot;
-          quotaTeorica[dayKey] = q;
-          quotaTeoricaSum += q;
-        });
-
-        // alloca rispettando i CAP
-        let csResiduo = csAmountTot;
-        // primo giro: fino allo spazio disponibile di ogni giorno
-        days.forEach((dayKey) => {
-          if (!eligibleByDay[dayKey]) return;
-
-          const space = Math.max(0, capByDay[dayKey] - rawNoCS[dayKey]); // capienza residua
-          const take = Math.min(space, quotaTeorica[dayKey]);
-          csPerDay[dayKey] += take;
-          csResiduo -= take;
-        });
-        // secondo giro: se resta qualcosa, distribuisci greedily sugli eleggibili con spazio
-        if (csResiduo > 0.0001) {
-          days.forEach((dayKey) => {
-            if (!eligibleByDay[dayKey]) return;
-            const space = Math.max(0, capByDay[dayKey] - rawNoCS[dayKey] - csPerDay[dayKey]);
-            if (space <= 0) return;
-            const take = Math.min(space, csResiduo);
-            csPerDay[dayKey] += take;
-            csResiduo -= take;
-          });
-        }
-      }
-
-      // Terzo pass: Assegnato_d e KPI per i "giorni pieni"
-      let perDaySum = 0;
-      days.forEach((dayKey) => {
-        if (!eligibleByDay[dayKey]) return;
-
-        const assigned = Math.min(capByDay[dayKey], rawNoCS[dayKey] + csPerDay[dayKey]);
-        perDaySum += assigned;
-
-        // Classificazioni
-        if (assigned === CAP_STD) {
-          daysAt46_48 += 1;
-          amountAt46_48 += assigned;
-        } else if (assigned === CAP_CON_BDP) {
-          daysAt30_98 += 1;
-          amountAt30_98 += assigned;
-        }
-
-      });
-
-      totalAssigned += perDaySum;
-      totalCS += csAmountTot;
     });
 
+    // 3) Riempi i giorni a 46,48
+    const G46 = Math.min(Math.floor(R / CAP_STD), A46);
+    const amountAt46_48 = G46 * CAP_STD;
+    let R1 = R - amountAt46_48; // resto da distribuire
+
+    // 4) Distribuisci il resto su CAP 30,98 a importo uniforme
+    let Gresto = 0;
+    let restoPerGiorno = 0;
+    let warning: string | null = null;
+
+    if (R1 > 0) {
+      Gresto = Math.ceil(R1 / CAP_BDP);
+      if (Gresto > A30) {
+        warning = `Capienza insufficiente: servono ${Gresto} giorni CAP 30,98 ma ne hai ${A30}. Converti altri BDP o aumenta i giorni eleggibili.`;
+        // Limita per evitare NaN/inf
+        Gresto = A30 > 0 ? A30 : 0;
+      }
+      restoPerGiorno = Gresto > 0 ? (R1 / Gresto) : 0;
+      // sicurezza: non superare 30,98
+      if (restoPerGiorno > CAP_BDP) restoPerGiorno = CAP_BDP;
+    }
+
+    // 5) Totale assegnato (per completezza = R se c'è capienza)
+    const ledgerAssignedTotal = amountAt46_48 + restoPerGiorno * Gresto;
+
     return {
-      totalDays: daysAt46_48 + daysAt30_98,
-      daysAt46_48,
+      // per i riquadri
+      daysAt46_48: G46,
       amountAt46_48,
-      daysAt30_98,
-      amountAt30_98,
-      totalAmount: amountAt46_48 + amountAt30_98,           // solo giorni pieni
-      // Per i box:
-      ledgerAssignedTotal: totalAssigned,                   // Σ Assegnato_d (VERITÀ per KPI Totale Trasferte)
-      byTypeTotal: totalTS + totalTI + totalCS + totalCB,   // somma TS+TI+CS+CB (deve = ledgerAssignedTotal)
-      conversionAmount: totalCB,
+      // blocco "resto"
+      remainderDays: Gresto,
+      remainderPerDay: restoPerGiorno,
+      remainderTotal: restoPerGiorno * Gresto,
+      // totale (dovrebbe ≈ R se c'è capienza)
+      ledgerAssignedTotal,
+      // utilità
+      needCapacityWarning: warning,
     };
   };
   
@@ -674,7 +617,7 @@ const BusinessTripsDashboard = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Dipendenti</CardTitle>
@@ -697,46 +640,54 @@ const BusinessTripsDashboard = () => {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Giorni €30.98</CardTitle>
-            <TrendingDown className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{businessTripBreakdown.daysAt30_98}</div>
-            <p className="text-xs text-muted-foreground">€{businessTripBreakdown.amountAt30_98.toFixed(2)}</p>
-          </CardContent>
-        </Card>
+        {businessTripBreakdown.remainderDays > 0 && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Resto</CardTitle>
+              <TrendingDown className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{businessTripBreakdown.remainderDays}</div>
+              <p className="text-xs text-muted-foreground">
+                giorni a €{businessTripBreakdown.remainderPerDay.toFixed(2)}
+              </p>
+              <p className="text-xs text-muted-foreground font-semibold">
+                Tot: €{businessTripBreakdown.remainderTotal.toFixed(2)}
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Totale Trasferte</CardTitle>
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">€{businessTripBreakdown.ledgerAssignedTotal.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">TS + TI + CB + CS (dopo CAP)</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Totale Generale</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">€{businessTripBreakdown.ledgerAssignedTotal.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Incluse conversioni</p>
+            <p className="text-xs text-muted-foreground">Importo finale distribuito</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Reconciliation line */}
-      <div className="text-center">
-        <p className="text-[11px] text-muted-foreground">
-          Recon: per-giorno €{businessTripBreakdown.ledgerAssignedTotal.toFixed(2)} / per-tipologia €{businessTripBreakdown.byTypeTotal.toFixed(2)}
-        </p>
-      </div>
+      {/* Warning if capacity insufficient */}
+      {businessTripBreakdown.needCapacityWarning && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="w-5 h-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-yellow-800">Attenzione</h3>
+              <div className="mt-2 text-sm text-yellow-700">
+                {businessTripBreakdown.needCapacityWarning}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Detailed Table */}
       <Card>
