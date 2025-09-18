@@ -91,6 +91,22 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log('User created successfully:', authData.user.id);
 
+    // Verify company exists before creating profile
+    const { data: companyCheck, error: companyError } = await supabaseAdmin
+      .from('companies')
+      .select('id')
+      .eq('id', currentProfile.company_id)
+      .single();
+
+    if (companyError || !companyCheck) {
+      console.error('Company not found:', currentProfile.company_id, companyError);
+      // Try to clean up the created user
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      throw new Error(`Company not found: ${currentProfile.company_id}`);
+    }
+
+    console.log('Company verified:', companyCheck.id);
+
     // Create profile with admin client
     const { error: profileInsertError } = await supabaseAdmin
       .from('profiles')
