@@ -609,21 +609,27 @@ const BusinessTripsDashboard = () => {
                         <TableRow>
                           <TableCell className="py-1"></TableCell>
                           <TableCell className="text-sm text-amber-600 py-1">S</TableCell>
-                          {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                            const dayKey = String(i + 1).padStart(2, '0');
-                            const overtime = employee.daily_data[dayKey]?.overtime || 0;
-                            const { isSunday, isSaturday } = getDateInfo(i + 1);
-                            return (
-                              <TableCell 
-                                key={i + 1} 
-                                className={`text-center text-xs py-1 px-1 ${
-                                  isSunday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
-                                }`}
-                              >
-                                {overtime > 0 ? overtime.toFixed(1) : ''}
-                              </TableCell>
-                            );
-                          })}
+                           {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                             const dayKey = String(i + 1).padStart(2, '0');
+                             const originalOvertime = employee.daily_data[dayKey]?.overtime || 0;
+                             // Calculate reduced overtime after proportional conversion
+                             const originalTotalOvertimeHours = employee.totals.overtime + employee.overtime_conversions.hours;
+                             const proportionalConversion = originalTotalOvertimeHours > 0 && employee.overtime_conversions.hours > 0
+                               ? (originalOvertime / originalTotalOvertimeHours) * employee.overtime_conversions.hours
+                               : 0;
+                             const reducedOvertime = Math.max(0, originalOvertime - proportionalConversion);
+                             const { isSunday, isSaturday } = getDateInfo(i + 1);
+                             return (
+                               <TableCell 
+                                 key={i + 1} 
+                                 className={`text-center text-xs py-1 px-1 ${
+                                   isSunday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                 }`}
+                               >
+                                 {reducedOvertime > 0 ? reducedOvertime.toFixed(1) : ''}
+                               </TableCell>
+                             );
+                           })}
                           <TableCell className="text-right font-medium py-1">
                             {employee.totals.overtime.toFixed(1)}
                           </TableCell>
@@ -748,12 +754,12 @@ const BusinessTripsDashboard = () => {
                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
                               const dayKey = String(i + 1).padStart(2, '0');
                               const { isSunday, isSaturday } = getDateInfo(i + 1);
-                              // Calculate proportional conversion hours for this day
-                              const dayOvertimeHours = employee.daily_data[dayKey]?.overtime || 0;
-                              const totalOvertimeHours = employee.totals.overtime + employee.overtime_conversions.hours; // Original total before conversion
-                              const conversionHours = totalOvertimeHours > 0 && employee.overtime_conversions.hours > 0
-                                ? (dayOvertimeHours / totalOvertimeHours) * employee.overtime_conversions.hours
-                                : 0;
+                               // Calculate proportional conversion hours for this day based on original overtime
+                               const originalDayOvertimeHours = employee.daily_data[dayKey]?.overtime || 0;
+                               const originalTotalOvertimeHours = employee.totals.overtime + employee.overtime_conversions.hours; // Original total before conversion
+                               const conversionHours = originalTotalOvertimeHours > 0 && employee.overtime_conversions.hours > 0
+                                 ? (originalDayOvertimeHours / originalTotalOvertimeHours) * employee.overtime_conversions.hours
+                                 : 0;
                               return (
                                 <TableCell 
                                   key={i + 1} 
