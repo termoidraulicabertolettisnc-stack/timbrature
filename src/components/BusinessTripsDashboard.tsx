@@ -514,6 +514,9 @@ const BusinessTripsDashboard = () => {
     let A46 = 0; // giorni eleggibili con CAP 46.48
     let A30 = 0; // giorni eleggibili con CAP 30.98
 
+    // Debug info
+    const debugInfo: any[] = [];
+
     businessTripData.forEach(emp => {
       // Somma importi per tipologia (mese)
       const TS_total = emp.saturday_trips.amount || 0;
@@ -521,6 +524,14 @@ const BusinessTripsDashboard = () => {
       const CS_total = emp.overtime_conversions.amount || 0;
       const CB_total = emp.meal_voucher_conversions.amount || 0;
       R += TS_total + TI_total + CS_total + CB_total;
+
+      // Debug per dipendente
+      const empDebug = {
+        name: emp.employee_name,
+        eligible_days: [] as any[],
+        days_46_48: 0,
+        days_30_98: 0
+      };
 
       // Giorni eleggibili del dipendente (ha ore o sabato TS)
       const days = Object.keys(emp.daily_data);
@@ -535,10 +546,33 @@ const BusinessTripsDashboard = () => {
         const hasBdpNotConverted = !!emp.meal_vouchers_daily_data?.[d];
         const cap = (hasBdpNotConverted && !hasCB) ? CAP_BDP : CAP_STD;
 
-        if (cap === CAP_STD) A46 += 1;
-        else A30 += 1; // CAP_BDP
+        // Debug info per questo giorno
+        const dayInfo = {
+          day: d,
+          ordinary: work.ordinary,
+          overtime: work.overtime,
+          tsHours,
+          hasBdpNotConverted,
+          hasCB,
+          cap: cap === CAP_STD ? '46.48' : '30.98'
+        };
+        empDebug.eligible_days.push(dayInfo);
+
+        if (cap === CAP_STD) {
+          A46 += 1;
+          empDebug.days_46_48 += 1;
+        } else {
+          A30 += 1;
+          empDebug.days_30_98 += 1;
+        }
       });
+
+      debugInfo.push(empDebug);
     });
+
+    // Log debug info
+    console.log('🔍 Debug Business Trip Breakdown:', debugInfo);
+    console.log(`📊 Totale giorni eleggibili: A46=${A46}, A30=${A30}`);
 
     // 3) Riempi i giorni a 46,48
     const G46 = Math.min(Math.floor(R / CAP_STD), A46);
@@ -565,6 +599,8 @@ const BusinessTripsDashboard = () => {
     // 5) Totale assegnato (per completezza = R se c'è capienza)
     const ledgerAssignedTotal = amountAt46_48 + restoPerGiorno * Gresto;
 
+    console.log(`💰 Calcoli finali: R=${R.toFixed(2)}, G46=${G46}, R1=${R1.toFixed(2)}, Gresto=${Gresto}, restoPerGiorno=${restoPerGiorno.toFixed(2)}`);
+
     return {
       // per i riquadri
       daysAt46_48: G46,
@@ -577,6 +613,11 @@ const BusinessTripsDashboard = () => {
       ledgerAssignedTotal,
       // utilità
       needCapacityWarning: warning,
+      // debug
+      debugInfo: debugInfo,
+      totalEligibleDays: A46 + A30,
+      eligibleA46: A46,
+      eligibleA30: A30
     };
   };
   
