@@ -32,13 +32,13 @@ export function DayConversionToggle({
         size={size}
         onClick={() => setDialogOpen(true)}
         className={`
-          flex items-center gap-1.5 transition-all duration-200 font-medium
+          flex items-center gap-1 transition-all duration-150 font-normal
           ${isConverted 
-            ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-md hover:shadow-lg border-0' 
-            : 'bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border-blue-200 hover:border-blue-300 text-blue-700 hover:text-blue-800 shadow-sm hover:shadow-md'
+            ? 'bg-green-500 hover:bg-green-600 text-white shadow-sm hover:shadow-md border-0' 
+            : 'bg-blue-50 hover:bg-blue-100 border border-blue-200 hover:border-blue-300 text-blue-600 hover:text-blue-700'
           }
-          ${size === 'sm' ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'}
-          rounded-lg hover:scale-105 active:scale-95
+          ${size === 'sm' ? 'px-1.5 py-0.5 text-xs' : 'px-2 py-1 text-xs'}
+          rounded-md hover:scale-[1.02]
         `}
       >
         {isConverted ? (
