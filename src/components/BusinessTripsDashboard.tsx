@@ -49,6 +49,10 @@ interface BusinessTripData {
     amount: number;
     daily_data: { [day: string]: boolean }; // true if converted
   };
+  // NEW: info giornaliere necessarie al CAP
+  meal_vouchers_daily_data: { [day: string]: boolean };          // BDP maturato e NON convertito
+  daily_allowances_amounts: { [day: string]: number };           // € TI del giorno (0 se assente)
+  saturday_rate?: number;                                        // tariffa oraria usata
 }
 
 const BusinessTripsDashboard = () => {
@@ -261,6 +265,10 @@ const BusinessTripsDashboard = () => {
             daily_data: {} as { [day: string]: boolean }
           };
 
+          // NEW: initialize new fields
+          const mealVouchersDaily: { [day: string]: boolean } = {};
+          const dailyAllowanceAmounts: { [day: string]: number } = {};
+
           const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
           for (let day = 1; day <= daysInMonth; day++) {
             const dayKey = String(day).padStart(2, '0');
@@ -268,6 +276,9 @@ const BusinessTripsDashboard = () => {
             saturdayTrips.daily_data[dayKey] = 0;
             dailyAllowances.daily_data[dayKey] = false;
             mealVoucherConversions.daily_data[dayKey] = false;
+            // NEW: initialize new daily data
+            mealVouchersDaily[dayKey] = false;
+            dailyAllowanceAmounts[dayKey] = 0;
           }
 
           const defaultSaturdayRate = companySettingsForEmployee?.saturday_hourly_rate || 10;
@@ -315,7 +326,7 @@ const BusinessTripsDashboard = () => {
               ts.date,
             );
 
-            // Daily allowances
+            // TI (indennità giornaliera)
             if (mealBenefits.dailyAllowance) {
               dailyAllowances.days += 1;
               dailyAllowances.daily_data[dayKey] = true;
@@ -324,12 +335,20 @@ const BusinessTripsDashboard = () => {
                 || companySettingsForEmployee?.default_daily_allowance_amount 
                 || 10;
               dailyAllowances.amount += effectiveDailyAllowanceAmount;
+
+              // NEW: salva l'importo TI del giorno
+              dailyAllowanceAmounts[dayKey] = effectiveDailyAllowanceAmount;
             }
 
-            // Count meal vouchers (not converted)
-            if (mealBenefits.mealVoucher) mealVoucherDays++;
+            // BDP "non convertito" (serve per CAP=30,98)
+            if (mealBenefits.mealVoucher) {
+              mealVoucherDays++;
+              if (!employeeConversions.some(conv => conv.date === ts.date && conv.converted_to_allowance)) {
+                mealVouchersDaily[dayKey] = true;  // BDP maturato e NON convertito
+              }
+            }
 
-            // Track meal voucher conversions
+            // CB (già fai la somma mensile + daily flag)
             const isConverted = employeeConversions.some(conv => conv.date === ts.date && conv.converted_to_allowance);
             if (isConverted) {
               mealVoucherConversions.days += 1;
@@ -389,6 +408,10 @@ const BusinessTripsDashboard = () => {
             daily_allowances: dailyAllowances,
             overtime_conversions: overtimeConversions,
             meal_voucher_conversions: mealVoucherConversions,
+            // NEW: add new fields
+            meal_vouchers_daily_data: mealVouchersDaily,         // NEW
+            daily_allowances_amounts: dailyAllowanceAmounts,     // NEW
+            saturday_rate: defaultSaturdayRate,                  // NEW
           };
         })
       );
@@ -480,70 +503,137 @@ const BusinessTripsDashboard = () => {
   
   // Calculate business trip days according to business rules
   const calculateBusinessTripBreakdown = () => {
-    // CAP_STD = 46.48 (without meal vouchers)
-    // CAP_CON_BDP = 30.98 (with meal vouchers)
-    // BDP = 8.00 (meal voucher conversion)
-    
-    const CAP_STD = 46.48;
-    const CAP_CON_BDP = 30.98;
+    const CAP_STD = 46.48;   // senza BDP o con BDP convertito
+    const CAP_CON_BDP = 30.98; // con BDP non convertito
     const BDP = 8.00;
-    
-    let totalDaysAt46_48 = 0;
-    let totalAmountAt46_48 = 0;
-    let totalDaysAt30_98 = 0;
-    let totalAmountAt30_98 = 0;
-    let totalConversionAmount = 0;
-    
-    businessTripData.forEach(employee => {
-      // Count days with meal voucher conversions (CB)
-      // These days get €8 + CAP increases to €46.48
-      const conversionDays = employee.meal_voucher_conversions.days;
-      const conversionAmount = employee.meal_voucher_conversions.amount; // €8 per day
-      
-      // Daily allowances (TI) days without conversions use €30.98
-      const tiDays = employee.daily_allowances.days;
-      const tiAmount = employee.daily_allowances.amount;
-      
-      // For TI days, check which ones have conversions
-      let tiDaysWithConversions = 0;
-      let tiDaysWithoutConversions = 0;
-      
-      Object.entries(employee.daily_allowances.daily_data).forEach(([dayKey, hasTI]) => {
-        if (hasTI) {
-          const hasConversion = employee.meal_voucher_conversions.daily_data[dayKey];
-          if (hasConversion) {
-            tiDaysWithConversions++;
-          } else {
-            tiDaysWithoutConversions++;
-          }
-        }
+
+    let daysAt46_48 = 0;
+    let amountAt46_48 = 0;
+    let daysAt30_98 = 0;
+    let amountAt30_98 = 0;
+
+    let totalAssigned = 0;        // Σ Assegnato_d (serve riconciliazione)
+    let totalCB = 0;              // Σ CB
+    let totalCS = 0;              // Σ CS (importo)
+    let totalTS = 0;              // Σ TS (importo)
+    let totalTI = 0;              // Σ TI (importo)
+
+    businessTripData.forEach((emp) => {
+      // Dati utili
+      const rate = emp.saturday_rate || (emp.saturday_trips.hours > 0 ? (emp.saturday_trips.amount / emp.saturday_trips.hours) : 10);
+      const days = Object.keys(emp.daily_data); // "01".."31"
+
+      // Ripartizione CS (importo) proporzionale alle ore straordinarie originali del giorno
+      const totalOTOriginal = emp.totals.overtime + emp.overtime_conversions.hours; // ore totali PRIMA della conversione
+      const csAmountTot = emp.overtime_conversions.amount || 0;
+
+      // Primo pass: calcolo dei "raw component per giorno" senza CS
+      const rawNoCS: Record<string, number> = {};
+      const capByDay: Record<string, number> = {};
+      const eligibleByDay: Record<string, boolean> = {};
+
+      days.forEach((dayKey) => {
+        const work = emp.daily_data[dayKey] || { ordinary: 0, overtime: 0, absence: null };
+
+        // Giorno eleggibile: ha ore oppure è sabato con gestione già in TS (saturday_trips.daily_data>0)
+        const tsHours = emp.saturday_trips.daily_data[dayKey] || 0;
+        const eligible = (work.ordinary + work.overtime) > 0 || tsHours > 0;
+        eligibleByDay[dayKey] = eligible;
+
+        // CAP: 30,98 se BDP maturato e NON convertito; altrimenti 46,48
+        const hasBdpNotConverted = !!emp.meal_vouchers_daily_data?.[dayKey];
+        const hasCB = !!emp.meal_voucher_conversions.daily_data?.[dayKey];
+
+        const cap = (hasBdpNotConverted && !hasCB) ? CAP_CON_BDP : CAP_STD;
+        capByDay[dayKey] = cap;
+
+        // Componenti "base" del giorno
+        const tsEuro = tsHours * rate;
+        const tiEuro = emp.daily_allowances_amounts?.[dayKey] || 0;
+        const cbEuro = hasCB ? BDP : 0;
+
+        rawNoCS[dayKey] = tsEuro + tiEuro + cbEuro;
+
+        // Accumuli per tipologia
+        totalTS += tsEuro;
+        totalTI += tiEuro;
+        totalCB += cbEuro;
       });
-      
-      // Days at €46.48: TI days with conversions (they can use full CAP_STD)
-      totalDaysAt46_48 += tiDaysWithConversions;
-      totalAmountAt46_48 += tiDaysWithConversions > 0 ? Math.min(tiAmount * (tiDaysWithConversions / tiDays), tiDaysWithConversions * CAP_STD) : 0;
-      
-      // Days at €30.98: TI days without conversions (limited to CAP_CON_BDP)
-      totalDaysAt30_98 += tiDaysWithoutConversions;
-      totalAmountAt30_98 += tiDaysWithoutConversions > 0 ? Math.min(tiAmount * (tiDaysWithoutConversions / tiDays), tiDaysWithoutConversions * CAP_CON_BDP) : 0;
-      
-      // Saturday trips (TS) - these are hours, not full days, so don't count as daily allowances
-      // They are paid at hourly rate, not daily allowance rates
-      
-      totalConversionAmount += conversionAmount;
+
+      // Secondo pass: distribuisci CS sugli unici giorni con capienza residua, proporzionalmente alle ore S del giorno
+      const csPerDay: Record<string, number> = {};
+      days.forEach((dayKey) => csPerDay[dayKey] = 0);
+
+      if (csAmountTot > 0 && totalOTOriginal > 0) {
+        // quota teorica ∝ straordinario originale del giorno
+        const quotaTeorica: Record<string, number> = {};
+        let quotaTeoricaSum = 0;
+
+        days.forEach((dayKey) => {
+          const otOriginalDay = emp.daily_data[dayKey]?.overtime || 0;
+          const q = (otOriginalDay / totalOTOriginal) * csAmountTot;
+          quotaTeorica[dayKey] = q;
+          quotaTeoricaSum += q;
+        });
+
+        // alloca rispettando i CAP
+        let csResiduo = csAmountTot;
+        // primo giro: fino allo spazio disponibile di ogni giorno
+        days.forEach((dayKey) => {
+          if (!eligibleByDay[dayKey]) return;
+
+          const space = Math.max(0, capByDay[dayKey] - rawNoCS[dayKey]); // capienza residua
+          const take = Math.min(space, quotaTeorica[dayKey]);
+          csPerDay[dayKey] += take;
+          csResiduo -= take;
+        });
+        // secondo giro: se resta qualcosa, distribuisci greedily sugli eleggibili con spazio
+        if (csResiduo > 0.0001) {
+          days.forEach((dayKey) => {
+            if (!eligibleByDay[dayKey]) return;
+            const space = Math.max(0, capByDay[dayKey] - rawNoCS[dayKey] - csPerDay[dayKey]);
+            if (space <= 0) return;
+            const take = Math.min(space, csResiduo);
+            csPerDay[dayKey] += take;
+            csResiduo -= take;
+          });
+        }
+      }
+
+      // Terzo pass: Assegnato_d e KPI per i "giorni pieni"
+      let perDaySum = 0;
+      days.forEach((dayKey) => {
+        if (!eligibleByDay[dayKey]) return;
+
+        const assigned = Math.min(capByDay[dayKey], rawNoCS[dayKey] + csPerDay[dayKey]);
+        perDaySum += assigned;
+
+        // Classificazioni
+        if (assigned === CAP_STD) {
+          daysAt46_48 += 1;
+          amountAt46_48 += assigned;
+        } else if (assigned === CAP_CON_BDP) {
+          daysAt30_98 += 1;
+          amountAt30_98 += assigned;
+        }
+
+      });
+
+      totalAssigned += perDaySum;
+      totalCS += csAmountTot;
     });
-    
-    const totalBusinessTripDays = totalDaysAt46_48 + totalDaysAt30_98;
-    const totalBusinessTripAmount = totalAmountAt46_48 + totalAmountAt30_98;
-    
+
     return {
-      totalDays: totalBusinessTripDays,
-      daysAt46_48: totalDaysAt46_48,
-      amountAt46_48: totalAmountAt46_48,
-      daysAt30_98: totalDaysAt30_98,
-      amountAt30_98: totalAmountAt30_98,
-      totalAmount: totalBusinessTripAmount,
-      conversionAmount: totalConversionAmount
+      totalDays: daysAt46_48 + daysAt30_98,
+      daysAt46_48,
+      amountAt46_48,
+      daysAt30_98,
+      amountAt30_98,
+      totalAmount: amountAt46_48 + amountAt30_98,           // solo giorni pieni
+      // Per i box:
+      ledgerAssignedTotal: totalAssigned,                   // Σ Assegnato_d (VERITÀ per KPI Totale Trasferte)
+      byTypeTotal: totalTS + totalTI + totalCS + totalCB,   // somma TS+TI+CS+CB (deve = ledgerAssignedTotal)
+      conversionAmount: totalCB,
     };
   };
   
@@ -624,8 +714,8 @@ const BusinessTripsDashboard = () => {
             <MapPin className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">€{(totalSaturdayAmount + businessTripBreakdown.totalAmount + businessTripBreakdown.conversionAmount + totalOvertimeConversions).toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">TS + TI + CB + CS</p>
+            <div className="text-2xl font-bold">€{businessTripBreakdown.ledgerAssignedTotal.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">TS + TI + CB + CS (dopo CAP)</p>
           </CardContent>
         </Card>
 
@@ -635,10 +725,17 @@ const BusinessTripsDashboard = () => {
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">€{grandTotal.toFixed(2)}</div>
+            <div className="text-2xl font-bold">€{businessTripBreakdown.ledgerAssignedTotal.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">Incluse conversioni</p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Reconciliation line */}
+      <div className="text-center">
+        <p className="text-[11px] text-muted-foreground">
+          Recon: per-giorno €{businessTripBreakdown.ledgerAssignedTotal.toFixed(2)} / per-tipologia €{businessTripBreakdown.byTypeTotal.toFixed(2)}
+        </p>
       </div>
 
       {/* Detailed Table */}
