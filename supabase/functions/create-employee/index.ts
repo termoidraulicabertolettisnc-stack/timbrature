@@ -24,7 +24,10 @@ const handler = async (req: Request): Promise<Response> => {
     // Get auth header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      throw new Error('Authorization header missing');
+      return new Response(
+        JSON.stringify({ error: 'Missing Authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Create admin client with service role
@@ -47,7 +50,10 @@ const handler = async (req: Request): Promise<Response> => {
     // Verify current user is admin
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
-      throw new Error('Unauthorized');
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Get current user's profile and company
@@ -58,11 +64,17 @@ const handler = async (req: Request): Promise<Response> => {
       .single();
 
     if (profileError || !currentProfile) {
-      throw new Error('Profile not found');
+      return new Response(
+        JSON.stringify({ error: 'Profile not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     if (currentProfile.role !== 'amministratore') {
-      throw new Error('Insufficient permissions');
+      return new Response(
+        JSON.stringify({ error: 'Insufficient permissions' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Parse request body
@@ -82,7 +94,11 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (authError) {
       console.error('Auth error:', authError);
-      throw new Error(`Failed to create user: ${authError.message}`);
+      const status = authError.status || (authError.message?.includes('already registered') ? 409 : 500);
+      return new Response(
+        JSON.stringify({ error: `Failed to create user: ${authError.message}` }),
+        { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     if (!authData.user) {
@@ -102,7 +118,10 @@ const handler = async (req: Request): Promise<Response> => {
       console.error('Company not found:', currentProfile.company_id, companyError);
       // Try to clean up the created user
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      throw new Error(`Company not found: ${currentProfile.company_id}`);
+      return new Response(
+        JSON.stringify({ error: `Company not found: ${currentProfile.company_id}` }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     console.log('Company verified:', companyCheck.id);
@@ -124,14 +143,18 @@ const handler = async (req: Request): Promise<Response> => {
       console.error('Profile insert error:', profileInsertError);
       // Try to clean up the created user
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      throw new Error(`Failed to create profile: ${profileInsertError.message}`);
+      return new Response(
+        JSON.stringify({ error: `Failed to create profile: ${profileInsertError.message}` }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     console.log('Profile created successfully');
 
     // Send invite email
+    const origin = req.headers.get('origin') || Deno.env.get('PUBLIC_SITE_URL') || '';
     const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${req.headers.get('origin')}/auth`
+      redirectTo: `${origin}/auth`
     });
 
     if (inviteError) {
