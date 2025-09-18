@@ -13,6 +13,7 @@ import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog'
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
 import { MealVoucherConversionService, MealVoucherConversion } from '@/services/MealVoucherConversionService';
 import { DayConversionToggle } from '@/components/DayConversionToggle';
+import { MassConversionDialog } from '@/components/MassConversionDialog';
 import { useToast } from '@/hooks/use-toast';
 
 interface BusinessTripData {
@@ -97,6 +98,20 @@ const BusinessTripsDashboard = () => {
     userId: '',
     userName: '',
     originalOvertimeHours: 0
+  });
+
+  const [massConversionDialog, setMassConversionDialog] = useState<{
+    open: boolean;
+    userId: string;
+    userName: string;
+    companyId: string;
+    workingDays: string[];
+  }>({
+    open: false,
+    userId: '',
+    userName: '',
+    companyId: '',
+    workingDays: []
   });
 
   const getDaysInMonth = () => {
@@ -405,8 +420,37 @@ const BusinessTripsDashboard = () => {
     });
   };
 
+  const handleMassConversion = (userId: string, userName: string, companyId: string) => {
+    // Get working days for the month (days with worked hours)
+    const employee = businessTripData.find(emp => emp.employee_id === userId);
+    if (!employee) return;
+
+    const workingDays: string[] = [];
+    const [year, month] = selectedMonth.split('-');
+    
+    Object.entries(employee.daily_data).forEach(([dayKey, data]) => {
+      if ((data.ordinary > 0 || data.overtime > 0) && !data.absence) {
+        const date = `${year}-${month}-${dayKey}`;
+        workingDays.push(date);
+      }
+    });
+
+    setMassConversionDialog({
+      open: true,
+      userId,
+      userName,
+      companyId,
+      workingDays
+    });
+  };
+
   const handleConversionComplete = () => {
     setConversionDialog({ open: false, userId: '', userName: '', originalOvertimeHours: 0 });
+    fetchBusinessTripData();
+  };
+
+  const handleMassConversionComplete = () => {
+    setMassConversionDialog({ open: false, userId: '', userName: '', companyId: '', workingDays: [] });
     fetchBusinessTripData();
   };
 
@@ -868,7 +912,15 @@ const BusinessTripsDashboard = () => {
                           <TableCell className="text-right font-bold text-purple-700 py-1">
                             €{employee.meal_voucher_conversions.amount.toFixed(2)}
                           </TableCell>
-                          <TableCell className="py-1"></TableCell>
+                           <TableCell className="py-1">
+                             <Button
+                               variant="outline"
+                               size="sm"
+                               onClick={() => handleMassConversion(employee.employee_id, employee.employee_name, employee.company_id)}
+                             >
+                               Conversione Massiva
+                             </Button>
+                           </TableCell>
                         </TableRow>
 
                         {/* Separator row */}
@@ -988,6 +1040,17 @@ const BusinessTripsDashboard = () => {
         month={selectedMonth}
         originalOvertimeHours={conversionDialog.originalOvertimeHours}
         onSuccess={handleConversionComplete}
+      />
+      
+      <MassConversionDialog
+        open={massConversionDialog.open}
+        onOpenChange={(open) => setMassConversionDialog(prev => ({ ...prev, open }))}
+        userId={massConversionDialog.userId}
+        userName={massConversionDialog.userName}
+        companyId={massConversionDialog.companyId}
+        month={selectedMonth}
+        workingDays={massConversionDialog.workingDays}
+        onConversionUpdated={handleMassConversionComplete}
       />
     </div>
   );

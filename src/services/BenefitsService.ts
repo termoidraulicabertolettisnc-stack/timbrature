@@ -83,14 +83,12 @@ export class BenefitsService {
       );
 
       if (isConverted) {
-        // Convert meal voucher to daily allowance MANTENENDO LO STESSO IMPORTO
-        const mealVoucherAmount = benefits.mealVoucherAmount || 8.00;
-        
+        // Se c'è una conversione manuale, NON calcolare indennità automatica
+        // Le conversioni manuali sono gestite separatamente nella riga "CB"
         benefits = {
           ...benefits,
-          mealVoucher: false,           // Nessun buono pasto
-          dailyAllowance: true,         // Indennità attivata
-          dailyAllowanceAmount: mealVoucherAmount  // STESSO IMPORTO del buono pasto
+          mealVoucher: false,           // Nessun buono pasto (convertito)
+          dailyAllowance: false,        // NESSUNA indennità automatica (già gestita manualmente)
         };
       }
     } catch (error) {
