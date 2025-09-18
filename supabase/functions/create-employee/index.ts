@@ -152,22 +152,36 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log('Profile created successfully');
 
-    // Send invite email
-    const origin = req.headers.get('origin') || Deno.env.get('PUBLIC_SITE_URL') || '';
-    const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${origin}/auth`
-    });
+    // Try to send invite email (optional - won't block the operation)
+    let emailSent = false;
+    try {
+      const origin = req.headers.get('origin') || Deno.env.get('PUBLIC_SITE_URL') || '';
+      const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+        redirectTo: `${origin}/auth`
+      });
 
-    if (inviteError) {
-      console.warn('Invite email failed:', inviteError);
-      // Don't fail the whole operation for invite email issues
+      if (inviteError) {
+        console.warn('Invite email failed:', inviteError);
+        emailSent = false;
+      } else {
+        console.log('Invite email sent successfully');
+        emailSent = true;
+      }
+    } catch (error) {
+      console.warn('Error sending invite email:', error);
+      emailSent = false;
     }
+
+    const message = emailSent 
+      ? 'Dipendente creato con successo. È stata inviata un\'email di invito.'
+      : 'Dipendente creato con successo. L\'email di invito non è stata inviata - l\'utente dovrà reimpostare la password manualmente.';
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Dipendente creato con successo. È stata inviata un\'email di invito.',
-        user_id: authData.user.id
+        message,
+        user_id: authData.user.id,
+        email_sent: emailSent
       }),
       {
         status: 200,
