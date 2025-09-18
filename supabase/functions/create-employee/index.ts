@@ -153,7 +153,7 @@ const handler = async (req: Request): Promise<Response> => {
         role,
         is_active,
         company_id: currentProfile.company_id
-      });
+      }, { onConflict: 'user_id' });
 
     if (profileInsertError) {
       console.error('Profile insert error:', profileInsertError);
