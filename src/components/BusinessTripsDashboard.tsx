@@ -478,34 +478,76 @@ const BusinessTripsDashboard = () => {
   const totalMealVoucherConversions = businessTripData.reduce((sum, emp) => sum + emp.meal_voucher_conversions.amount, 0);
   const grandTotal = totalSaturdayAmount + totalDailyAllowanceAmount + totalOvertimeConversions + totalMealVoucherConversions;
   
-  // Calculate business trip days and daily rate according to business rules
-  const calculateBusinessTripDaysAndRate = () => {
-    const totalBusinessTripAmount = totalSaturdayAmount + totalDailyAllowanceAmount;
+  // Calculate business trip days according to business rules
+  const calculateBusinessTripBreakdown = () => {
+    // CAP_STD = 46.48 (without meal vouchers)
+    // CAP_CON_BDP = 30.98 (with meal vouchers)
+    // BDP = 8.00 (meal voucher conversion)
     
-    if (totalBusinessTripAmount === 0) {
-      return { totalDays: 0, dailyRate: 0 };
-    }
+    const CAP_STD = 46.48;
+    const CAP_CON_BDP = 30.98;
+    const BDP = 8.00;
     
-    // Get total meal voucher conversion days (days with higher rate €46.48)
-    const totalConversionDays = businessTripData.reduce((sum, emp) => sum + emp.meal_voucher_conversions.days, 0);
+    let totalDaysAt46_48 = 0;
+    let totalAmountAt46_48 = 0;
+    let totalDaysAt30_98 = 0;
+    let totalAmountAt30_98 = 0;
+    let totalConversionAmount = 0;
     
-    // Assume remaining days use standard rate €30.98
-    // We need to calculate based on the rates from company settings
-    const standardRate = 30.98; // business_trip_rate_with_meal
-    const conversionRate = 46.48; // business_trip_rate_without_meal
+    businessTripData.forEach(employee => {
+      // Count days with meal voucher conversions (CB)
+      // These days get €8 + CAP increases to €46.48
+      const conversionDays = employee.meal_voucher_conversions.days;
+      const conversionAmount = employee.meal_voucher_conversions.amount; // €8 per day
+      
+      // Daily allowances (TI) days without conversions use €30.98
+      const tiDays = employee.daily_allowances.days;
+      const tiAmount = employee.daily_allowances.amount;
+      
+      // For TI days, check which ones have conversions
+      let tiDaysWithConversions = 0;
+      let tiDaysWithoutConversions = 0;
+      
+      Object.entries(employee.daily_allowances.daily_data).forEach(([dayKey, hasTI]) => {
+        if (hasTI) {
+          const hasConversion = employee.meal_voucher_conversions.daily_data[dayKey];
+          if (hasConversion) {
+            tiDaysWithConversions++;
+          } else {
+            tiDaysWithoutConversions++;
+          }
+        }
+      });
+      
+      // Days at €46.48: TI days with conversions (they can use full CAP_STD)
+      totalDaysAt46_48 += tiDaysWithConversions;
+      totalAmountAt46_48 += tiDaysWithConversions > 0 ? Math.min(tiAmount * (tiDaysWithConversions / tiDays), tiDaysWithConversions * CAP_STD) : 0;
+      
+      // Days at €30.98: TI days without conversions (limited to CAP_CON_BDP)
+      totalDaysAt30_98 += tiDaysWithoutConversions;
+      totalAmountAt30_98 += tiDaysWithoutConversions > 0 ? Math.min(tiAmount * (tiDaysWithoutConversions / tiDays), tiDaysWithoutConversions * CAP_CON_BDP) : 0;
+      
+      // Saturday trips (TS) - these are hours, not full days, so don't count as daily allowances
+      // They are paid at hourly rate, not daily allowance rates
+      
+      totalConversionAmount += conversionAmount;
+    });
     
-    // Calculate days: divide total by max single trip amount (rounded up)
-    // For simplicity, using weighted calculation based on conversion ratio
-    const estimatedStandardDays = Math.max(0, Math.ceil((totalBusinessTripAmount - (totalConversionDays * conversionRate)) / standardRate));
-    const totalDays = estimatedStandardDays + totalConversionDays;
+    const totalBusinessTripDays = totalDaysAt46_48 + totalDaysAt30_98;
+    const totalBusinessTripAmount = totalAmountAt46_48 + totalAmountAt30_98;
     
-    // Calculate daily rate: total amount / total days
-    const dailyRate = totalDays > 0 ? totalBusinessTripAmount / totalDays : 0;
-    
-    return { totalDays, dailyRate };
+    return {
+      totalDays: totalBusinessTripDays,
+      daysAt46_48: totalDaysAt46_48,
+      amountAt46_48: totalAmountAt46_48,
+      daysAt30_98: totalDaysAt30_98,
+      amountAt30_98: totalAmountAt30_98,
+      totalAmount: totalBusinessTripAmount,
+      conversionAmount: totalConversionAmount
+    };
   };
   
-  const { totalDays: totalBusinessTripDays, dailyRate: businessTripDailyRate } = calculateBusinessTripDaysAndRate();
+  const businessTripBreakdown = calculateBusinessTripBreakdown();
 
   return (
     <div className="space-y-6">
@@ -556,23 +598,23 @@ const BusinessTripsDashboard = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Giorni Trasferta</CardTitle>
+            <CardTitle className="text-sm font-medium">Giorni €46.48</CardTitle>
             <MapPin className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalBusinessTripDays}</div>
-            <p className="text-xs text-muted-foreground">Giorni totali</p>
+            <div className="text-2xl font-bold">{businessTripBreakdown.daysAt46_48}</div>
+            <p className="text-xs text-muted-foreground">€{businessTripBreakdown.amountAt46_48.toFixed(2)}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Importo/Giorno</CardTitle>
+            <CardTitle className="text-sm font-medium">Giorni €30.98</CardTitle>
             <TrendingDown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">€{businessTripDailyRate.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Importo giornaliero trasferte</p>
+            <div className="text-2xl font-bold">{businessTripBreakdown.daysAt30_98}</div>
+            <p className="text-xs text-muted-foreground">€{businessTripBreakdown.amountAt30_98.toFixed(2)}</p>
           </CardContent>
         </Card>
 
@@ -582,8 +624,8 @@ const BusinessTripsDashboard = () => {
             <MapPin className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">€{(totalSaturdayAmount + totalDailyAllowanceAmount + totalOvertimeConversions).toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Sabati + Indennità + Conversioni</p>
+            <div className="text-2xl font-bold">€{(totalSaturdayAmount + businessTripBreakdown.totalAmount + businessTripBreakdown.conversionAmount + totalOvertimeConversions).toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">TS + TI + CB + CS</p>
           </CardContent>
         </Card>
 
@@ -965,11 +1007,11 @@ const BusinessTripsDashboard = () => {
               <div className="space-y-2 text-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-orange-200 rounded"></div>
-                  <span><strong>TS</strong> - Trasferte Sabato</span>
+                  <span><strong>TS</strong> - Trasferte Sabato (ore * tariffa oraria)</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-blue-200 rounded"></div>
-                  <span><strong>TI</strong> - Trasferte Indennità</span>
+                  <span><strong>TI</strong> - Trasferte Indennità (giorni a €30.98 o €46.48)</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-green-200 rounded"></div>
@@ -977,8 +1019,26 @@ const BusinessTripsDashboard = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-purple-200 rounded"></div>
-                  <span><strong>CB</strong> - Conversioni Buoni Pasto</span>
+                  <span><strong>CB</strong> - Conversioni Buoni Pasto (+€8.00)</span>
                 </div>
+              </div>
+            </div>
+
+            {/* Daily rates explanation */}
+            <div>
+              <h4 className="text-sm font-medium mb-2">Tariffe Trasferte Giornaliere</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-500 rounded"></div>
+                  <span><strong>€46.48</strong> - Giorni TI con conversioni buoni pasto (CB)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                  <span><strong>€30.98</strong> - Giorni TI senza conversioni buoni pasto</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Le conversioni buoni pasto (CB) aggiungono €8.00 e permettono di utilizzare la tariffa €46.48 invece di €30.98
+                </p>
               </div>
             </div>
 
