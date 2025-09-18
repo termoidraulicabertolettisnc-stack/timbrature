@@ -183,31 +183,37 @@ export default function AdminEmployees() {
   };
 
   const handleDeleteEmployee = async (employee: Employee) => {
-    if (!confirm(`Sei sicuro di voler eliminare ${employee.first_name} ${employee.last_name}?`)) {
+    if (!confirm(`Sei sicuro di voler eliminare completamente ${employee.first_name} ${employee.last_name}? Questa azione non può essere annullata.`)) {
       return;
     }
 
     try {
-      // TODO: Implementare eliminazione completa (disattivazione invece di eliminazione)
-      const { error } = await supabase
-        .from('profiles')
-        .update({ is_active: false })
-        .eq('user_id', employee.user_id);
+      const { error } = await supabase.functions.invoke('delete-employee', {
+        body: { email: employee.email }
+      });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting employee:', error);
+        toast({
+          title: "Errore",
+          description: "Errore nell'eliminazione del dipendente",
+          variant: "destructive",
+        });
+        return;
+      }
 
       toast({
         title: "Successo",
-        description: "Dipendente disattivato con successo",
+        description: "Dipendente eliminato con successo",
       });
 
       loadEmployees();
 
     } catch (error) {
-      console.error('Error deactivating employee:', error);
+      console.error('Error deleting employee:', error);
       toast({
         title: "Errore",
-        description: "Errore nella disattivazione del dipendente",
+        description: "Errore nell'eliminazione del dipendente",
         variant: "destructive",
       });
     }
