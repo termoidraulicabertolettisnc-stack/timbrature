@@ -60,6 +60,33 @@ const BusinessTripsDashboard = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  // Italian holidays (fallback for standard holidays)
+  const getItalianHolidays = (year: number) => {
+    const holidays = new Set([
+      `${year}-01-01`, // Capodanno
+      `${year}-01-06`, // Epifania
+      `${year}-04-25`, // Festa della Liberazione
+      `${year}-05-01`, // Festa del Lavoro
+      `${year}-06-02`, // Festa della Repubblica
+      `${year}-08-15`, // Ferragosto
+      `${year}-11-01`, // Ognissanti
+      `${year}-12-08`, // Immacolata Concezione
+      `${year}-12-25`, // Natale
+      `${year}-12-26`, // Santo Stefano
+    ]);
+    
+    // Easter-related holidays (simplified calculation for 2024-2025)
+    if (year === 2024) {
+      holidays.add(`${year}-03-31`); // Pasqua 2024
+      holidays.add(`${year}-04-01`); // Lunedì dell'Angelo 2024
+    } else if (year === 2025) {
+      holidays.add(`${year}-04-20`); // Pasqua 2025
+      holidays.add(`${year}-04-21`); // Lunedì dell'Angelo 2025
+    }
+    
+    return holidays;
+  };
   const [conversionDialog, setConversionDialog] = useState<{
     open: boolean;
     userId: string;
@@ -84,7 +111,11 @@ const BusinessTripsDashboard = () => {
     const isSunday = date.getDay() === 0;
     const isSaturday = date.getDay() === 6;
     const dateString = `${year}-${month.padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const isHoliday = holidays.includes(dateString);
+    
+    // Check both company holidays and Italian standard holidays
+    const italianHolidays = getItalianHolidays(parseInt(year));
+    const isHoliday = holidays.includes(dateString) || italianHolidays.has(dateString);
+    
     return { dayName, isSunday, isSaturday, isHoliday };
   };
 
