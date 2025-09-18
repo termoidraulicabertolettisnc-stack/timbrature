@@ -83,30 +83,43 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log('Creating employee:', { email, first_name, last_name, role, is_active });
 
-    // Create user with admin client
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      email_confirm: false, // User will receive invite email
-      user_metadata: {
-        first_name,
-        last_name
+    // Check if user already exists first
+    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+    const existingUser = existingUsers.users?.find(u => u.email === email);
+    
+    let authData: any;
+    let userAlreadyExists = false;
+
+    if (existingUser) {
+      console.log('User already exists:', existingUser.id);
+      userAlreadyExists = true;
+      authData = { user: existingUser };
+    } else {
+      // Create new user
+      const { data: newAuthData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        email_confirm: false, // User will receive invite email
+        user_metadata: {
+          first_name,
+          last_name
+        }
+      });
+
+      if (authError) {
+        console.error('Auth error:', authError);
+        return new Response(
+          JSON.stringify({ error: `Failed to create user: ${authError.message}` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
-    });
 
-    if (authError) {
-      console.error('Auth error:', authError);
-      const status = authError.status || (authError.message?.includes('already registered') ? 409 : 500);
-      return new Response(
-        JSON.stringify({ error: `Failed to create user: ${authError.message}` }),
-        { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      if (!newAuthData.user) {
+        throw new Error('User creation failed');
+      }
+
+      authData = newAuthData;
+      console.log('User created successfully:', authData.user.id);
     }
-
-    if (!authData.user) {
-      throw new Error('User creation failed');
-    }
-
-    console.log('User created successfully:', authData.user.id);
 
     // Verify company exists before creating profile
     const { data: companyCheck, error: companyError } = await supabaseAdmin
@@ -117,8 +130,10 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (companyError || !companyCheck) {
       console.error('Company not found:', currentProfile.company_id, companyError);
-      // Try to clean up the created user
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      // Only try to clean up if we created a new user
+      if (!userAlreadyExists) {
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      }
       return new Response(
         JSON.stringify({ error: `Company not found: ${currentProfile.company_id}` }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -142,8 +157,10 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (profileInsertError) {
       console.error('Profile insert error:', profileInsertError);
-      // Try to clean up the created user
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      // Only try to clean up if we created a new user
+      if (!userAlreadyExists) {
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      }
       return new Response(
         JSON.stringify({ error: `Failed to create profile: ${profileInsertError.message}` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -172,16 +189,21 @@ const handler = async (req: Request): Promise<Response> => {
       emailSent = false;
     }
 
+    const baseMessage = userAlreadyExists 
+      ? 'Dipendente esistente aggiornato con successo'
+      : 'Dipendente creato con successo';
+      
     const message = emailSent 
-      ? 'Dipendente creato con successo. È stata inviata un\'email di invito.'
-      : 'Dipendente creato con successo. L\'email di invito non è stata inviata - l\'utente dovrà reimpostare la password manualmente.';
+      ? `${baseMessage}. È stata inviata un'email di invito.`
+      : `${baseMessage}. L'email di invito non è stata inviata - l'utente dovrà reimpostare la password manualmente.`;
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         message,
         user_id: authData.user.id,
-        email_sent: emailSent
+        email_sent: emailSent,
+        user_already_existed: userAlreadyExists
       }),
       {
         status: 200,
