@@ -533,12 +533,12 @@ const BusinessTripsDashboard = () => {
         days_30_98: 0
       };
 
-      // Giorni eleggibili del dipendente (ha ore o sabato TS)
+      // Giorni eleggibili del dipendente (solo ore ordinarie/straordinarie: NIENTE sabati TS)
       const days = Object.keys(emp.daily_data);
       days.forEach(d => {
         const work = emp.daily_data[d] || { ordinary: 0, overtime: 0, absence: null };
         const tsHours = emp.saturday_trips.daily_data[d] || 0;
-        const eligible = (work.ordinary + work.overtime) > 0 || tsHours > 0;
+        const eligible = (work.ordinary + work.overtime) > 0;
         if (!eligible) return;
 
         // CAP del giorno: 30,98 se BDP maturato e NON convertito; altrimenti 46,48
