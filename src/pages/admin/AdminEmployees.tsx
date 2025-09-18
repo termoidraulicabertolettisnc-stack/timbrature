@@ -83,20 +83,77 @@ export default function AdminEmployees() {
   };
 
   const handleAddEmployee = async () => {
-    try {
-      // TODO: Implementare creazione utente completa con Supabase Auth
-      // Per ora solo placeholder
+    if (!formData.email || !formData.first_name || !formData.last_name) {
       toast({
-        title: "Funzionalità in sviluppo",
-        description: "L'aggiunta di nuovi dipendenti sarà disponibile a breve",
+        title: "Errore",
+        description: "Compila tutti i campi obbligatori",
+        variant: "destructive",
       });
+      return;
+    }
+
+    try {
+      // Get current user's company
+      const { data: currentProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+        .single();
+
+      if (profileError || !currentProfile?.company_id) {
+        throw new Error('Impossibile determinare l\'azienda di appartenenza');
+      }
+
+      // Generate a temporary password
+      const tempPassword = Math.random().toString(36).slice(-12) + 'A1!';
+      
+      // Create user account
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: tempPassword,
+        options: {
+          data: {
+            first_name: formData.first_name,
+            last_name: formData.last_name
+          }
+        }
+      });
+
+      if (authError) throw authError;
+
+      if (authData.user) {
+        // Update the profile that was created by the trigger
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({
+            first_name: formData.first_name,
+            last_name: formData.last_name,
+            role: formData.role,
+            is_active: formData.is_active,
+            company_id: currentProfile.company_id
+          })
+          .eq('user_id', authData.user.id);
+
+        if (updateError) {
+          console.warn('Profile update error:', updateError);
+        }
+      }
+
+      toast({
+        title: "Successo",
+        description: `Dipendente aggiunto con successo. Invia la password temporanea: ${tempPassword}`,
+        duration: 10000,
+      });
+
       setIsAddDialogOpen(false);
       resetForm();
+      loadEmployees();
+
     } catch (error) {
       console.error('Error adding employee:', error);
       toast({
         title: "Errore",
-        description: "Errore nell'aggiunta del dipendente",
+        description: error instanceof Error ? error.message : "Errore nell'aggiunta del dipendente",
         variant: "destructive",
       });
     }
