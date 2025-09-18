@@ -749,317 +749,304 @@ const BusinessTripsDashboard = () => {
                 <Table className="text-sm">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="min-w-[180px] py-2">Dipendente</TableHead>
-                      <TableHead className="min-w-[100px] py-2">Tipo</TableHead>
+                      <TableHead className="sticky left-0 bg-background z-10 min-w-[200px] text-xs font-medium border-r">Dipendente</TableHead>
                       {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                        const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                        const day = i + 1;
+                        const { dayName, isSunday, isSaturday, isHoliday } = getDateInfo(day);
                         return (
                           <TableHead 
-                            key={i + 1} 
-                            className={`w-7 text-center text-xs py-1 px-1 ${
-                              isSunday || isHoliday ? 'bg-red-100 text-red-700' : 
-                              isSaturday ? 'bg-orange-100 text-orange-700' : ''
+                            key={day} 
+                            className={`text-center w-8 min-w-8 max-w-8 text-xs font-medium p-1 ${
+                              isSunday || isHoliday ? 'bg-red-50 text-red-700' : 
+                              isSaturday ? 'bg-orange-50 text-orange-700' : ''
                             }`}
+                            title={`${dayName} ${day}`}
                           >
-                            {i + 1}
+                            <div className="flex flex-col">
+                              <span className="font-bold">{day}</span>
+                              <span className="text-xs font-normal opacity-75">{dayName}</span>
+                            </div>
                           </TableHead>
                         );
                       })}
-                      <TableHead className="text-right min-w-[70px] py-2">Totale</TableHead>
-                      <TableHead className="text-right min-w-[80px] py-2">Buoni</TableHead>
-                      <TableHead className="text-right min-w-[80px] py-2">Importo</TableHead>
-                      <TableHead className="min-w-[100px] py-2">Azioni</TableHead>
-                    </TableRow>
-                    {/* Weekday names row */}
-                    <TableRow>
-                      <TableHead className="py-1"></TableHead>
-                      <TableHead className="py-1"></TableHead>
-                      {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                        const { dayName, isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
-                        return (
-                          <TableHead 
-                            key={i + 1} 
-                            className={`w-7 text-center text-xs py-1 px-1 ${
-                              isSunday || isHoliday ? 'bg-red-100 text-red-700' : 
-                              isSaturday ? 'bg-orange-100 text-orange-700' : ''
-                            }`}
-                          >
-                            {dayName}
-                          </TableHead>
-                        );
-                      })}
-                      <TableHead className="py-1"></TableHead>
-                      <TableHead className="py-1"></TableHead>
-                      <TableHead className="py-1"></TableHead>
-                      <TableHead className="py-1"></TableHead>
+                      <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-gray-50 border-l">Tot</TableHead>
+                      <TableHead className="text-center w-16 min-w-16 text-xs font-medium bg-yellow-50">Buoni</TableHead>
+                      <TableHead className="text-center w-16 min-w-16 text-xs font-medium">Importo</TableHead>
+                      <TableHead className="min-w-[100px] text-xs font-medium">Azioni</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {businessTripData.map((employee) => (
-                      <React.Fragment key={employee.employee_id}>
-                         {/* Ordinary hours row */}
-                        <TableRow>
-                          <TableCell className="font-medium py-1">{employee.employee_name}</TableCell>
-                          <TableCell className="text-sm text-blue-600 py-1">O</TableCell>
-                          {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                            const dayKey = String(i + 1).padStart(2, '0');
-                            const ordinary = employee.daily_data[dayKey]?.ordinary || 0;
-                             const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
-                             return (
-                               <TableCell 
-                                 key={i + 1} 
-                                 className={`text-center text-xs py-1 px-1 ${
-                                   isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
-                                 }`}
-                               >
-                                 {ordinary > 0 ? ordinary.toFixed(1) : ''}
-                               </TableCell>
-                             );
-                          })}
-                          <TableCell className="text-right font-medium py-1">
-                            {employee.totals.ordinary.toFixed(1)}
-                          </TableCell>
-                          <TableCell className="text-right py-1">
-                            {employee.meal_vouchers > 0 
-                              ? `${employee.meal_vouchers} (€${employee.meal_voucher_amount.toFixed(2)})`
-                              : ''
-                            }
-                          </TableCell>
-                          <TableCell className="text-right py-1">€0.00</TableCell>
-                          <TableCell className="py-1"></TableCell>
-                        </TableRow>
-
-                        {/* Overtime hours row */}
-                        <TableRow>
-                          <TableCell className="py-1"></TableCell>
-                          <TableCell className="text-sm text-amber-600 py-1">S</TableCell>
+                     {businessTripData.map((employee) => (
+                       <React.Fragment key={employee.employee_id}>
+                          {/* Ordinary hours row */}
+                         <TableRow className="hover:bg-green-50/50">
+                           <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                             <span className="text-green-700 font-bold">O</span> - {employee.employee_name}
+                           </TableCell>
                            {Array.from({ length: getDaysInMonth() }, (_, i) => {
                              const dayKey = String(i + 1).padStart(2, '0');
-                             const originalOvertime = employee.daily_data[dayKey]?.overtime || 0;
-                             // Calculate reduced overtime after proportional conversion
-                             const originalTotalOvertimeHours = employee.totals.overtime + employee.overtime_conversions.hours;
-                             const proportionalConversion = originalTotalOvertimeHours > 0 && employee.overtime_conversions.hours > 0
-                               ? (originalOvertime / originalTotalOvertimeHours) * employee.overtime_conversions.hours
-                               : 0;
-                             const reducedOvertime = Math.max(0, originalOvertime - proportionalConversion);
-                             const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
-                             return (
-                               <TableCell 
-                                 key={i + 1} 
-                                 className={`text-center text-xs py-1 px-1 ${
-                                   isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
-                                 }`}
-                               >
-                                 {reducedOvertime > 0 ? reducedOvertime.toFixed(1) : ''}
-                               </TableCell>
-                             );
-                           })}
-                          <TableCell className="text-right font-medium py-1">
-                            {employee.totals.overtime.toFixed(1)}
-                          </TableCell>
-                          <TableCell className="text-right py-1"></TableCell>
-                          <TableCell className="text-right py-1">€0.00</TableCell>
-                          <TableCell className="py-1">
-                            {/* CORREZIONE: Mostra sempre il tasto se le conversioni sono abilitate o se ci sono già conversioni */}
-                            {(employee.totals.overtime > 0 || employee.overtime_conversions.hours > 0) && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleOvertimeConversion(
-                                  employee.employee_id,
-                                  employee.employee_name,
-                                  employee.totals.overtime // CORREZIONE: Passa solo gli straordinari attuali (già ridotti)
-                                )}
-                              >
-                                Conversioni
-                              </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
-
-                        {/* Absence rows */}
-                        {Object.entries(employee.totals.absence_totals).map(([absenceType, hours]) => (
-                          hours > 0 && (
-                            <TableRow key={`${employee.employee_id}-${absenceType}`}>
-                              <TableCell className="py-1"></TableCell>
-                              <TableCell className="text-sm text-gray-600 py-1">{absenceType}</TableCell>
-                              {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                                const dayKey = String(i + 1).padStart(2, '0');
-                                const absence = employee.daily_data[dayKey]?.absence;
-                                 const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
-                                 return (
-                                   <TableCell 
-                                     key={i + 1} 
-                                     className={`text-center text-xs py-1 px-1 ${
-                                       isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
-                                     }`}
-                                   >
-                                     {absence === absenceType ? absence.charAt(0).toUpperCase() : ''}
-                                   </TableCell>
-                                 );
-                              })}
-                              <TableCell className="text-right font-medium py-1">
-                                {hours.toFixed(1)}
-                              </TableCell>
-                              <TableCell className="text-right py-1"></TableCell>
-                              <TableCell className="text-right py-1">€0.00</TableCell>
-                              <TableCell className="py-1"></TableCell>
-                            </TableRow>
-                          )
-                        ))}
-
-                        {/* Saturday trips row */}
-                        {employee.saturday_trips.hours > 0 && (
-                          <TableRow className="bg-orange-50">
-                            <TableCell className="py-1"></TableCell>
-                            <TableCell className="text-sm font-medium text-orange-700 py-1">TS</TableCell>
-                            {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                              const dayKey = String(i + 1).padStart(2, '0');
-                              const hours = employee.saturday_trips.daily_data[dayKey] || 0;
-                               const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
-                               return (
-                                 <TableCell 
-                                   key={i + 1} 
-                                   className={`text-center text-xs font-medium py-1 px-1 ${
-                                     isSunday || isHoliday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-orange-50'
-                                   }`}
-                                 >
-                                   {hours > 0 ? hours.toFixed(1) : ''}
-                                 </TableCell>
-                               );
-                            })}
-                            <TableCell className="text-right font-bold text-orange-700 py-1">
-                              {employee.saturday_trips.hours.toFixed(1)}
-                            </TableCell>
-                            <TableCell className="text-right py-1"></TableCell>
-                            <TableCell className="text-right font-bold text-orange-700 py-1">
-                              €{employee.saturday_trips.amount.toFixed(2)}
-                            </TableCell>
-                            <TableCell className="py-1"></TableCell>
-                          </TableRow>
-                        )}
-
-                        {/* Daily allowances row */}
-                        {employee.daily_allowances.days > 0 && (
-                          <TableRow className="bg-blue-50">
-                            <TableCell className="py-1"></TableCell>
-                            <TableCell className="text-sm font-medium text-blue-700 py-1">TI</TableCell>
-                            {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                              const dayKey = String(i + 1).padStart(2, '0');
-                              const hasAllowance = employee.daily_allowances.daily_data[dayKey];
-                               const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
-                               return (
-                                 <TableCell 
-                                   key={i + 1} 
-                                   className={`text-center text-xs font-medium py-1 px-1 ${
-                                     isSunday || isHoliday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-blue-50'
-                                   }`}
-                                 >
-                                   {hasAllowance ? 'TI' : ''}
-                                 </TableCell>
-                               );
-                            })}
-                            <TableCell className="text-right font-bold text-blue-700 py-1">
-                              {employee.daily_allowances.days}
-                            </TableCell>
-                            <TableCell className="text-right py-1"></TableCell>
-                            <TableCell className="text-right font-bold text-blue-700 py-1">
-                              €{employee.daily_allowances.amount.toFixed(2)}
-                            </TableCell>
-                            <TableCell className="py-1"></TableCell>
-                          </TableRow>
-                        )}
-
-                        {/* Overtime conversions row */}
-                        {employee.overtime_conversions.hours > 0 && (
-                          <TableRow className="bg-green-50">
-                            <TableCell className="py-1"></TableCell>
-                            <TableCell className="text-sm font-medium text-green-700 py-1">CS</TableCell>
-                            {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                              const dayKey = String(i + 1).padStart(2, '0');
+                             const ordinary = employee.daily_data[dayKey]?.ordinary || 0;
                               const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
-                               // Calculate proportional conversion hours for this day based on original overtime
-                               const originalDayOvertimeHours = employee.daily_data[dayKey]?.overtime || 0;
-                               const originalTotalOvertimeHours = employee.totals.overtime + employee.overtime_conversions.hours; // Original total before conversion
-                               const conversionHours = originalTotalOvertimeHours > 0 && employee.overtime_conversions.hours > 0
-                                 ? (originalDayOvertimeHours / originalTotalOvertimeHours) * employee.overtime_conversions.hours
-                                 : 0;
                               return (
                                 <TableCell 
                                   key={i + 1} 
-                                  className={`text-center text-xs font-medium py-1 px-1 ${
-                                    isSunday || isHoliday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-green-50'
-                                  }`}
+                                  className={`text-center text-xs p-1 ${
+                                    isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                  } ${ordinary > 0 ? 'text-green-700 font-medium' : 'text-muted-foreground'}`}
                                 >
-                                  {conversionHours > 0 ? conversionHours.toFixed(1) : ''}
+                                  {ordinary > 0 ? ordinary.toFixed(1) : ''}
+                                </TableCell>
+                              );
+                           })}
+                           <TableCell className="text-center font-bold text-green-700 text-xs p-1 bg-gray-50 border-l">
+                             {employee.totals.ordinary.toFixed(1)}
+                           </TableCell>
+                           <TableCell className="text-center text-xs p-1 bg-yellow-50">
+                             {employee.meal_vouchers > 0 
+                               ? `${employee.meal_vouchers} (€${employee.meal_voucher_amount.toFixed(2)})`
+                               : ''
+                             }
+                           </TableCell>
+                           <TableCell className="text-center text-xs p-1">€0.00</TableCell>
+                           <TableCell className="p-1"></TableCell>
+                         </TableRow>
+
+                         {/* Overtime hours row */}
+                         <TableRow className="hover:bg-blue-50/50">
+                           <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                             <span className="text-blue-700 font-bold">S</span> - {employee.employee_name}
+                           </TableCell>
+                            {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                              const dayKey = String(i + 1).padStart(2, '0');
+                              const originalOvertime = employee.daily_data[dayKey]?.overtime || 0;
+                              // Calculate reduced overtime after proportional conversion
+                              const originalTotalOvertimeHours = employee.totals.overtime + employee.overtime_conversions.hours;
+                              const proportionalConversion = originalTotalOvertimeHours > 0 && employee.overtime_conversions.hours > 0
+                                ? (originalOvertime / originalTotalOvertimeHours) * employee.overtime_conversions.hours
+                                : 0;
+                              const reducedOvertime = Math.max(0, originalOvertime - proportionalConversion);
+                              const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                              return (
+                                <TableCell 
+                                  key={i + 1} 
+                                  className={`text-center text-xs p-1 ${
+                                    isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                  } ${reducedOvertime > 0 ? 'text-blue-700 font-medium' : 'text-muted-foreground'}`}
+                                >
+                                  {reducedOvertime > 0 ? reducedOvertime.toFixed(1) : ''}
                                 </TableCell>
                               );
                             })}
-                            <TableCell className="text-right font-bold text-green-700 py-1">
-                              {employee.overtime_conversions.hours.toFixed(1)}
-                            </TableCell>
-                            <TableCell className="text-right py-1"></TableCell>
-                            <TableCell className="text-right font-bold text-green-700 py-1">
-                              €{employee.overtime_conversions.amount.toFixed(2)}
-                            </TableCell>
-                            <TableCell className="py-1"></TableCell>
-                          </TableRow>
-                        )}
-
-                        {/* Meal voucher conversions row */}
-                        <TableRow className="bg-purple-50">
-                          <TableCell className="py-1"></TableCell>
-                          <TableCell className="text-sm font-medium text-purple-700 py-1">CB</TableCell>
-                          {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                            const dayKey = String(i + 1).padStart(2, '0');
-                            const hasWorkedHours = (employee.daily_data[dayKey]?.ordinary || 0) > 0 || (employee.daily_data[dayKey]?.overtime || 0) > 0;
-                            const isConverted = employee.meal_voucher_conversions.daily_data[dayKey];
-                            const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
-                            return (
-                              <TableCell 
-                                key={i + 1} 
-                                className={`text-center text-xs py-1 px-1 ${
-                                  isSunday || isHoliday ? 'bg-red-100' : isSaturday ? 'bg-orange-100' : 'bg-purple-50'
-                                }`}
-                              >
-                                {hasWorkedHours && (
-                                  <DayConversionToggle
-                                    userId={employee.employee_id}
-                                    userName={employee.employee_name}
-                                    date={`${selectedMonth.split('-')[0]}-${selectedMonth.split('-')[1]}-${dayKey}`}
-                                    companyId={employee.company_id}
-                                    isConverted={isConverted}
-                                    onConversionUpdated={fetchBusinessTripData}
-                                    size="sm"
-                                  />
-                                )}
-                              </TableCell>
-                            );
-                          })}
-                          <TableCell className="text-right font-bold text-purple-700 py-1">
-                            {employee.meal_voucher_conversions.days}
-                          </TableCell>
-                          <TableCell className="text-right py-1"></TableCell>
-                          <TableCell className="text-right font-bold text-purple-700 py-1">
-                            €{employee.meal_voucher_conversions.amount.toFixed(2)}
-                          </TableCell>
-                           <TableCell className="py-1">
-                             <Button
-                               variant="outline"
-                               size="sm"
-                               onClick={() => handleMassConversion(employee.employee_id, employee.employee_name, employee.company_id)}
-                             >
-                               Conversioni
-                             </Button>
+                           <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-gray-50 border-l">
+                             {employee.totals.overtime.toFixed(1)}
                            </TableCell>
-                        </TableRow>
+                           <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                           <TableCell className="text-center text-xs p-1">€0.00</TableCell>
+                           <TableCell className="p-1">
+                             {/* CORREZIONE: Mostra sempre il tasto se le conversioni sono abilitate o se ci sono già conversioni */}
+                             {(employee.totals.overtime > 0 || employee.overtime_conversions.hours > 0) && (
+                               <Button
+                                 variant="outline"
+                                 size="sm"
+                                 onClick={() => handleOvertimeConversion(
+                                   employee.employee_id,
+                                   employee.employee_name,
+                                   employee.totals.overtime // CORREZIONE: Passa solo gli straordinari attuali (già ridotti)
+                                 )}
+                               >
+                                 Conversioni
+                               </Button>
+                             )}
+                           </TableCell>
+                         </TableRow>
 
-                        {/* Separator row */}
-                        <TableRow>
-                          <TableCell colSpan={getDaysInMonth() + 6} className="h-1 border-b border-gray-200 py-1"></TableCell>
-                        </TableRow>
-                      </React.Fragment>
-                    ))}
+                         {/* Absence rows */}
+                         {Object.entries(employee.totals.absence_totals).map(([absenceType, hours]) => (
+                           hours > 0 && (
+                             <TableRow key={`${employee.employee_id}-${absenceType}`} className="hover:bg-red-50/50">
+                               <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                                 <span className="text-red-700 font-bold">{absenceType}</span> - {employee.employee_name}
+                               </TableCell>
+                               {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                                 const dayKey = String(i + 1).padStart(2, '0');
+                                 const absence = employee.daily_data[dayKey]?.absence;
+                                  const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                                  return (
+                                    <TableCell 
+                                      key={i + 1} 
+                                      className={`text-center text-xs p-1 ${
+                                        isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                      }`}
+                                    >
+                                      {absence === absenceType ? (
+                                        <span className="text-red-700 font-bold text-xs">
+                                          {absence.charAt(0).toUpperCase()}
+                                        </span>
+                                      ) : ''}
+                                    </TableCell>
+                                  );
+                               })}
+                               <TableCell className="text-center font-bold text-red-700 text-xs p-1 bg-gray-50 border-l">
+                                 {hours.toFixed(1)}
+                               </TableCell>
+                               <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                               <TableCell className="text-center text-xs p-1">€0.00</TableCell>
+                               <TableCell className="p-1"></TableCell>
+                             </TableRow>
+                           )
+                         ))}
+
+                         {/* Saturday trips row */}
+                         {employee.saturday_trips.hours > 0 && (
+                           <TableRow className="hover:bg-orange-50/50">
+                             <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                               <span className="text-orange-700 font-bold">TS</span> - {employee.employee_name}
+                             </TableCell>
+                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                               const dayKey = String(i + 1).padStart(2, '0');
+                               const hours = employee.saturday_trips.daily_data[dayKey] || 0;
+                                const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                                return (
+                                  <TableCell 
+                                    key={i + 1} 
+                                    className={`text-center text-xs p-1 ${
+                                      isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                    } ${hours > 0 ? 'text-orange-700 font-medium' : 'text-muted-foreground'}`}
+                                  >
+                                    {hours > 0 ? hours.toFixed(1) : ''}
+                                  </TableCell>
+                                );
+                             })}
+                             <TableCell className="text-center font-bold text-orange-700 text-xs p-1 bg-gray-50 border-l">
+                               {employee.saturday_trips.hours.toFixed(1)}
+                             </TableCell>
+                             <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                             <TableCell className="text-center font-bold text-orange-700 text-xs p-1">
+                               €{employee.saturday_trips.amount.toFixed(2)}
+                             </TableCell>
+                             <TableCell className="p-1"></TableCell>
+                           </TableRow>
+                         )}
+
+                         {/* Daily allowances row */}
+                         {employee.daily_allowances.days > 0 && (
+                           <TableRow className="hover:bg-sky-50/50">
+                             <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                               <span className="text-sky-700 font-bold">TI</span> - {employee.employee_name}
+                             </TableCell>
+                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                               const dayKey = String(i + 1).padStart(2, '0');
+                               const hasAllowance = employee.daily_allowances.daily_data[dayKey];
+                                const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                                return (
+                                  <TableCell 
+                                    key={i + 1} 
+                                    className={`text-center text-xs p-1 ${
+                                      isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                    } ${hasAllowance ? 'text-sky-700 font-medium' : 'text-muted-foreground'}`}
+                                  >
+                                    {hasAllowance ? 'TI' : ''}
+                                  </TableCell>
+                                );
+                             })}
+                             <TableCell className="text-center font-bold text-sky-700 text-xs p-1 bg-gray-50 border-l">
+                               {employee.daily_allowances.days}
+                             </TableCell>
+                             <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                             <TableCell className="text-center font-bold text-sky-700 text-xs p-1">
+                               €{employee.daily_allowances.amount.toFixed(2)}
+                             </TableCell>
+                             <TableCell className="p-1"></TableCell>
+                           </TableRow>
+                         )}
+
+                         {/* Overtime conversions row */}
+                         {employee.overtime_conversions.hours > 0 && (
+                           <TableRow className="hover:bg-emerald-50/50">
+                             <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                               <span className="text-emerald-700 font-bold">CS</span> - {employee.employee_name}
+                             </TableCell>
+                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                               const dayKey = String(i + 1).padStart(2, '0');
+                               const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                                // Calculate proportional conversion hours for this day based on original overtime
+                                const originalDayOvertimeHours = employee.daily_data[dayKey]?.overtime || 0;
+                                const originalTotalOvertimeHours = employee.totals.overtime + employee.overtime_conversions.hours; // Original total before conversion
+                                const conversionHours = originalTotalOvertimeHours > 0 && employee.overtime_conversions.hours > 0
+                                  ? (originalDayOvertimeHours / originalTotalOvertimeHours) * employee.overtime_conversions.hours
+                                  : 0;
+                               return (
+                                 <TableCell 
+                                   key={i + 1} 
+                                   className={`text-center text-xs p-1 ${
+                                     isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                   } ${conversionHours > 0 ? 'text-emerald-700 font-medium' : 'text-muted-foreground'}`}
+                                 >
+                                   {conversionHours > 0 ? conversionHours.toFixed(1) : ''}
+                                 </TableCell>
+                               );
+                             })}
+                             <TableCell className="text-center font-bold text-emerald-700 text-xs p-1 bg-gray-50 border-l">
+                               {employee.overtime_conversions.hours.toFixed(1)}
+                             </TableCell>
+                             <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                             <TableCell className="text-center font-bold text-emerald-700 text-xs p-1">
+                               €{employee.overtime_conversions.amount.toFixed(2)}
+                             </TableCell>
+                             <TableCell className="p-1"></TableCell>
+                           </TableRow>
+                         )}
+
+                         {/* Meal voucher conversions row */}
+                         <TableRow className="hover:bg-purple-50/50">
+                           <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                             <span className="text-purple-700 font-bold">CB</span> - {employee.employee_name}
+                           </TableCell>
+                           {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                             const dayKey = String(i + 1).padStart(2, '0');
+                             const hasWorkedHours = (employee.daily_data[dayKey]?.ordinary || 0) > 0 || (employee.daily_data[dayKey]?.overtime || 0) > 0;
+                             const isConverted = employee.meal_voucher_conversions.daily_data[dayKey];
+                             const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                             return (
+                               <TableCell 
+                                 key={i + 1} 
+                                 className={`text-center text-xs p-1 ${
+                                   isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                 }`}
+                               >
+                                 {hasWorkedHours && (
+                                   <DayConversionToggle
+                                     userId={employee.employee_id}
+                                     userName={employee.employee_name}
+                                     date={`${selectedMonth.split('-')[0]}-${selectedMonth.split('-')[1]}-${dayKey}`}
+                                     companyId={employee.company_id}
+                                     isConverted={isConverted}
+                                     onConversionUpdated={fetchBusinessTripData}
+                                     size="sm"
+                                   />
+                                 )}
+                               </TableCell>
+                             );
+                           })}
+                           <TableCell className="text-center font-bold text-purple-700 text-xs p-1 bg-gray-50 border-l">
+                             {employee.meal_voucher_conversions.days}
+                           </TableCell>
+                           <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                           <TableCell className="text-center font-bold text-purple-700 text-xs p-1">
+                             €{employee.meal_voucher_conversions.amount.toFixed(2)}
+                           </TableCell>
+                            <TableCell className="p-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleMassConversion(employee.employee_id, employee.employee_name, employee.company_id)}
+                              >
+                                Conversioni
+                              </Button>
+                            </TableCell>
+                         </TableRow>
+                       </React.Fragment>
+                     ))}
                   </TableBody>
                 </Table>
               </div>
