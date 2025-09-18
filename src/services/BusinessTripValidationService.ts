@@ -369,7 +369,7 @@ export class BusinessTripValidationService {
 
     const currentTotal = conversion.total_conversion_hours ?? 0;
     const currentManual = conversion.manual_conversion_hours ?? 0;
-    const currentAutomatic = conversion.automatic_conversion_hours ?? 0;
+    // automatic_conversion_hours rimosso - ora solo conversioni manuali
 
     // Calcola il delta necessario per raggiungere il target
     const targetDelta = correctedConversion - currentTotal;
@@ -377,7 +377,6 @@ export class BusinessTripValidationService {
     console.log(`🔧 [BusinessTripValidation] Delta correzione:`, {
       currentTotal,
       currentManual,
-      currentAutomatic,
       correctedConversion,
       targetDelta
     });

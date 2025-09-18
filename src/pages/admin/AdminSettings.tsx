@@ -36,7 +36,6 @@ interface CompanySettings {
   // Overtime conversion fields
   enable_overtime_conversion?: boolean | null;
   default_overtime_conversion_rate?: number | null;
-  default_overtime_conversion_limit?: number | null;
 }
 
 export default function AdminSettings() {
@@ -63,7 +62,6 @@ export default function AdminSettings() {
     // Overtime conversion fields
     enable_overtime_conversion: null,
     default_overtime_conversion_rate: null,
-    default_overtime_conversion_limit: null,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -140,7 +138,6 @@ export default function AdminSettings() {
         // Overtime conversion defaults
         enable_overtime_conversion: false,
         default_overtime_conversion_rate: 12.00,
-        default_overtime_conversion_limit: null,
       };
 
       const { data, error } = await supabase
@@ -187,7 +184,6 @@ export default function AdminSettings() {
           // Overtime conversion fields
           enable_overtime_conversion: settings.enable_overtime_conversion,
           default_overtime_conversion_rate: settings.default_overtime_conversion_rate,
-          default_overtime_conversion_limit: settings.default_overtime_conversion_limit,
         })
         .eq('id', settings.id);
 
@@ -666,28 +662,9 @@ export default function AdminSettings() {
                     <p className="text-xs text-muted-foreground mt-1">
                       Tariffa oraria per la conversione di straordinari in trasferte
                     </p>
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="default_overtime_conversion_limit">
-                      Limite Automatico Mensile (ore)
-                    </Label>
-                    <Input
-                      id="default_overtime_conversion_limit"
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={settings.default_overtime_conversion_limit || ''}
-                      onChange={(e) => updateSetting('default_overtime_conversion_limit', parseInt(e.target.value) || null)}
-                      placeholder="20"
-                      className="mt-1"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Ore massime di straordinario prima della conversione automatica (vuoto = solo manuale)
-                    </p>
-                  </div>
-                  
-                  <div className="col-span-full">
+                   </div>
+                   
+                   <div className="col-span-full">
                     <Alert>
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>

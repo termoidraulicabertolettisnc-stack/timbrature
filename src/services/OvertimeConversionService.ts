@@ -26,7 +26,7 @@ export class OvertimeConversionService {
     // Get employee-specific settings first
     const { data: employeeSettings, error: employeeError } = await supabase
       .from('employee_settings')
-      .select('enable_overtime_conversion, overtime_conversion_rate, overtime_conversion_limit')
+      .select('enable_overtime_conversion, overtime_conversion_rate')
       .eq('user_id', userId)
       .lte('valid_from', normalizedDate)
       .or(`valid_to.is.null,valid_to.gt.${encodeURIComponent(normalizedDate)}`)
@@ -53,7 +53,7 @@ export class OvertimeConversionService {
     // Get company settings as fallback
     const { data: companySettings, error: companyError } = await supabase
       .from('company_settings')
-      .select('enable_overtime_conversion, default_overtime_conversion_rate, default_overtime_conversion_limit')
+      .select('enable_overtime_conversion, default_overtime_conversion_rate')
       .eq('company_id', profile.company_id)
       .maybeSingle();
 
@@ -67,36 +67,8 @@ export class OvertimeConversionService {
 
     return {
       enable_overtime_conversion: employeeSettings?.enable_overtime_conversion ?? companySettings?.enable_overtime_conversion ?? false,
-      overtime_conversion_rate: employeeSettings?.overtime_conversion_rate ?? companySettings.default_overtime_conversion_rate ?? 12.00,
-      overtime_conversion_limit: employeeSettings?.overtime_conversion_limit ?? companySettings.default_overtime_conversion_limit
+      overtime_conversion_rate: employeeSettings?.overtime_conversion_rate ?? companySettings.default_overtime_conversion_rate ?? 12.00
     };
-  }
-
-  /**
-   * Calculate automatic conversion for a user in a specific month
-   */
-  static async calculateAutomaticConversion(
-    userId: string, 
-    month: string, 
-    totalOvertimeHours: number
-  ): Promise<{ hours: number; amount: number }> {
-    const normalizedMonth = this.normalizeMonth(month);
-    const settings = await this.getEffectiveConversionSettings(userId, normalizedMonth);
-    
-    if (!settings?.enable_overtime_conversion) {
-      return { hours: 0, amount: 0 };
-    }
-
-    // If user has a custom limit set, respect it absolutely
-    // Only convert hours that EXCEED the limit (not up to the limit)
-    if (settings.overtime_conversion_limit) {
-      const conversionHours = Math.max(0, totalOvertimeHours - settings.overtime_conversion_limit);
-      const conversionAmount = conversionHours * settings.overtime_conversion_rate;
-      return { hours: conversionHours, amount: conversionAmount };
-    }
-
-    // Fallback: if no limit is set, don't convert anything automatically
-    return { hours: 0, amount: 0 };
   }
 
   /**
@@ -111,7 +83,7 @@ export class OvertimeConversionService {
     // Try to get existing record with explicit field selection
     const { data: existing } = await supabase
       .from('employee_overtime_conversions')
-      .select('id, user_id, company_id, month, automatic_conversion_hours, manual_conversion_hours, total_conversion_hours, conversion_amount, notes, created_at, updated_at, created_by, updated_by')
+      .select('id, user_id, company_id, month, manual_conversion_hours, total_conversion_hours, conversion_amount, notes, created_at, updated_at, created_by, updated_by')
       .eq('user_id', userId)
       .eq('month', monthStart)
       .maybeSingle();
@@ -129,6 +101,7 @@ export class OvertimeConversionService {
 
     if (profileError) {
       console.error('Error fetching user profile for conversion creation:', profileError);
+      return null;
     }
 
     if (!profile) return null;
@@ -140,7 +113,6 @@ export class OvertimeConversionService {
         user_id: userId,
         company_id: profile.company_id,
         month: monthStart,
-        automatic_conversion_hours: 0,
         manual_conversion_hours: 0,
         conversion_amount: 0,
         created_by: userId
@@ -187,24 +159,22 @@ export class OvertimeConversionService {
 
       console.log(`📋 [OvertimeConversion] Stato corrente conversione:`, {
         currentManualHours: conversion.manual_conversion_hours,
-        currentAutomaticHours: conversion.automatic_conversion_hours,
         currentTotalHours: conversion.total_conversion_hours
       });
 
       // Store old total for timesheet distribution calculation
       const oldTotalConversionHours = conversion.total_conversion_hours || 0;
 
-      // Calculate new manual conversion hours - ALLOW NEGATIVE VALUES to offset automatic conversions
+      // Calculate new manual conversion hours
       const newManualHours = conversion.manual_conversion_hours + deltaHours;
-      // CORREZIONE: total_conversion_hours è ora calcolato automaticamente dal database
-      const totalHours = conversion.automatic_conversion_hours + newManualHours;
+      const totalHours = newManualHours; // Only manual conversions now
       const newAmount = Math.max(0, totalHours) * settings.overtime_conversion_rate;
 
       console.log(`💾 [OvertimeConversion] Aggiornamento con:`, {
         newManualHours,
         newAmount,
         totalHours,
-        calculatedFrom: `${conversion.automatic_conversion_hours} + ${newManualHours} * ${settings.overtime_conversion_rate}`
+        calculatedFrom: `${newManualHours} * ${settings.overtime_conversion_rate}`
       });
 
       // Update the conversion record (exclude total_conversion_hours as it's now a generated column)
@@ -289,17 +259,12 @@ export class OvertimeConversionService {
       originalOvertimeHours,
       remainingOvertimeHours,
       conversionAmount,
-      automaticHours: conversion.automatic_conversion_hours,
       manualHours: conversion.manual_conversion_hours
     });
 
     let explanation = `${totalConvertedHours.toFixed(2)}h × ${settings.overtime_conversion_rate}€/h = ${conversionAmount.toFixed(2)}€`;
     
-    if (conversion.automatic_conversion_hours > 0 && conversion.manual_conversion_hours > 0) {
-      explanation += ` (Auto: ${conversion.automatic_conversion_hours.toFixed(2)}h + Manuale: ${conversion.manual_conversion_hours.toFixed(2)}h)`;
-    } else if (conversion.automatic_conversion_hours > 0) {
-      explanation += ` (Conversione automatica)`;
-    } else if (conversion.manual_conversion_hours > 0) {
+    if (conversion.manual_conversion_hours > 0) {
       explanation += ` (Conversione manuale)`;
     }
 
@@ -314,178 +279,32 @@ export class OvertimeConversionService {
   }
 
   /**
-   * Processa automaticamente le conversioni straordinari per tutti gli utenti attivi di un'azienda
-   * per un determinato mese, includendo la validazione dei giorni lavorati
+   * Processa conversioni manuali - la conversione automatica è stata rimossa
+   * Questo metodo ora serve solo per validazione o operazioni batch
    */
-  static async processAutomaticConversions(
+  static async processManualConversions(
     month: string,
     companyId?: string
   ): Promise<{ processed: number; errors: string[]; validationResult?: any }> {
     const startTime = Date.now();
-    console.log(`🔄 [OvertimeConversion] Inizio processamento conversioni automatiche per ${month}`, {
+    console.log(`🔄 [OvertimeConversion] Inizio processamento conversioni manuali per ${month}`, {
       companyId,
       startTime: new Date(startTime)
     });
-
-    const monthStart = this.normalizeMonth(month);
-    const monthDate = new Date(monthStart);
-    const startDate = monthStart;
-    const endDate = format(endOfMonth(monthDate), 'yyyy-MM-dd');
 
     const result: { processed: number; errors: string[]; validationResult?: any } = {
       processed: 0,
       errors: []
     };
     
-    try {
-      // Determine which users to process
-      let usersQuery = supabase
-        .from('profiles')
-        .select('user_id, company_id, first_name, last_name')
-        .eq('is_active', true);
-      
-          if (companyId) {
-            usersQuery = usersQuery.eq('company_id', companyId);
-          }
-          
-          const { data: users, error: usersError } = await usersQuery;
-          if (usersError) throw usersError;
-          
-          if (!users || users.length === 0) return result;
-      
-      // Get all timesheets for the month
-      const { data: timesheets, error: timesheetsError } = await supabase
-        .from('timesheets')
-        .select('user_id, overtime_hours')
-        .in('user_id', users.map(u => u.user_id))
-        .gte('date', startDate)
-        .lte('date', endDate)
-        .eq('is_absence', false);
-      
-      if (timesheetsError) throw timesheetsError;
-      
-      // Process each user
-      for (const user of users) {
-        try {
-          // Calculate total overtime for this user in this month
-          const userTimesheets = (timesheets || []).filter(t => t.user_id === user.user_id);
-          const totalOvertimeHours = userTimesheets.reduce((sum, t) => sum + (t.overtime_hours || 0), 0);
-          
-          if (totalOvertimeHours === 0) continue; // Skip users with no overtime
-          
-          // Get conversion settings
-          const settings = await this.getEffectiveConversionSettings(user.user_id, startDate);
-          if (!settings?.enable_overtime_conversion) {
-            continue; // Skip if conversion is disabled
-          }
-          
-          // Calculate automatic conversion
-          const automaticConversion = await this.calculateAutomaticConversion(
-            user.user_id, 
-            monthStart, 
-            totalOvertimeHours
-          );
-          
-          if (automaticConversion.hours <= 0) continue; // Skip if no conversion needed
-          
-          // Get or create conversion record - use consistent monthStart
-          const existingConversion = await this.getOrCreateConversion(user.user_id, monthStart);
-            if (!existingConversion) {
-              result.errors.push(`Could not create conversion record for ${user.first_name} ${user.last_name}`);
-              continue;
-            }
-          
-          // Update automatic conversion hours (preserve manual hours UNLESS they are negative adjustments)
-          const hasManualAdjustment = existingConversion.manual_conversion_hours !== 0;
-          const totalAmount = hasManualAdjustment ? 
-            (automaticConversion.hours + existingConversion.manual_conversion_hours) * settings.overtime_conversion_rate :
-            automaticConversion.hours * settings.overtime_conversion_rate;
-          
-          // Only update automatic conversions if there's no manual adjustment
-          const updateData: any = {
-            conversion_amount: Math.max(0, totalAmount),
-            updated_at: new Date().toISOString(),
-            updated_by: (await supabase.auth.getUser()).data.user?.id ?? user.user_id
-          };
-          
-          // Only overwrite automatic hours if there's no manual intervention
-          if (!hasManualAdjustment) {
-            updateData.automatic_conversion_hours = automaticConversion.hours;
-          }
-          
-          const { error: updateError } = await supabase
-            .from('employee_overtime_conversions')
-            .update(updateData)
-            .eq('id', existingConversion.id);
-          
-            if (updateError) {
-              result.errors.push(`Error updating conversion for ${user.first_name} ${user.last_name}: ${updateError.message}`);
-              continue;
-            }
-          
-          result.processed++;
-          console.log(`✅ Processed automatic conversion for ${user.first_name} ${user.last_name}: ${hasManualAdjustment ? 'preserved manual adjustment' : automaticConversion.hours + 'h'} = €${Math.max(0, totalAmount).toFixed(2)}`);
-          
-        } catch (userError) {
-          result.errors.push(`Error processing ${user.first_name} ${user.last_name}: ${userError}`);
-        }
-      }
-      
-    } catch (error) {
-      result.errors.push(`System error: ${error}`);
-    }
-    
-    console.log(`✅ [OvertimeConversion] Processamento completato per ${month}:`, {
+    // La conversione automatica è stata rimossa - non c'è nulla da processare automaticamente
+    console.log(`✅ [OvertimeConversion] Processamento completato per ${month} - solo conversioni manuali supportate:`, {
       processed: result.processed,
       errors: result.errors.length,
       totalTime: Date.now() - startTime
     });
 
-    // Applica validazione e correzioni automatiche se c'è un companyId specifico
-    if (companyId && result.processed > 0) {
-      try {
-        console.log(`🔍 [OvertimeConversion] Inizio validazione automatica per company ${companyId}`);
-        const { BusinessTripValidationService } = await import('./BusinessTripValidationService');
-        const validationResult = await BusinessTripValidationService.validateAndCorrectConversions(companyId, month);
-        
-        if (validationResult.correctionsMade) {
-          console.log(`⚠️ [OvertimeConversion] Correzioni automatiche applicate:`, validationResult.corrections);
-        }
-        
-        result.validationResult = validationResult;
-      } catch (validationError) {
-        console.error('❌ [OvertimeConversion] Errore durante la validazione:', validationError);
-        result.errors.push(`Validation error: ${validationError}`);
-      }
-    }
-
     return result;
-  }
-
-  /**
-   * Process automatic conversions for a specific user and month
-   */
-  static async processUserAutomaticConversion(
-    userId: string, 
-    month: string
-  ): Promise<boolean> {
-    try {
-      // Get user's company ID
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('company_id, first_name, last_name')
-        .eq('user_id', userId)
-        .single();
-
-      if (!profile) return false;
-
-      // Process automatic conversions for this user's company
-      const result = await this.processAutomaticConversions(month, profile.company_id);
-      return result.processed > 0 && result.errors.length === 0;
-    } catch (error) {
-      console.error('Error processing user automatic conversion:', error);
-      return false;
-    }
   }
 
   /**

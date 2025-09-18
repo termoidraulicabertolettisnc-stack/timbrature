@@ -61,7 +61,6 @@ export const syncEmployeeSettingsStructure = async (companyId: string) => {
         // Nuovi campi di conversione straordinari
         enable_overtime_conversion: empSetting.enable_overtime_conversion !== undefined ? empSetting.enable_overtime_conversion : null,
         overtime_conversion_rate: empSetting.overtime_conversion_rate !== undefined ? empSetting.overtime_conversion_rate : null,
-        overtime_conversion_limit: empSetting.overtime_conversion_limit !== undefined ? empSetting.overtime_conversion_limit : null,
         updated_at: new Date().toISOString()
       };
 
@@ -139,7 +138,6 @@ export const createDefaultEmployeeSettings = async (
       // Nuovi campi di conversione straordinari
       enable_overtime_conversion: null,
       overtime_conversion_rate: null,
-      overtime_conversion_limit: null,
     };
 
     const { data, error } = await supabase

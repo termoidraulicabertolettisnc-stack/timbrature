@@ -43,7 +43,6 @@ interface EmployeeSettings {
   // Overtime conversion fields
   enable_overtime_conversion?: boolean | null;
   overtime_conversion_rate?: number | null;
-  overtime_conversion_limit?: number | null;
 }
 
 interface CompanySettings {
@@ -67,7 +66,6 @@ interface CompanySettings {
   // Overtime conversion fields
   enable_overtime_conversion?: boolean;
   default_overtime_conversion_rate?: number;
-  default_overtime_conversion_limit?: number;
 }
 
 interface EmployeeSettingsDialogProps {
@@ -109,7 +107,6 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
     // Overtime conversion fields
     enable_overtime_conversion: null,
     overtime_conversion_rate: null,
-    overtime_conversion_limit: null,
   });
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [companies, setCompanies] = useState<Array<{id: string, name: string}>>([]);
@@ -923,8 +920,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
               {companySettings && (
                 <span className="ml-2 text-xs font-medium">
                   (Aziendale: {companySettings.enable_overtime_conversion ? 'Abilitato' : 'Disabilitato'}
-                  {companySettings.enable_overtime_conversion && ` - €${companySettings.default_overtime_conversion_rate || 12}/h`}
-                  {companySettings.enable_overtime_conversion && companySettings.default_overtime_conversion_limit && ` - Limite ${companySettings.default_overtime_conversion_limit}h/mese`})
+                  {companySettings.enable_overtime_conversion && ` - €${companySettings.default_overtime_conversion_rate || 12}/h`})
                 </span>
               )}
             </CardDescription>
@@ -975,38 +971,17 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                     <p className="text-xs text-muted-foreground mt-1">
                       Effettivo: €{getEffectiveValue(settings.overtime_conversion_rate, companySettings?.default_overtime_conversion_rate) || 12.00}/h
                     </p>
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="emp_overtime_conversion_limit">
-                      Limite Automatico Personalizzato (ore/mese)
-                    </Label>
-                    <Input
-                      id="emp_overtime_conversion_limit"
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={settings.overtime_conversion_limit || ''}
-                      onChange={(e) => updateSetting('overtime_conversion_limit', parseInt(e.target.value) || null)}
-                      placeholder={companySettings?.default_overtime_conversion_limit?.toString() || 'Nessun limite'}
-                      className="mt-1"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Effettivo: {getEffectiveValue(settings.overtime_conversion_limit, companySettings?.default_overtime_conversion_limit) ? `${getEffectiveValue(settings.overtime_conversion_limit, companySettings?.default_overtime_conversion_limit)} ore/mese` : 'Nessun limite automatico'}
-                    </p>
-                  </div>
-                  
-                  <div className="col-span-full">
+                   </div>
+                   
+                   <div className="col-span-full">
                     <Alert>
                       <AlertTriangle className="h-4 w-4" />
                       <AlertDescription className="text-sm">
-                        <strong>Funzionamento:</strong> Gli straordinari possono essere convertiti automaticamente quando superano il limite mensile, oppure manualmente dalla dashboard Cedolino.
+                        <strong>Funzionamento:</strong> Gli straordinari possono essere convertiti manualmente dalla dashboard Cedolino.
                         <br />
-                        <strong>Esempio:</strong> Limite {getEffectiveValue(settings.overtime_conversion_limit, companySettings?.default_overtime_conversion_limit) || 30} ore/mese, tariffa €{getEffectiveValue(settings.overtime_conversion_rate, companySettings?.default_overtime_conversion_rate) || 12}/h
+                        <strong>Esempio:</strong> Tariffa €{getEffectiveValue(settings.overtime_conversion_rate, companySettings?.default_overtime_conversion_rate) || 12}/h
                         <br />
-                        • Dipendente con 25h straordinari → 5h convertite automaticamente in trasferte (€{((getEffectiveValue(settings.overtime_conversion_rate, companySettings?.default_overtime_conversion_rate) || 12) * 5).toFixed(2)})
-                        <br />
-                        • Admin può aggiungere conversioni manuali aggiuntive dalla dashboard
+                        • Admin può aggiungere conversioni manuali dalla dashboard
                         <br />
                         <em>Le conversioni modificano solo la visualizzazione dashboard, i timesheet originali restano invariati.</em>
                       </AlertDescription>
@@ -1020,7 +995,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                   <p className="text-sm text-muted-foreground">
                     <strong>Impostazioni aziendali:</strong> {
                       companySettings.enable_overtime_conversion 
-                        ? `Abilitato - Tariffa €${companySettings.default_overtime_conversion_rate || 12}/h${companySettings.default_overtime_conversion_limit ? `, limite ${companySettings.default_overtime_conversion_limit} ore/mese` : ', nessun limite automatico'}`
+                        ? `Abilitato - Tariffa €${companySettings.default_overtime_conversion_rate || 12}/h (solo conversioni manuali)`
                         : 'Disabilitato'
                     }
                   </p>

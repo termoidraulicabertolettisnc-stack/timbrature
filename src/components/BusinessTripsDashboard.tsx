@@ -99,28 +99,8 @@ const BusinessTripsDashboard = () => {
         .eq('user_id', user.id)
         .single();
 
-      if (profile) {
-        console.log(`⚙️ [BusinessTripsDashboard] Processamento conversioni automatiche per company ${profile.company_id}`);
-        try {
-          const conversionResult = await OvertimeConversionService.processAutomaticConversions(
-            selectedMonth, 
-            profile.company_id
-          );
-          
-          if (conversionResult.validationResult?.correctionsMade) {
-            console.log(`✅ [BusinessTripsDashboard] Correzioni automatiche applicate:`, 
-              conversionResult.validationResult.corrections);
-            
-            toast({
-              title: "Correzioni Automatiche",
-              description: `Applicate ${conversionResult.validationResult.corrections.length} correzioni per rispettare i limiti dei giorni lavorati`,
-              variant: "default",
-            });
-          }
-        } catch (conversionError) {
-          console.error('❌ [BusinessTripsDashboard] Errore nelle conversioni automatiche:', conversionError);
-        }
-      }
+      // Le conversioni automatiche sono state rimosse - solo conversioni manuali supportate
+      console.log(`ℹ️ [BusinessTripsDashboard] Solo conversioni manuali supportate per ${selectedMonth}`);
 
       const [year, month] = selectedMonth.split('-');
       const startDate = `${year}-${month}-01`;
