@@ -501,117 +501,110 @@ const BusinessTripsDashboard = () => {
   const totalMealVoucherConversions = businessTripData.reduce((sum, emp) => sum + emp.meal_voucher_conversions.amount, 0);
   const grandTotal = totalSaturdayAmount + totalDailyAllowanceAmount + totalOvertimeConversions + totalMealVoucherConversions;
   
-  // Calculate business trip breakdown per employee
   const calculateEmployeeBreakdowns = () => {
-    const CAP_STD = 46.48;
-    const CAP_BDP = 30.98;
-    const BDP = 8.00;
+    const CAP_STD = 46.48;  // senza BDP
+    const CAP_BDP = 30.98;  // con BDP
 
     return businessTripData.map(emp => {
-      // 1) Totale dipendente da distribuire (R) = TS + TI + CS + CB
+      // Totale R = TS + TI + CS + CB
       const TS_total = emp.saturday_trips.amount || 0;
       const TI_total = emp.daily_allowances.amount || 0;
       const CS_total = emp.overtime_conversions.amount || 0;
       const CB_total = emp.meal_voucher_conversions.amount || 0;
       const R = TS_total + TI_total + CS_total + CB_total;
 
-      // 2) Conta giorni eleggibili a 46.48 e 30.98 per questo dipendente
-      let A46 = 0; // giorni eleggibili con CAP 46.48
-      let A30 = 0; // giorni eleggibili con CAP 30.98
+      // Conta giorni disponibili
+      let A46 = 0; // giorni SENZA buoni pasto
+      let A30 = 0; // giorni CON buoni pasto (convertiti o non)
+      Object.keys(emp.daily_data).forEach(d => {
+        const w = emp.daily_data[d] || { ordinary: 0, overtime: 0, absence: null };
+        const worked = (w.ordinary + w.overtime) > 0 && !w.absence;
+        if (!worked) return;
 
-      // Debug info
-      const empDebug = {
-        name: emp.employee_name,
-        eligible_days: [] as any[],
-        days_46_48: 0,
-        days_30_98: 0
-      };
-
-      // Giorni eleggibili del dipendente (solo ore ordinarie/straordinarie: NIENTE sabati TS)
-      const days = Object.keys(emp.daily_data);
-      days.forEach(d => {
-        const work = emp.daily_data[d] || { ordinary: 0, overtime: 0, absence: null };
-        const tsHours = emp.saturday_trips.daily_data[d] || 0;
-        const eligible = (work.ordinary + work.overtime) > 0;
-        if (!eligible) return;
-
-        // CAP del giorno: 30,98 se BDP maturato e NON convertito; altrimenti 46,48
         const hasCB = !!emp.meal_voucher_conversions.daily_data?.[d];
-        const hasBdpNotConverted = !!emp.meal_vouchers_daily_data?.[d];
-        const cap = (hasBdpNotConverted && !hasCB) ? CAP_BDP : CAP_STD;
+        const hasBDPnotConv = !!emp.meal_vouchers_daily_data?.[d];
+        const hasBDP = hasCB || hasBDPnotConv;
 
-        // Debug info per questo giorno
-        const dayInfo = {
-          day: d,
-          ordinary: work.ordinary,
-          overtime: work.overtime,
-          tsHours,
-          hasBdpNotConverted,
-          hasCB,
-          cap: cap === CAP_STD ? '46.48' : '30.98'
-        };
-        empDebug.eligible_days.push(dayInfo);
-
-        if (cap === CAP_STD) {
-          A46 += 1;
-          empDebug.days_46_48 += 1;
-        } else {
-          A30 += 1;
-          empDebug.days_30_98 += 1;
-        }
+        if (hasBDP) A30 += 1; else A46 += 1;
       });
 
-      // 3) Riempi i giorni a 46,48 per questo dipendente
-      const G46 = Math.min(Math.floor(R / CAP_STD), A46);
-      const amountAt46_48 = G46 * CAP_STD;
-      let R1 = R - amountAt46_48; // resto da distribuire
-
-      // 4) Distribuisci il resto su CAP 30,98 a importo uniforme
-      let Gresto = 0;
-      let restoPerGiorno = 0;
+      // Output vars
+      let daysAt46_48 = 0;
+      let amountAt46_48 = 0;
+      let remainderDays = 0;
+      let remainderPerDay = 0;
       let warning: string | null = null;
 
-      if (R1 > 0) {
-        Gresto = Math.ceil(R1 / CAP_BDP);
-        if (Gresto > A30) {
-          const remainingAmount = R1.toFixed(2);
-          warning = `${emp.employee_name}: Resto €${remainingAmount} non distribuibile. Serve ${Gresto} giorno/i CAP €30.98 ma ne ha solo ${A30}. Tutti i suoi ${empDebug.days_46_48} giorni eleggibili sono CAP €46.48. Per risolvere: converti alcuni BDP in CB (per ottenere giorni €30.98) oppure riduci gli importi TS/TI.`;
-          // Limita per evitare NaN/inf
-          Gresto = A30 > 0 ? A30 : 0;
+      // --- Branch 1: solo 46,48 ---
+      if (A46 > 0 && A30 === 0) {
+        // minimal # days, tutte uguali, ≤46.48
+        const k = Math.min(A46, Math.ceil(R / CAP_STD));
+        const per = k > 0 ? R / k : 0;
+        daysAt46_48 = k;
+        amountAt46_48 = R;            // tutto allocato su 46,48-bucket
+        remainderDays = 0;
+        remainderPerDay = 0;
+
+        // (facoltativo) se per > CAP_STD, segnala mancanza giorni
+        if (per > CAP_STD) {
+          warning = `${emp.employee_name}: servono più giorni disponibili per rientrare nel cap €${CAP_STD}.`;
         }
-        restoPerGiorno = Gresto > 0 ? (R1 / Gresto) : 0;
-        // sicurezza: non superare 30,98
-        if (restoPerGiorno > CAP_BDP) restoPerGiorno = CAP_BDP;
+      }
+      // --- Branch 2: solo 30,98 ---
+      else if (A46 === 0 && A30 > 0) {
+        // minimal # days, tutte uguali, ≤30.98
+        const k = Math.min(A30, Math.ceil(R / CAP_BDP));
+        const per = k > 0 ? R / k : 0;
+        daysAt46_48 = 0;
+        amountAt46_48 = 0;
+        remainderDays = k;
+        remainderPerDay = per;
+
+        if (per > CAP_BDP) {
+          warning = `${emp.employee_name}: servono più giorni (BDP) per rientrare nel cap €${CAP_BDP}.`;
+        }
+      }
+      // --- Branch 3: misto 46,48 + 30,98 ---
+      else if (A46 > 0 && A30 > 0) {
+        const G46 = Math.min(Math.floor(R / CAP_STD), A46);
+        const alloc46 = G46 * CAP_STD;
+        let R1 = R - alloc46;
+
+        daysAt46_48 = G46;
+        amountAt46_48 = alloc46;
+
+        if (R1 > 0) {
+          if (A30 === 0) {
+            warning = `${emp.employee_name}: residuo €${R1.toFixed(2)} non distribuibile (nessun giorno con buoni pasto).`;
+          } else {
+            const k = Math.min(A30, Math.ceil(R1 / CAP_BDP));
+            remainderDays = k;
+            remainderPerDay = k > 0 ? R1 / k : 0;
+            if (remainderPerDay > CAP_BDP) {
+              remainderPerDay = CAP_BDP; // safety
+            }
+          }
+        }
       }
 
-      // 5) Totale assegnato per questo dipendente
-      const ledgerAssignedTotal = amountAt46_48 + restoPerGiorno * Gresto;
-
-      console.log(`💰 ${emp.employee_name}: R=${R.toFixed(2)}, G46=${G46}, R1=${R1.toFixed(2)}, Gresto=${Gresto}, restoPerGiorno=${restoPerGiorno.toFixed(2)}`);
+      const ledgerAssignedTotal = amountAt46_48 + remainderPerDay * remainderDays;
 
       return {
         employee_id: emp.employee_id,
         employee_name: emp.employee_name,
-        // per i riquadri individuali
-        daysAt46_48: G46,
+        daysAt46_48,
         amountAt46_48,
-        // blocco "resto"
-        remainderDays: Gresto,
-        remainderPerDay: restoPerGiorno,
-        remainderTotal: restoPerGiorno * Gresto,
-        // totale per questo dipendente
+        remainderDays,
+        remainderPerDay,
+        remainderTotal: remainderPerDay * remainderDays,
         ledgerAssignedTotal,
-        // componenti del totale
         components: {
           saturday_trips: TS_total,
           daily_allowances: TI_total,
           overtime_conversions: CS_total,
           meal_voucher_conversions: CB_total
         },
-        // utilità
         needCapacityWarning: warning,
-        // debug
-        debugInfo: empDebug,
         totalEligibleDays: A46 + A30,
         eligibleA46: A46,
         eligibleA30: A30
