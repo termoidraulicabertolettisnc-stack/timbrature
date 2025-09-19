@@ -505,6 +505,21 @@ const BusinessTripsDashboard = () => {
     const CAP_STD = 46.48;  // senza BDP
     const CAP_BDP = 30.98;  // con BDP
 
+    // Helper function to choose best solution (P1 then P2)
+    const chooseBest = (current: any, candidate: any) => {
+      if (!current) return candidate;
+      
+      // P1: minimize total days
+      if (candidate.daysTotal < current.daysTotal) return candidate;
+      if (candidate.daysTotal > current.daysTotal) return current;
+      
+      // P2: maximize uniformity (prefer higher val30 closer to cap)
+      const currentUniformity = current.plan.val30 / CAP_BDP;
+      const candidateUniformity = candidate.plan.val30 / CAP_BDP;
+      
+      return candidateUniformity > currentUniformity ? candidate : current;
+    };
+
     return businessTripData.map(emp => {
       // Totale R = TS + TI + CS + CB
       const TS_total = emp.saturday_trips.amount || 0;
@@ -528,6 +543,8 @@ const BusinessTripsDashboard = () => {
         if (hasBDP) A30 += 1; else A46 += 1;
       });
 
+      const N = A46 + A30;
+
       // Output vars
       let daysAt46_48 = 0;
       let amountAt46_48 = 0;
@@ -535,55 +552,106 @@ const BusinessTripsDashboard = () => {
       let remainderPerDay = 0;
       let warning: string | null = null;
 
-      // --- Branch 1: solo 46,48 ---
-      if (A46 > 0 && A30 === 0) {
-        // minimal # days, tutte uguali, ≤46.48
-        const k = Math.min(A46, Math.ceil(R / CAP_STD));
-        const per = k > 0 ? R / k : 0;
-        daysAt46_48 = k;
-        amountAt46_48 = R;            // tutto allocato su 46,48-bucket
+      // No eligible days
+      if (N === 0) {
+        return {
+          employee_id: emp.employee_id,
+          employee_name: emp.employee_name,
+          daysAt46_48: 0,
+          amountAt46_48: 0,
+          remainderDays: 0,
+          remainderPerDay: 0,
+          remainderTotal: 0,
+          ledgerAssignedTotal: 0,
+          components: {
+            saturday_trips: TS_total,
+            daily_allowances: TI_total,
+            overtime_conversions: CS_total,
+            meal_voucher_conversions: CB_total
+          },
+          needCapacityWarning: R > 0 ? `${emp.employee_name}: nessun giorno eleggibile` : null,
+          totalEligibleDays: 0,
+          eligibleA46: A46,
+          eligibleA30: A30
+        };
+      }
+
+      // Caso speciale: A30 = 0 (tutti giorni 46.48)
+      if (A30 === 0) {
+        const giorni = Math.min(A46, Math.ceil(R / CAP_STD)); // P1: minimizza giorni
+        const importo = giorni > 0 ? R / giorni : 0;          // P2: uniforma importi
+        
+        daysAt46_48 = giorni;
+        amountAt46_48 = importo * giorni;
         remainderDays = 0;
         remainderPerDay = 0;
 
-        // (facoltativo) se per > CAP_STD, segnala mancanza giorni
-        if (per > CAP_STD) {
-          warning = `${emp.employee_name}: servono più giorni disponibili per rientrare nel cap €${CAP_STD}.`;
+        if (importo > CAP_STD) {
+          warning = `${emp.employee_name}: importo per giorno €${importo.toFixed(2)} supera il cap €${CAP_STD}`;
         }
       }
-      // --- Branch 2: solo 30,98 ---
-      else if (A46 === 0 && A30 > 0) {
-        // minimal # days, tutte uguali, ≤30.98
-        const k = Math.min(A30, Math.ceil(R / CAP_BDP));
-        const per = k > 0 ? R / k : 0;
+      // Caso misto: abbiamo sia 46.48 che 30.98
+      else if (A46 > 0 && A30 > 0) {
+        let best: any = null;
+        const G46_max = Math.min(A46, Math.floor(R / CAP_STD));
+
+        for (let G46 = G46_max; G46 >= 0; G46--) {
+          const R1 = R - G46 * CAP_STD;
+          if (R1 < 0) continue;
+
+          if (R1 === 0) {
+            // Tutto coperto con soli 46.48
+            const solution = { 
+              daysTotal: G46, 
+              plan: { d46: G46, d30: 0, val30: 0 } 
+            };
+            best = chooseBest(best, solution);
+            break; // è già ottimo in P1
+          }
+
+          // Quanti giorni 30.98 servono al minimo?
+          const Gresto = Math.ceil(R1 / CAP_BDP);
+          if (Gresto <= A30) {
+            const val30 = R1 / Gresto; // uniforme e <= 30.98 per costruzione
+            const solution = { 
+              daysTotal: G46 + Gresto, 
+              plan: { d46: G46, d30: Gresto, val30 } 
+            };
+            best = chooseBest(best, solution);
+          }
+        }
+
+        // Se abbiamo trovato soluzione fattibile, applicala
+        if (best) {
+          daysAt46_48 = best.plan.d46;
+          amountAt46_48 = best.plan.d46 * CAP_STD;
+          remainderDays = best.plan.d30;
+          remainderPerDay = best.plan.val30;
+        } else {
+          // Fallback robusto: distribuisci tutto uniformemente su soli 46.48
+          const giorni = Math.min(A46, Math.ceil(R / CAP_STD));
+          const importo = giorni > 0 ? R / giorni : 0;
+          
+          daysAt46_48 = giorni;
+          amountAt46_48 = importo * giorni;
+          remainderDays = 0;
+          remainderPerDay = 0;
+          
+          warning = `${emp.employee_name}: auto-adattato a distribuzione uniforme sui giorni €46.48`;
+        }
+      }
+      // Solo giorni a 30.98
+      else {
+        const giorni = Math.min(A30, Math.ceil(R / CAP_BDP));
+        const importo = giorni > 0 ? R / giorni : 0;
+        
         daysAt46_48 = 0;
         amountAt46_48 = 0;
-        remainderDays = k;
-        remainderPerDay = per;
+        remainderDays = giorni;
+        remainderPerDay = importo;
 
-        if (per > CAP_BDP) {
-          warning = `${emp.employee_name}: servono più giorni (BDP) per rientrare nel cap €${CAP_BDP}.`;
-        }
-      }
-      // --- Branch 3: misto 46,48 + 30,98 ---
-      else if (A46 > 0 && A30 > 0) {
-        const G46 = Math.min(Math.floor(R / CAP_STD), A46);
-        const alloc46 = G46 * CAP_STD;
-        let R1 = R - alloc46;
-
-        daysAt46_48 = G46;
-        amountAt46_48 = alloc46;
-
-        if (R1 > 0) {
-          if (A30 === 0) {
-            warning = `${emp.employee_name}: residuo €${R1.toFixed(2)} non distribuibile (nessun giorno con buoni pasto).`;
-          } else {
-            const k = Math.min(A30, Math.ceil(R1 / CAP_BDP));
-            remainderDays = k;
-            remainderPerDay = k > 0 ? R1 / k : 0;
-            if (remainderPerDay > CAP_BDP) {
-              remainderPerDay = CAP_BDP; // safety
-            }
-          }
+        if (importo > CAP_BDP) {
+          warning = `${emp.employee_name}: importo per giorno €${importo.toFixed(2)} supera il cap €${CAP_BDP}`;
         }
       }
 
@@ -666,7 +734,9 @@ const BusinessTripsDashboard = () => {
                 <div className="bg-blue-50 rounded-lg p-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-blue-700">Giorni €46.48</p>
+                      <p className="text-sm font-medium text-blue-700">
+                        Giorni €{breakdown.daysAt46_48 > 0 ? (breakdown.amountAt46_48 / breakdown.daysAt46_48).toFixed(2) : '46.48'}
+                      </p>
                       <p className="text-2xl font-bold text-blue-900">{breakdown.daysAt46_48}</p>
                     </div>
                     <MapPin className="h-8 w-8 text-blue-500" />
