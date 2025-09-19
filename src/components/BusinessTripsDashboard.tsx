@@ -17,6 +17,7 @@ import { DayConversionToggle } from '@/components/DayConversionToggle';
 import { MassConversionDialog } from '@/components/MassConversionDialog';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
+import { BusinessTripSkeleton } from '@/components/ui/business-trip-skeleton';
 
 interface BusinessTripData {
   employee_id: string;
@@ -143,316 +144,8 @@ const BusinessTripsDashboard = () => {
     return { dayName, isSunday, isSaturday, isHoliday };
   };
 
-  const fetchBusinessTripData = async () => {
-    if (!user) return;
-    
-    setLoading(true);
-    try {
-      console.log(`🚀 [BusinessTripsDashboard] Inizio caricamento dati per ${selectedMonth}`);
-      
-      // Prima esegui le conversioni automatiche con validazione
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('user_id', user.id)
-        .single();
-
-      // Le conversioni automatiche sono state rimosse - solo conversioni manuali supportate
-      console.log(`ℹ️ [BusinessTripsDashboard] Solo conversioni manuali supportate per ${selectedMonth}`);
-
-      const [year, month] = selectedMonth.split('-');
-      const startDate = `${year}-${month}-01`;
-      const endDate = `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`;
-
-      // Multi-tenant safety: scope by current user's company
-      const { data: me, error: meError } = await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('user_id', user!.id)
-        .single();
-      if (meError) throw meError;
-
-      // Fetch holidays for the selected month
-      const { data: holidayData, error: holidayError } = await supabase
-        .from('company_holidays')
-        .select('date')
-        .eq('company_id', me!.company_id)
-        .gte('date', startDate)
-        .lte('date', endDate);
-      
-      if (holidayError) {
-        console.warn('Error fetching holidays:', holidayError);
-      }
-      
-      const holidayDates = holidayData?.map(h => h.date) || [];
-      setHolidays(holidayDates);
-
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('user_id, first_name, last_name, company_id')
-        .eq('is_active', true)
-        .eq('company_id', me!.company_id);
-      if (profilesError) throw profilesError;
-
-      const profiles = profilesData || [];
-      const userIds = profiles.map((p) => p.user_id);
-      if (userIds.length === 0) {
-        setBusinessTripData([]);
-        return;
-      }
-
-      const { data: timesheets, error: timesheetError } = await supabase
-        .from('timesheets')
-        .select('*')
-        .in('user_id', userIds)
-        .gte('date', startDate)
-        .lte('date', endDate)
-        .eq('is_absence', false);
-      if (timesheetError) throw timesheetError;
-
-      const { data: absences, error: absenceError } = await supabase
-        .from('employee_absences')
-        .select('*')
-        .in('user_id', userIds)
-        .gte('date', startDate)
-        .lte('date', endDate);
-      if (absenceError) throw absenceError;
-
-      const { data: companySettings, error: companySettingsError } = await supabase
-        .from('company_settings')
-        .select('*')
-        .in('company_id', profiles.map((p) => p.company_id));
-      if (companySettingsError) throw companySettingsError;
-
-      // Process automatic conversions once per company (già fatto sopra con validazione)
-      // await OvertimeConversionService.processAutomaticConversions(selectedMonth, me!.company_id);
-
-      // Import services
-      const [{ getEmployeeSettingsForDate }, { BenefitsService }, { MealVoucherConversionService }] = await Promise.all([
-        import('@/utils/temporalEmployeeSettings'),
-        import('@/services/BenefitsService'),
-        import('@/services/MealVoucherConversionService'),
-      ]);
-
-      // Load all meal voucher conversions for the period
-      const allConversionsData = await MealVoucherConversionService.getConversionsForUsers(userIds, startDate, endDate);
-
-      // Build simplified per-employee dataset
-      const processedData: BusinessTripData[] = await Promise.all(
-        profiles.map(async (profile) => {
-          const employeeTimesheets = (timesheets || []).filter((t) => t.user_id === profile.user_id);
-          const employeeAbsences = (absences || []).filter((a) => a.user_id === profile.user_id);
-          const companySettingsForEmployee = companySettings?.find((cs) => cs.company_id === profile.company_id);
-          const employeeConversions = allConversionsData[profile.user_id] || [];
-
-          const dailyData: BusinessTripData['daily_data'] = {};
-          let totalOrdinary = 0;
-          let totalOvertime = 0;
-          let absenceTotals: Record<string, number> = {};
-          let mealVoucherDays = 0;
-
-          // Initialize separate business trip types
-          const saturdayTrips = {
-            hours: 0,
-            amount: 0,
-            daily_data: {} as { [day: string]: number }
-          };
-
-          const dailyAllowances = {
-            days: 0,
-            amount: 0,
-            daily_data: {} as { [day: string]: boolean }
-          };
-
-          const mealVoucherConversions = {
-            days: 0,
-            amount: 0,
-            daily_data: {} as { [day: string]: boolean }
-          };
-
-          // NEW: initialize new fields
-          const mealVouchersDaily: { [day: string]: boolean } = {};
-          const dailyAllowanceAmounts: { [day: string]: number } = {};
-
-          const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
-          for (let day = 1; day <= daysInMonth; day++) {
-            const dayKey = String(day).padStart(2, '0');
-            dailyData[dayKey] = { ordinary: 0, overtime: 0, absence: null };
-            saturdayTrips.daily_data[dayKey] = 0;
-            dailyAllowances.daily_data[dayKey] = false;
-            mealVoucherConversions.daily_data[dayKey] = false;
-            // NEW: initialize new daily data
-            mealVouchersDaily[dayKey] = false;
-            dailyAllowanceAmounts[dayKey] = 0;
-          }
-
-          const defaultSaturdayRate = companySettingsForEmployee?.saturday_hourly_rate || 10;
-          const defaultMealVoucherAmount = companySettingsForEmployee?.meal_voucher_amount || 8.0;
-
-          // Process timesheets - separate Saturday trips from regular work
-          for (const ts of employeeTimesheets) {
-            const day = new Date(`${ts.date}T00:00:00`).getDate();
-            const dayKey = String(day).padStart(2, '0');
-            const date = new Date(`${ts.date}T00:00:00`);
-            const isSaturday = date.getDay() === 6;
-
-            const temporalSettings = await getEmployeeSettingsForDate(ts.user_id, ts.date);
-            const effectiveSaturdayHandling = temporalSettings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
-            const effectiveSaturdayRate = temporalSettings?.saturday_hourly_rate || defaultSaturdayRate;
-
-            if (isSaturday && effectiveSaturdayHandling === 'trasferta') {
-              // Saturday treated as business trip
-              const hours = ts.total_hours || 0;
-              saturdayTrips.hours += hours;
-              saturdayTrips.amount += hours * effectiveSaturdayRate;
-              saturdayTrips.daily_data[dayKey] = hours;
-            } else {
-              // Regular work day
-              const overtime = ts.overtime_hours || 0;
-              const ordinary = Math.max(0, (ts.total_hours || 0) - overtime);
-              
-              dailyData[dayKey].ordinary = ordinary;
-              dailyData[dayKey].overtime = overtime;
-              totalOrdinary += ordinary;
-              totalOvertime += overtime;
-            }
-
-            // Calculate meal benefits (includes conversion logic)
-            const mealBenefits = await BenefitsService.calculateMealBenefits(
-              ts,
-              temporalSettings ? {
-                meal_allowance_policy: temporalSettings.meal_allowance_policy,
-                meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
-                daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
-                lunch_break_type: temporalSettings.lunch_break_type,
-                saturday_handling: temporalSettings.saturday_handling,
-              } : undefined,
-              companySettingsForEmployee,
-              ts.date,
-            );
-
-            // TI (indennità giornaliera)
-            if (mealBenefits.dailyAllowance) {
-              dailyAllowances.days += 1;
-              dailyAllowances.daily_data[dayKey] = true;
-              const effectiveDailyAllowanceAmount = mealBenefits.dailyAllowanceAmount 
-                || temporalSettings?.daily_allowance_amount 
-                || companySettingsForEmployee?.default_daily_allowance_amount 
-                || 10;
-              dailyAllowances.amount += effectiveDailyAllowanceAmount;
-
-              // NEW: salva l'importo TI del giorno
-              dailyAllowanceAmounts[dayKey] = effectiveDailyAllowanceAmount;
-            }
-
-            // BDP "non convertito" (serve per CAP=30,98)
-            if (mealBenefits.mealVoucher) {
-              mealVoucherDays++;
-              if (!employeeConversions.some(conv => conv.date === ts.date && conv.converted_to_allowance)) {
-                mealVouchersDaily[dayKey] = true;  // BDP maturato e NON convertito
-              }
-            }
-
-            // CB (già fai la somma mensile + daily flag)
-            const isConverted = employeeConversions.some(conv => conv.date === ts.date && conv.converted_to_allowance);
-            if (isConverted) {
-              mealVoucherConversions.days += 1;
-              mealVoucherConversions.daily_data[dayKey] = true;
-              mealVoucherConversions.amount += defaultMealVoucherAmount;
-            }
-          }
-
-          // Process absences
-          for (const abs of employeeAbsences) {
-            const day = new Date(`${abs.date}T00:00:00`).getDate();
-            const dayKey = String(day).padStart(2, '0');
-            dailyData[dayKey].absence = abs.absence_type;
-            if (!absenceTotals[abs.absence_type]) absenceTotals[abs.absence_type] = 0;
-            absenceTotals[abs.absence_type] += abs.hours || 8;
-          }
-
-          // Calculate overtime conversions (monthly)
-          let overtimeConversions = {
-            hours: 0,
-            amount: 0,
-            monthly_total: false
-          };
-
-          let finalDailyData = dailyData;
-          let finalOvertimeTotal = totalOvertime;
-
-          try {
-            const conversionCalc = await OvertimeConversionService.calculateConversionDetails(
-              profile.user_id,
-              selectedMonth,
-              totalOvertime,
-            );
-            
-            if (conversionCalc.converted_hours > 0) {
-              overtimeConversions.hours = conversionCalc.converted_hours;
-              overtimeConversions.amount = conversionCalc.conversion_amount;
-              overtimeConversions.monthly_total = true;
-              
-              // Apply conversion distribution to daily data
-              const dailyDataForDistribution: { [day: string]: { ordinary: number; overtime: number; absence: string | null } } = {};
-              Object.keys(dailyData).forEach(day => {
-                dailyDataForDistribution[day] = {
-                  ordinary: dailyData[day].ordinary,
-                  overtime: dailyData[day].overtime,
-                  absence: dailyData[day].absence
-                };
-              });
-              
-              const distributions = distributePayrollOvertime(dailyDataForDistribution, conversionCalc.converted_hours);
-              finalDailyData = applyPayrollOvertimeDistribution(dailyDataForDistribution, distributions);
-              
-              // Recalculate total overtime after conversions
-              finalOvertimeTotal = Object.values(finalDailyData).reduce((sum, data) => sum + (data.overtime || 0), 0);
-            }
-          } catch (e) {
-            console.warn('Conversion calc error', profile.user_id, e);
-          }
-
-          return {
-            employee_id: profile.user_id,
-            employee_name: `${profile.first_name} ${profile.last_name}`,
-            company_id: profile.company_id,
-            daily_data: finalDailyData,
-            totals: {
-              ordinary: totalOrdinary,
-              overtime: finalOvertimeTotal,
-              absence_totals: absenceTotals,
-            },
-            meal_vouchers: mealVoucherDays,
-            meal_voucher_amount: mealVoucherDays * defaultMealVoucherAmount,
-            saturday_trips: saturdayTrips,
-            daily_allowances: dailyAllowances,
-            overtime_conversions: overtimeConversions,
-            meal_voucher_conversions: mealVoucherConversions,
-            // NEW: add new fields
-            meal_vouchers_daily_data: mealVouchersDaily,         // NEW
-            daily_allowances_amounts: dailyAllowanceAmounts,     // NEW
-            saturday_rate: defaultSaturdayRate,                  // NEW
-          };
-        })
-      );
-
-      setBusinessTripData(processedData);
-    } catch (error) {
-      console.error('Error fetching business trip data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (user) {
-      fetchBusinessTripData();
-    }
-  }, [user, selectedMonth]);
-
   const handleRefresh = () => {
-    fetchBusinessTripData();
+    refetch();
   };
 
   const handleOvertimeConversion = (userId: string, userName: string, originalOvertimeHours: number) => {
@@ -490,15 +183,21 @@ const BusinessTripsDashboard = () => {
 
   const handleConversionComplete = () => {
     setConversionDialog({ open: false, userId: '', userName: '', originalOvertimeHours: 0 });
-    fetchBusinessTripData();
+    refetch();
   };
 
   const handleMassConversionComplete = () => {
     setMassConversionDialog({ open: false, userId: '', userName: '', companyId: '', workingDays: [] });
-    fetchBusinessTripData();
+    refetch();
   };
 
-  if (loading) {
+  // Show loading skeleton while fetching
+  if (isLoading) {
+    return <BusinessTripSkeleton />;
+  }
+
+  // Show error state
+  if (error) {
     return (
       <div className="space-y-6">
         <div className="flex justify-between items-center">
@@ -507,22 +206,43 @@ const BusinessTripsDashboard = () => {
             <p className="text-muted-foreground">Panoramica dettagliata delle trasferte mensili</p>
           </div>
         </div>
-        <div className="text-center py-12">Caricamento dati trasferte...</div>
+        <Card className="p-6">
+          <div className="text-center">
+            <p className="text-destructive mb-4">Errore durante il caricamento dei dati</p>
+            <Button onClick={handleRefresh} variant="outline">
+              Riprova
+            </Button>
+          </div>
+        </Card>
       </div>
     );
   }
 
-  // Calculate totals for summary cards
-  const totalEmployees = businessTripData.length;
-  const totalSaturdayHours = businessTripData.reduce((sum, emp) => sum + emp.saturday_trips.hours, 0);
-  const totalSaturdayAmount = businessTripData.reduce((sum, emp) => sum + emp.saturday_trips.amount, 0);
-  const totalDailyAllowanceDays = businessTripData.reduce((sum, emp) => sum + emp.daily_allowances.days, 0);
-  const totalDailyAllowanceAmount = businessTripData.reduce((sum, emp) => sum + emp.daily_allowances.amount, 0);
-  const totalOvertimeConversions = businessTripData.reduce((sum, emp) => sum + emp.overtime_conversions.amount, 0);
-  const totalMealVoucherConversions = businessTripData.reduce((sum, emp) => sum + emp.meal_voucher_conversions.amount, 0);
-  const grandTotal = totalSaturdayAmount + totalDailyAllowanceAmount + totalOvertimeConversions + totalMealVoucherConversions;
+  // Memoize totals calculation
+  const totals = useMemo(() => {
+    const totalEmployees = businessTripData.length;
+    const totalSaturdayHours = businessTripData.reduce((sum, emp) => sum + emp.saturday_trips.hours, 0);
+    const totalSaturdayAmount = businessTripData.reduce((sum, emp) => sum + emp.saturday_trips.amount, 0);
+    const totalDailyAllowanceDays = businessTripData.reduce((sum, emp) => sum + emp.daily_allowances.days, 0);
+    const totalDailyAllowanceAmount = businessTripData.reduce((sum, emp) => sum + emp.daily_allowances.amount, 0);
+    const totalOvertimeConversions = businessTripData.reduce((sum, emp) => sum + emp.overtime_conversions.amount, 0);
+    const totalMealVoucherConversions = businessTripData.reduce((sum, emp) => sum + emp.meal_voucher_conversions.amount, 0);
+    const grandTotal = totalSaturdayAmount + totalDailyAllowanceAmount + totalOvertimeConversions + totalMealVoucherConversions;
+    
+    return {
+      totalEmployees,
+      totalSaturdayHours,
+      totalSaturdayAmount,
+      totalDailyAllowanceDays,
+      totalDailyAllowanceAmount,
+      totalOvertimeConversions,
+      totalMealVoucherConversions,
+      grandTotal
+    };
+  }, [businessTripData]);
   
-  const calculateEmployeeBreakdowns = () => {
+  // Memoize expensive calculations
+  const employeeBreakdowns = useMemo(() => {
     const CAP_STD = 46.48;  // senza BDP
     const CAP_BDP = 30.98;  // con BDP
 
@@ -758,9 +478,7 @@ const BusinessTripsDashboard = () => {
         undistributed: clamp2(undistributed)
       };
     });
-  };
-  
-  const employeeBreakdowns = calculateEmployeeBreakdowns();
+  }, [businessTripData]); // Only recalculate when data changes
 
   return (
     <div className="space-y-6">
@@ -1177,7 +895,7 @@ const BusinessTripsDashboard = () => {
                                      date={`${selectedMonth.split('-')[0]}-${selectedMonth.split('-')[1]}-${dayKey}`}
                                      companyId={employee.company_id}
                                      isConverted={isConverted}
-                                     onConversionUpdated={fetchBusinessTripData}
+                                     onConversionUpdated={refetch}
                                      size="sm"
                                    />
                                  )}
