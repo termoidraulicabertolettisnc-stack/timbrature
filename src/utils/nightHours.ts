@@ -1,4 +1,4 @@
-import { utcToZonedTime, zonedTimeToUtc } from 'date-fns-tz';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 
 /**
  * Calculates night hours overlap between a work period and night shift window
@@ -22,14 +22,14 @@ export function calcNightMinutesLocal(
     const { h, m } = hhmm(t);
     const local = new Date(dayLocal);
     local.setHours(h, m, 0, 0); // local time
-    return zonedTimeToUtc(local, tz);
+    return fromZonedTime(local, tz);
   };
 
   let minutes = 0;
   let cursorUTC = startUTC;
 
   while (cursorUTC < endUTC) {
-    const local = utcToZonedTime(cursorUTC, tz);
+    const local = toZonedTime(cursorUTC, tz);
     const dayLocal = new Date(local); 
     dayLocal.setHours(0, 0, 0, 0);
     const nextDayLocal = new Date(dayLocal); 
@@ -46,13 +46,13 @@ export function calcNightMinutesLocal(
     const crossMidnightWindow = (ns: string, ne: string) => {
       // [ns, 24:00)
       const a1UTC = mkUtc(dayLocal, ns);
-      const b1UTC = zonedTimeToUtc(nextDayLocal, tz); // 24:00 local
+      const b1UTC = fromZonedTime(nextDayLocal, tz); // 24:00 local
       const a1 = a1UTC > startUTC ? a1UTC : startUTC;
       const b1 = b1UTC < endUTC ? b1UTC : endUTC;
       if (b1 > a1) minutes += (b1.getTime() - a1.getTime()) / 60000;
 
       // [00:00, ne] (always of current "dayLocal")
-      const a2UTC = zonedTimeToUtc(dayLocal, tz); // 00:00 local
+      const a2UTC = fromZonedTime(dayLocal, tz); // 00:00 local
       const b2UTC = mkUtc(dayLocal, ne);
       const a2 = a2UTC > startUTC ? a2UTC : startUTC;
       const b2 = b2UTC < endUTC ? b2UTC : endUTC;
@@ -67,7 +67,7 @@ export function calcNightMinutesLocal(
     else crossMidnightWindow(ns, ne);
 
     // next local day
-    cursorUTC = zonedTimeToUtc(nextDayLocal, tz);
+    cursorUTC = fromZonedTime(nextDayLocal, tz);
   }
 
   return minutes;

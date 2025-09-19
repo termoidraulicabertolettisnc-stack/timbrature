@@ -22,6 +22,8 @@ import { DayActionMenu } from '@/components/DayActionMenu';
 import { AbsenceIndicator } from '@/components/AbsenceIndicator';
 import LocationDisplay from '@/components/LocationDisplay';
 import { useRealtimeHours } from '@/hooks/use-realtime-hours';
+import { calcNightMinutesLocal } from '@/utils/nightHours';
+import { getEmployeeSettingsForDate } from '@/utils/temporalEmployeeSettings';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -35,6 +37,31 @@ import { TimesheetImportDialog } from '@/components/TimesheetImportDialog';
 // Componente per mostrare ore con calcolo in tempo reale
 function HoursDisplay({ timesheet }: { timesheet: TimesheetWithProfile }) {
   const realtimeHours = useRealtimeHours(timesheet);
+  const [rtNightHours, setRtNightHours] = useState<number>(0);
+
+  useEffect(() => {
+    let active = true;
+
+    const run = async () => {
+      if (!timesheet.start_time || timesheet.end_time) {
+        setRtNightHours(0);
+        return;
+      }
+      const settings = await getEmployeeSettingsForDate(timesheet.user_id, timesheet.date);
+      const ns = settings?.night_shift_start || '22:00:00';
+      const ne = settings?.night_shift_end || '05:00:00';
+      const start = new Date(timesheet.start_time);
+      const now = new Date();
+      const mins = calcNightMinutesLocal(start, now, ns, ne, 'Europe/Rome');
+      if (active) setRtNightHours(mins / 60);
+    };
+
+    run();
+
+    // recalculate every minute while shift is open
+    const id = setInterval(run, 60_000);
+    return () => { active = false; clearInterval(id); };
+  }, [timesheet.start_time, timesheet.end_time, timesheet.user_id, timesheet.date]);
   
   const formatHours = (hours: number | null) => {
     if (!hours) return '0h';
@@ -42,12 +69,28 @@ function HoursDisplay({ timesheet }: { timesheet: TimesheetWithProfile }) {
   };
   
   if (!timesheet.end_time && timesheet.start_time) {
-    // Timesheet aperto - mostra ore in tempo reale
-    return <span className="text-blue-600">{formatHours(realtimeHours)} (in corso)</span>;
+    return (
+      <span className="text-blue-600">
+        {formatHours(realtimeHours)} (in corso)
+        {rtNightHours > 0 && (
+          <span className="text-xs text-blue-700 ml-1">
+            • notturne {rtNightHours.toFixed(1)}h
+          </span>
+        )}
+      </span>
+    );
   }
   
-  // Timesheet chiuso - mostra ore totali
-  return <span>{formatHours(timesheet.total_hours)}</span>;
+  return (
+    <span>
+      {formatHours(timesheet.total_hours)}
+      {timesheet.night_hours && timesheet.night_hours > 0 && (
+        <span className="text-xs text-muted-foreground ml-1">
+          • notturne {timesheet.night_hours.toFixed(1)}h
+        </span>
+      )}
+    </span>
+  );
 }
 
 interface EmployeeSummary {
