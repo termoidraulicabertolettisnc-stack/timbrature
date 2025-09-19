@@ -790,7 +790,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                 </div>
                 <div className="mt-4 p-3 bg-muted/50 rounded-lg">
                   <p className="text-sm text-muted-foreground">
-                    <strong>Info:</strong> Questa tariffa viene applicata per tutte le ore lavorate nei sabati, sia per trasferte che per straordinari.
+                    <strong>Info:</strong> Questa tariffa viene applicata solo quando i sabati sono configurati come "Trasferte". Per i sabati configurati come "Straordinari" si applica la normale tariffa straordinaria.
                   </p>
                 </div>
               </CardContent>
