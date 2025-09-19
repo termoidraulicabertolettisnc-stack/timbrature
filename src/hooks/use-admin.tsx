@@ -24,14 +24,20 @@ export const useAdmin = () => {
       }
 
       try {
+        console.log('🔍 Querying profiles for user_id:', user.id);
         const { data, error } = await supabase
           .from('profiles')
           .select('role')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
+
+        console.log('🔍 Profile query result:', { data, error });
 
         if (error) {
           console.error('❌ Error checking admin role:', error);
+          setIsAdmin(false);
+        } else if (!data) {
+          console.log('❌ No profile found for user');
           setIsAdmin(false);
         } else {
           const isAdminResult = data?.role === 'amministratore';
@@ -39,7 +45,7 @@ export const useAdmin = () => {
           setIsAdmin(isAdminResult);
         }
       } catch (error) {
-        console.error('Error checking admin role:', error);
+        console.error('❌ Exception checking admin role:', error);
         setIsAdmin(false);
       } finally {
         setLoading(false);
