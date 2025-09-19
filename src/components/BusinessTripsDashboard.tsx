@@ -1,13 +1,13 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { useBusinessTripData } from '@/hooks/useBusinessTripData';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, Download, Users, MapPin, TrendingDown } from "lucide-react";
+import { Calendar, Download, Users, MapPin, TrendingDown, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
@@ -16,6 +16,7 @@ import { distributePayrollOvertime, applyPayrollOvertimeDistribution } from '@/u
 import { DayConversionToggle } from '@/components/DayConversionToggle';
 import { MassConversionDialog } from '@/components/MassConversionDialog';
 import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface BusinessTripData {
   employee_id: string;
@@ -59,13 +60,16 @@ interface BusinessTripData {
 const BusinessTripsDashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [businessTripData, setBusinessTripData] = useState<BusinessTripData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [holidays, setHolidays] = useState<string[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  // Use optimized hook for data fetching
+  const { data: queryData, isLoading, error, refetch } = useBusinessTripData(selectedMonth);
+  
+  const businessTripData = queryData?.data || [];
+  const holidays = queryData?.holidays || [];
 
   // Italian holidays (fallback for standard holidays)
   const getItalianHolidays = (year: number) => {
