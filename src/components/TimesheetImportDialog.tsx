@@ -64,19 +64,37 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
     }
   };
 
-  const findEmployeeByFiscalCode = async (fiscalCode: string) => {
-    const { data, error } = await supabase
+  const findEmployeeByFiscalCode = async (fiscalCode: string, employeeName: string) => {
+    // First try to find by fiscal code
+    const { data: fiscalData, error: fiscalError } = await supabase
       .from('profiles')
       .select('user_id, first_name, last_name, company_id')
       .eq('codice_fiscale', fiscalCode)
-      .single();
+      .maybeSingle();
 
-    if (error) {
-      // Try to find by name if fiscal code doesn't match
-      return null;
+    if (!fiscalError && fiscalData) {
+      return fiscalData;
     }
 
-    return data;
+    // If fiscal code not found, try to find by name
+    const nameParts = employeeName.trim().split(/\s+/);
+    if (nameParts.length >= 2) {
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(' ');
+      
+      const { data: nameData, error: nameError } = await supabase
+        .from('profiles')
+        .select('user_id, first_name, last_name, company_id')
+        .ilike('first_name', firstName)
+        .ilike('last_name', lastName)
+        .maybeSingle();
+
+      if (!nameError && nameData) {
+        return nameData;
+      }
+    }
+
+    return null;
   };
 
   const checkExistingTimesheet = async (userId: string, date: string) => {
@@ -111,8 +129,8 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
         setProgress((i / total) * 100);
 
         try {
-          // Find employee by fiscal code
-          const employee = await findEmployeeByFiscalCode(timesheet.codice_fiscale);
+          // Find employee by fiscal code or name
+          const employee = await findEmployeeByFiscalCode(timesheet.codice_fiscale, timesheet.employee_name);
           
           if (!employee) {
             console.warn(`Dipendente non trovato per codice fiscale: ${timesheet.codice_fiscale}`);
