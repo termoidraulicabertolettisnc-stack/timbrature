@@ -142,9 +142,11 @@ export function MonthlyCalendarView({
           employee.days[date].meal_vouchers += 1;
         }
       } else {
-        // Turno notturno - distribuisci ore tra due giorni
-        const startHour = startTime.getHours() + startTime.getMinutes() / 60;
-        const endHour = endTime.getHours() + endTime.getMinutes() / 60;
+        // Turno notturno - distribuisci ore tra due giorni - usando UTC+1 (Europa/Roma)
+        const startHourUTC = startTime.getUTCHours() + startTime.getUTCMinutes() / 60 + 1; // Convert to Europe/Rome
+        const endHourUTC = endTime.getUTCHours() + endTime.getUTCMinutes() / 60 + 1; // Convert to Europe/Rome
+        const startHour = startHourUTC >= 24 ? startHourUTC - 24 : (startHourUTC < 0 ? startHourUTC + 24 : startHourUTC);
+        const endHour = endHourUTC >= 24 ? endHourUTC - 24 : (endHourUTC < 0 ? endHourUTC + 24 : endHourUTC);
         
         // Calcola ore per il primo giorno (fino a mezzanotte)
         const firstDayHours = Math.max(0, 24 - startHour);

@@ -41,9 +41,10 @@ export const useWeeklyRealtimeHours = (timesheets: TimesheetWithProfile[]): Week
             overtimeHours += (diffHours - 8);
           }
           
-          // Calcolo per ore notturne (se inizia prima delle 6 o dopo le 22)
-          const startHour = startTime.getHours();
-          if (startHour < 6 || startHour >= 22) {
+          // Calcolo per ore notturne (se inizia prima delle 6 o dopo le 22) - usando UTC+1 (Europa/Roma)
+          const startHour = startTime.getUTCHours() + 1; // Convert UTC to Europe/Rome timezone
+          const adjustedStartHour = startHour >= 24 ? startHour - 24 : (startHour < 0 ? startHour + 24 : startHour);
+          if (adjustedStartHour < 6 || adjustedStartHour >= 22) {
             nightHours += diffHours;
           }
         }

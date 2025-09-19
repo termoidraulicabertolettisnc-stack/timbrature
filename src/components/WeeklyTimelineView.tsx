@@ -195,7 +195,8 @@ export function WeeklyTimelineView({
         if (dayIndex === -1) return;
 
         const day = employee.days[dayIndex];
-        const startHour = startTime.getHours() + startTime.getMinutes() / 60;
+        const startHourUTC = startTime.getUTCHours() + startTime.getUTCMinutes() / 60 + 1; // Convert to Europe/Rome
+        const startHour = startHourUTC >= 24 ? startHourUTC - 24 : (startHourUTC < 0 ? startHourUTC + 24 : startHourUTC);
         const endHour = Math.min(24, startHour + totalDuration);
         const position = (startHour / 24) * 100;
         const width = ((endHour - startHour) / 24) * 100;
@@ -218,9 +219,11 @@ export function WeeklyTimelineView({
 
         day.entries.push(entry);
       } else {
-        // Turno notturno - dividi in due parti
-        const startHour = startTime.getHours() + startTime.getMinutes() / 60;
-        const endHour = endTime.getHours() + endTime.getMinutes() / 60;
+        // Turno notturno - dividi in due parti - usando UTC+1 (Europa/Roma)
+        const startHourUTC = startTime.getUTCHours() + startTime.getUTCMinutes() / 60 + 1; // Convert to Europe/Rome
+        const endHourUTC = endTime.getUTCHours() + endTime.getUTCMinutes() / 60 + 1; // Convert to Europe/Rome
+        const startHour = startHourUTC >= 24 ? startHourUTC - 24 : (startHourUTC < 0 ? startHourUTC + 24 : startHourUTC);
+        const endHour = endHourUTC >= 24 ? endHourUTC - 24 : (endHourUTC < 0 ? endHourUTC + 24 : endHourUTC);
         
         // Prima parte: dal tempo di inizio fino a mezzanotte
         const firstDayIndex = employee.days.findIndex(day => day.date === startDate);
