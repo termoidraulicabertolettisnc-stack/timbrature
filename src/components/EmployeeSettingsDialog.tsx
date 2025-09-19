@@ -759,13 +759,14 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
           </Card>
 
 
-          {/* Saturday Hourly Rate - Show only when Saturday is handled as business trip */}
-          {(getEffectiveValue(settings.saturday_handling, companySettings?.saturday_handling)) === 'trasferta' && (
+          {/* Saturday Hourly Rate - Show when Saturday is handled as business trip OR overtime */}
+          {((getEffectiveValue(settings.saturday_handling, companySettings?.saturday_handling)) === 'trasferta' || 
+            (getEffectiveValue(settings.saturday_handling, companySettings?.saturday_handling)) === 'straordinario') && (
             <Card>
               <CardHeader>
                 <CardTitle>Tariffa Oraria Sabato</CardTitle>
                 <CardDescription>
-                  Tariffa oraria personalizzata per le ore lavorate nei sabati pagati in trasferte
+                  Tariffa oraria personalizzata per le ore lavorate nei sabati 
                   {companySettings && ` (Aziendale: €${companySettings.saturday_hourly_rate}/ora)`}
                 </CardDescription>
               </CardHeader>
@@ -789,10 +790,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                 </div>
                 <div className="mt-4 p-3 bg-muted/50 rounded-lg">
                   <p className="text-sm text-muted-foreground">
-                    <strong>Info:</strong> Questa tariffa viene applicata per tutte le ore lavorate nei sabati quando sono configurati come "trasferte".
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Per i sabati configurati come "straordinari", viene applicata la normale tariffa straordinaria.
+                    <strong>Info:</strong> Questa tariffa viene applicata per tutte le ore lavorate nei sabati, sia per trasferte che per straordinari.
                   </p>
                 </div>
               </CardContent>
