@@ -569,6 +569,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          codice_fiscale: string | null
           company_id: string | null
           created_at: string
           email: string
@@ -581,6 +582,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          codice_fiscale?: string | null
           company_id?: string | null
           created_at?: string
           email: string
@@ -593,6 +595,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          codice_fiscale?: string | null
           company_id?: string | null
           created_at?: string
           email?: string

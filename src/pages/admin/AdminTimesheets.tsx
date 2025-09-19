@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { CalendarIcon, Clock, Edit, Filter, Download, Users, ChevronDown, ChevronRight, Trash2, Navigation, ChevronLeft, Plus, UserPlus, Calendar } from 'lucide-react';
+import { CalendarIcon, Clock, Edit, Filter, Download, Users, ChevronDown, ChevronRight, Trash2, Navigation, ChevronLeft, Plus, UserPlus, Calendar, FileSpreadsheet } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, addDays, isSameDay, subDays, subWeeks, subMonths, addWeeks, addMonths } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -30,6 +30,7 @@ import { cn } from '@/lib/utils';
 import { BenefitsService } from '@/services/BenefitsService';
 import { MonthlyCalendarView } from '@/components/MonthlyCalendarView';
 import { WeeklyTimelineView } from '@/components/WeeklyTimelineView';
+import { TimesheetImportDialog } from '@/components/TimesheetImportDialog';
 
 // Componente per mostrare ore con calcolo in tempo reale
 function HoursDisplay({ timesheet }: { timesheet: TimesheetWithProfile }) {
@@ -155,6 +156,7 @@ export default function AdminTimesheets() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [insertDialogOpen, setInsertDialogOpen] = useState(false);
   const [absenceDialogOpen, setAbsenceDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
   const [selectedTimesheetDate, setSelectedTimesheetDate] = useState<string>('');
 
@@ -610,6 +612,14 @@ export default function AdminTimesheets() {
             <UserPlus className="h-4 w-4" />
             Aggiungi Assenza
           </Button>
+          <Button 
+            variant="outline"
+            onClick={() => setImportDialogOpen(true)}
+            className="gap-2"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Importa Excel
+          </Button>
         </div>
       </div>
 
@@ -798,6 +808,15 @@ export default function AdminTimesheets() {
         onSuccess={() => {
           loadTimesheets(); // Ricarica anche le assenze
           setAbsenceDialogOpen(false);
+        }}
+      />
+
+      {/* Dialog per importazione Excel */}
+      <TimesheetImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onImportComplete={() => {
+          loadTimesheets();
         }}
       />
     </div>
