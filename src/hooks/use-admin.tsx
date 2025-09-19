@@ -24,8 +24,8 @@ export const useAdmin = () => {
       }
 
       try {
-        console.log('🔍 Calling is_user_admin_secure function');
-        const { data, error } = await supabase.rpc('is_user_admin_secure');
+        console.log('🔍 Calling is_admin function');
+        const { data, error } = await supabase.rpc('is_admin');
 
         console.log('🔍 Admin function result:', { data, error });
 
