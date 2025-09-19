@@ -179,6 +179,34 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
 
     setLoading(true);
     try {
+      // Validazioni prima dell'update
+      const startD = new Date(`${formData.date}T${formData.start_time || '00:00'}:00`);
+      const endD = new Date(`${formData.end_date || formData.date}T${formData.end_time || '00:00'}:00`);
+
+      if (formData.start_time && formData.end_time && endD < startD) {
+        toast({ 
+          title: 'Errore', 
+          description: 'L\'orario di fine è precedente all\'inizio', 
+          variant: 'destructive' 
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Validazione pausa pranzo quando si usa la modalità orari
+      if (lunchBreakMode === 'times' && (!!formData.lunch_start_time !== !!formData.lunch_end_time)) {
+        toast({ 
+          title: 'Errore', 
+          description: 'Specifica sia inizio che fine della pausa pranzo', 
+          variant: 'destructive' 
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Ottieni l'utente corrente per updated_by
+      const currentUser = (await supabase.auth.getUser()).data.user;
+
       // Prepare the update data
       const updateData: any = {
         date: formData.date,
@@ -187,7 +215,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         notes: formData.notes || null,
         is_saturday: formData.is_saturday,
         is_holiday: formData.is_holiday,
-        updated_by: timesheet.user_id,
+        updated_by: currentUser?.id ?? timesheet.user_id,
       };
 
       // Handle start_time - convert local time input to UTC
@@ -211,14 +239,22 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
       if (lunchBreakMode === 'times') {
         // Use specific start/end times - convert local time input to UTC
         if (formData.lunch_start_time) {
-          const localDate = new Date(`${formData.date}T${formData.lunch_start_time}:00`);
+          // Scegli il giorno giusto per la pausa - se attraversa la mezzanotte, usa end_date
+          const lunchDate = formData.lunch_start_time < formData.start_time && formData.end_date !== formData.date 
+            ? formData.end_date 
+            : formData.date;
+          const localDate = new Date(`${lunchDate}T${formData.lunch_start_time}:00`);
           updateData.lunch_start_time = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
         } else {
           updateData.lunch_start_time = null;
         }
 
         if (formData.lunch_end_time) {
-          const localDate = new Date(`${formData.date}T${formData.lunch_end_time}:00`);
+          // Scegli il giorno giusto per la pausa - se attraversa la mezzanotte, usa end_date  
+          const lunchDate = formData.lunch_end_time < formData.start_time && formData.end_date !== formData.date 
+            ? formData.end_date 
+            : formData.date;
+          const localDate = new Date(`${lunchDate}T${formData.lunch_end_time}:00`);
           updateData.lunch_end_time = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
         } else {
           updateData.lunch_end_time = null;
@@ -446,7 +482,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
               <Checkbox
                 id="is_saturday"
                 checked={formData.is_saturday}
-                onCheckedChange={(checked) => handleInputChange('is_saturday', checked)}
+                onCheckedChange={(checked) => handleInputChange('is_saturday', Boolean(checked))}
               />
               <Label htmlFor="is_saturday">Sabato</Label>
             </div>
@@ -455,7 +491,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
               <Checkbox
                 id="is_holiday"
                 checked={formData.is_holiday}
-                onCheckedChange={(checked) => handleInputChange('is_holiday', checked)}
+                onCheckedChange={(checked) => handleInputChange('is_holiday', Boolean(checked))}
               />
               <Label htmlFor="is_holiday">Festivo</Label>
             </div>
