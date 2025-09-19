@@ -64,49 +64,56 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
     }
   };
 
+  const getMyCompany = async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+      .single();
+    return data?.company_id;
+  };
+
   const findEmployeeByFiscalCode = async (fiscalCode: string, employeeName: string) => {
-    // First try to find by fiscal code
+    const companyId = await getMyCompany();
+    const cf = (fiscalCode || '').trim().toUpperCase();
+
+    // First try to find by fiscal code within the same company
     const { data: fiscalData, error: fiscalError } = await supabase
       .from('profiles')
       .select('user_id, first_name, last_name, company_id')
-      .eq('codice_fiscale', fiscalCode)
+      .eq('company_id', companyId)
+      .eq('codice_fiscale', cf)
       .maybeSingle();
 
     if (!fiscalError && fiscalData) {
       return fiscalData;
     }
-
-    // If fiscal code not found, try to find by name
-    const nameParts = employeeName.trim().split(/\s+/);
-    if (nameParts.length >= 2) {
-      const firstName = nameParts[0];
-      const lastName = nameParts.slice(1).join(' ');
-      
-      const { data: nameData, error: nameError } = await supabase
-        .from('profiles')
-        .select('user_id, first_name, last_name, company_id')
-        .ilike('first_name', firstName)
-        .ilike('last_name', lastName)
-        .maybeSingle();
-
-      if (!nameError && nameData) {
-        return nameData;
-      }
+    
+    // If there was an error (not just no data), don't proceed to name fallback
+    if (fiscalError) {
+      return null;
     }
 
-    return null;
-  };
+    // If fiscal code not found, try to find by name within the same company
+    const nameParts = employeeName.trim().split(/\s+/);
+    if (nameParts.length < 2) {
+      return null;
+    }
 
-  const checkExistingTimesheet = async (userId: string, date: string) => {
-    const { data, error } = await supabase
-      .from('timesheets')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('date', date)
+    const firstName = nameParts[0];
+    const lastName = nameParts.slice(1).join(' ');
+
+    const { data: nameData, error: nameError } = await supabase
+      .from('profiles')
+      .select('user_id, first_name, last_name, company_id')
+      .eq('company_id', companyId)
+      .ilike('first_name', firstName)
+      .ilike('last_name', lastName)
       .maybeSingle();
 
-    return !error && data !== null;
+    return (!nameError && nameData) ? nameData : null;
   };
+
 
   const handleImport = async () => {
     if (!parseResult || parseResult.success.length === 0) return;
@@ -123,11 +130,11 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
 
     try {
       const total = parseResult.success.length;
+      const currentUserId = (await supabase.auth.getUser()).data.user?.id;
 
       for (let i = 0; i < parseResult.success.length; i++) {
         const timesheet = parseResult.success[i];
-        setProgress((i / total) * 100);
-
+        
         try {
           // Find employee by fiscal code or name
           const employee = await findEmployeeByFiscalCode(timesheet.codice_fiscale, timesheet.employee_name);
@@ -138,17 +145,8 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
             continue;
           }
 
-          // Check if timesheet already exists
-          const exists = await checkExistingTimesheet(employee.user_id, timesheet.date);
-          
-          if (exists) {
-            console.log(`Timbratura già esistente per ${employee.first_name} ${employee.last_name} del ${timesheet.date}`);
-            importResults.skipped++;
-            continue;
-          }
-
-          // Insert new timesheet
-          const { error } = await supabase.from('timesheets').insert({
+          // Use upsert for idempotent insert (will ignore if already exists due to unique index)
+          const { error } = await supabase.from('timesheets').upsert({
             user_id: employee.user_id,
             date: timesheet.date,
             start_time: timesheet.start_time,
@@ -159,8 +157,11 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
             end_location_lng: timesheet.end_location_lng,
             lunch_start_time: timesheet.lunch_start_time,
             lunch_end_time: timesheet.lunch_end_time,
-            created_by: employee.user_id,
+            created_by: currentUserId,
             notes: `Importato da Excel - ${file?.name}`
+          }, { 
+            onConflict: 'user_id,date', 
+            ignoreDuplicates: true 
           });
 
           if (error) {
@@ -173,6 +174,8 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
         } catch (error) {
           console.error('Errore durante importazione riga:', error);
           importResults.errors++;
+        } finally {
+          setProgress(((i + 1) / total) * 100);
         }
       }
 
