@@ -789,6 +789,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      debug_night_hours_calculation: {
+        Args: {
+          p_end_time: string
+          p_night_end?: string
+          p_night_start?: string
+          p_start_time: string
+        }
+        Returns: {
+          calculated_hours: number
+          local_end: string
+          local_start: string
+          night_end_today: string
+          night_overlap_minutes: number
+          night_start_today: string
+          utc_end: string
+          utc_start: string
+        }[]
+      }
       get_current_user_role_and_company: {
         Args: Record<PropertyKey, never>
         Returns: {
