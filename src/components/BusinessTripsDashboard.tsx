@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
 import { MealVoucherConversionService, MealVoucherConversion } from '@/services/MealVoucherConversionService';
+import { distributePayrollOvertime, applyPayrollOvertimeDistribution } from '@/utils/payrollOvertimeDistribution';
 import { DayConversionToggle } from '@/components/DayConversionToggle';
 import { MassConversionDialog } from '@/components/MassConversionDialog';
 import { useToast } from '@/hooks/use-toast';
@@ -373,6 +374,9 @@ const BusinessTripsDashboard = () => {
             monthly_total: false
           };
 
+          let finalDailyData = dailyData;
+          let finalOvertimeTotal = totalOvertime;
+
           try {
             const conversionCalc = await OvertimeConversionService.calculateConversionDetails(
               profile.user_id,
@@ -385,8 +389,21 @@ const BusinessTripsDashboard = () => {
               overtimeConversions.amount = conversionCalc.conversion_amount;
               overtimeConversions.monthly_total = true;
               
-              // Apply conversion to reduce displayed overtime
-              totalOvertime = Math.max(0, totalOvertime - conversionCalc.converted_hours);
+              // Apply conversion distribution to daily data
+              const dailyDataForDistribution: { [day: string]: { ordinary: number; overtime: number; absence: string | null } } = {};
+              Object.keys(dailyData).forEach(day => {
+                dailyDataForDistribution[day] = {
+                  ordinary: dailyData[day].ordinary,
+                  overtime: dailyData[day].overtime,
+                  absence: dailyData[day].absence
+                };
+              });
+              
+              const distributions = distributePayrollOvertime(dailyDataForDistribution, conversionCalc.converted_hours);
+              finalDailyData = applyPayrollOvertimeDistribution(dailyDataForDistribution, distributions);
+              
+              // Recalculate total overtime after conversions
+              finalOvertimeTotal = Object.values(finalDailyData).reduce((sum, data) => sum + (data.overtime || 0), 0);
             }
           } catch (e) {
             console.warn('Conversion calc error', profile.user_id, e);
@@ -396,10 +413,10 @@ const BusinessTripsDashboard = () => {
             employee_id: profile.user_id,
             employee_name: `${profile.first_name} ${profile.last_name}`,
             company_id: profile.company_id,
-            daily_data: dailyData,
+            daily_data: finalDailyData,
             totals: {
               ordinary: totalOrdinary,
-              overtime: totalOvertime,
+              overtime: finalOvertimeTotal,
               absence_totals: absenceTotals,
             },
             meal_vouchers: mealVoucherDays,
