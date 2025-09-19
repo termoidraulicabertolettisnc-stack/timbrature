@@ -127,10 +127,10 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
       setFormData({
         date: timesheet.date,
         end_date: timesheet.end_date || timesheet.date,
-        start_time: timesheet.start_time ? format(new Date(timesheet.start_time + 'Z'), 'HH:mm') : '',
-        end_time: timesheet.end_time ? format(new Date(timesheet.end_time + 'Z'), 'HH:mm') : '',
-        lunch_start_time: timesheet.lunch_start_time ? format(new Date(timesheet.lunch_start_time + 'Z'), 'HH:mm') : '',
-        lunch_end_time: timesheet.lunch_end_time ? format(new Date(timesheet.lunch_end_time + 'Z'), 'HH:mm') : '',
+        start_time: timesheet.start_time ? format(parseISO(timesheet.start_time), 'HH:mm') : '',
+        end_time: timesheet.end_time ? format(parseISO(timesheet.end_time), 'HH:mm') : '',
+        lunch_start_time: timesheet.lunch_start_time ? format(parseISO(timesheet.lunch_start_time), 'HH:mm') : '',
+        lunch_end_time: timesheet.lunch_end_time ? format(parseISO(timesheet.lunch_end_time), 'HH:mm') : '',
         project_id: timesheet.project_id || 'none',
         notes: timesheet.notes || '',
         is_saturday: timesheet.is_saturday,
@@ -190,32 +190,36 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         updated_by: timesheet.user_id,
       };
 
-      // Handle start_time - create UTC timestamp directly
+      // Handle start_time - convert local time input to UTC
       if (formData.start_time) {
-        updateData.start_time = `${formData.date}T${formData.start_time}:00+00:00`;
+        const localDate = new Date(`${formData.date}T${formData.start_time}:00`);
+        updateData.start_time = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
       } else {
         updateData.start_time = null;
       }
 
-      // Handle end_time - create UTC timestamp directly  
+      // Handle end_time - convert local time input to UTC
       if (formData.end_time) {
         const endDate = formData.end_date || formData.date;
-        updateData.end_time = `${endDate}T${formData.end_time}:00+00:00`;
+        const localDate = new Date(`${endDate}T${formData.end_time}:00`);
+        updateData.end_time = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
       } else {
         updateData.end_time = null;
       }
 
       // Handle lunch times based on mode
       if (lunchBreakMode === 'times') {
-        // Use specific start/end times - create UTC timestamp directly
+        // Use specific start/end times - convert local time input to UTC
         if (formData.lunch_start_time) {
-          updateData.lunch_start_time = `${formData.date}T${formData.lunch_start_time}:00+00:00`;
+          const localDate = new Date(`${formData.date}T${formData.lunch_start_time}:00`);
+          updateData.lunch_start_time = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
         } else {
           updateData.lunch_start_time = null;
         }
 
         if (formData.lunch_end_time) {
-          updateData.lunch_end_time = `${formData.date}T${formData.lunch_end_time}:00+00:00`;
+          const localDate = new Date(`${formData.date}T${formData.lunch_end_time}:00`);
+          updateData.lunch_end_time = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
         } else {
           updateData.lunch_end_time = null;
         }
