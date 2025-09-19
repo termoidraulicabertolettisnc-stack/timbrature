@@ -24,25 +24,17 @@ export const useAdmin = () => {
       }
 
       try {
-        console.log('🔍 Querying profiles for user_id:', user.id);
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('user_id', user.id)
-          .maybeSingle();
+        console.log('🔍 Calling is_user_admin_secure function');
+        const { data, error } = await supabase.rpc('is_user_admin_secure');
 
-        console.log('🔍 Profile query result:', { data, error });
+        console.log('🔍 Admin function result:', { data, error });
 
         if (error) {
           console.error('❌ Error checking admin role:', error);
           setIsAdmin(false);
-        } else if (!data) {
-          console.log('❌ No profile found for user');
-          setIsAdmin(false);
         } else {
-          const isAdminResult = data?.role === 'amministratore';
-          console.log('✅ Admin check result:', { role: data?.role, isAdmin: isAdminResult });
-          setIsAdmin(isAdminResult);
+          console.log('✅ Admin check result:', { isAdmin: data });
+          setIsAdmin(data === true);
         }
       } catch (error) {
         console.error('❌ Exception checking admin role:', error);
