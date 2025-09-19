@@ -574,7 +574,8 @@ const BusinessTripsDashboard = () => {
       if (R1 > 0) {
         Gresto = Math.ceil(R1 / CAP_BDP);
         if (Gresto > A30) {
-          warning = `${emp.employee_name}: Capienza insufficiente - servono ${Gresto} giorni CAP 30,98 ma ne ha ${A30}. Converti altri BDP o aumenta i giorni eleggibili.`;
+          const remainingAmount = R1.toFixed(2);
+          warning = `${emp.employee_name}: Resto €${remainingAmount} non distribuibile. Serve ${Gresto} giorno/i CAP €30.98 ma ne ha solo ${A30}. Tutti i suoi ${empDebug.days_46_48} giorni eleggibili sono CAP €46.48. Per risolvere: converti alcuni BDP in CB (per ottenere giorni €30.98) oppure riduci gli importi TS/TI.`;
           // Limita per evitare NaN/inf
           Gresto = A30 > 0 ? A30 : 0;
         }
