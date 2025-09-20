@@ -817,8 +817,8 @@ const BusinessTripsDashboard = () => {
                                   <TableCell className="p-1"></TableCell>
                                 </TableRow>}
 
-                              {/* Overtime conversions row - Only show if has data */}
-                              {employee.overtime_conversions.hours > 0 && <TableRow className="hover:bg-indigo-50/50">
+                              {/* Overtime conversions row - Show if has converted hours OR available overtime to convert */}
+                              {(employee.overtime_conversions.hours > 0 || employee.totals.overtime > 0) && <TableRow className="hover:bg-indigo-50/50">
                                   <TableCell className="font-medium text-xs p-2">
                                     <span className="text-indigo-700 font-bold">CS</span> - Conv. Straordinari
                                   </TableCell>
