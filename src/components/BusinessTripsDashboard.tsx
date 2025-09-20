@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, Suspense } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBusinessTripData } from '@/hooks/useBusinessTripData';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,11 @@ import { MassConversionDialog } from '@/components/MassConversionDialog';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BusinessTripSkeleton } from '@/components/ui/business-trip-skeleton';
+
+// Lazy load toggle to avoid mounting hundreds of components
+const LazyDayConversionToggle = React.lazy(() => 
+  import('@/components/DayConversionToggle').then(m => ({ default: m.DayConversionToggle }))
+);
 
 interface BusinessTripData {
   employee_id: string;
@@ -98,6 +103,45 @@ const BusinessTripsDashboard = () => {
     companyId: '',
     workingDays: []
   });
+
+  // Pre-calculate month calendar once (CRITICAL OPTIMIZATION)
+  const { daysMeta, holidaysSet } = useMemo(() => {
+    const [y, m] = selectedMonth.split('-').map(Number);
+    const days = new Date(y, m, 0).getDate();
+
+    // Italian holidays Set for O(1) lookup
+    const itHolidays = new Set([
+      `${y}-01-01`, `${y}-01-06`, `${y}-04-25`, `${y}-05-01`, `${y}-06-02`,
+      `${y}-08-15`, `${y}-11-01`, `${y}-12-08`, `${y}-12-25`, `${y}-12-26`,
+      ...(y === 2024 ? [`${y}-03-31`, `${y}-04-01`] : []),
+      ...(y === 2025 ? [`${y}-04-20`, `${y}-04-21`] : []),
+    ]);
+
+    // Company holidays (from server) → Set for O(1)
+    const holidaysSet = new Set(holidays);
+
+    const daysMeta = Array.from({ length: days }, (_, i) => {
+      const d = i + 1;
+      const date = new Date(y, m - 1, d);
+      const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dow = date.getDay();
+      const isSunday = dow === 0;
+      const isSaturday = dow === 6;
+      const isHoliday = holidaysSet.has(dateStr) || itHolidays.has(dateStr);
+      const dayName = date.toLocaleDateString('it-IT', { weekday: 'short' });
+      return {
+        d,
+        dayKey: String(d).padStart(2, '0'),
+        dayName,
+        isSunday,
+        isSaturday,
+        isHoliday,
+        dateStr,
+      };
+    });
+
+    return { daysMeta, holidaysSet };
+  }, [selectedMonth, holidays]);
 
   // Memoize totals calculation
   const totals = useMemo(() => {
@@ -361,67 +405,21 @@ const BusinessTripsDashboard = () => {
     });
   }, [businessTripData]);
 
-  // Italian holidays (fallback for standard holidays)
-  const getItalianHolidays = (year: number) => {
-    const holidays = new Set([
-      `${year}-01-01`, // Capodanno
-      `${year}-01-06`, // Epifania
-      `${year}-04-25`, // Festa della Liberazione
-      `${year}-05-01`, // Festa del Lavoro
-      `${year}-06-02`, // Festa della Repubblica
-      `${year}-08-15`, // Ferragosto
-      `${year}-11-01`, // Ognissanti
-      `${year}-12-08`, // Immacolata Concezione
-      `${year}-12-25`, // Natale
-      `${year}-12-26`, // Santo Stefano
-    ]);
-    
-    // Easter-related holidays (simplified calculation for 2024-2025)
-    if (year === 2024) {
-      holidays.add(`${year}-03-31`); // Pasqua 2024
-      holidays.add(`${year}-04-01`); // Lunedì dell'Angelo 2024
-    } else if (year === 2025) {
-      holidays.add(`${year}-04-20`); // Pasqua 2025
-      holidays.add(`${year}-04-21`); // Lunedì dell'Angelo 2025
-    }
-    
-    return holidays;
-  };
-
-  const getDaysInMonth = () => {
-    const [year, month] = selectedMonth.split('-');
-    return new Date(parseInt(year), parseInt(month), 0).getDate();
-  };
-
-  const getDateInfo = (day: number) => {
-    const [year, month] = selectedMonth.split('-');
-    const date = new Date(parseInt(year), parseInt(month) - 1, day);
-    const dayName = date.toLocaleDateString('it-IT', { weekday: 'short' });
-    const isSunday = date.getDay() === 0;
-    const isSaturday = date.getDay() === 6;
-    const dateString = `${year}-${month.padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    
-    // Check both company holidays and Italian standard holidays
-    const italianHolidays = getItalianHolidays(parseInt(year));
-    const isHoliday = holidays.includes(dateString) || italianHolidays.has(dateString);
-    
-    return { dayName, isSunday, isSaturday, isHoliday };
-  };
-
-  const handleRefresh = () => {
+  // Stable event handlers with useCallback
+  const handleRefresh = useCallback(() => {
     refetch();
-  };
+  }, [refetch]);
 
-  const handleOvertimeConversion = (userId: string, userName: string, originalOvertimeHours: number) => {
+  const handleOvertimeConversion = useCallback((userId: string, userName: string, originalOvertimeHours: number) => {
     setConversionDialog({
       open: true,
       userId,
       userName,
       originalOvertimeHours
     });
-  };
+  }, []);
 
-  const handleMassConversion = (userId: string, userName: string, companyId: string) => {
+  const handleMassConversion = useCallback((userId: string, userName: string, companyId: string) => {
     // Get working days for the month (days with worked hours)
     const employee = businessTripData.find(emp => emp.employee_id === userId);
     if (!employee) return;
@@ -443,17 +441,17 @@ const BusinessTripsDashboard = () => {
       companyId,
       workingDays
     });
-  };
+  }, [businessTripData, selectedMonth]);
 
-  const handleConversionComplete = () => {
+  const handleConversionComplete = useCallback(() => {
     setConversionDialog({ open: false, userId: '', userName: '', originalOvertimeHours: 0 });
     refetch();
-  };
+  }, [refetch]);
 
-  const handleMassConversionComplete = () => {
+  const handleMassConversionComplete = useCallback(() => {
     setMassConversionDialog({ open: false, userId: '', userName: '', companyId: '', workingDays: [] });
     refetch();
-  };
+  }, [refetch]);
 
   // NOW SAFE TO HAVE CONDITIONAL RETURNS AFTER ALL HOOKS
   // Show loading skeleton while fetching
@@ -676,24 +674,20 @@ const BusinessTripsDashboard = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead className="sticky left-0 bg-background z-10 min-w-[120px]">Dipendente</TableHead>
-                  {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                    const day = i + 1;
-                    const { dayName, isSunday, isSaturday, isHoliday } = getDateInfo(day);
-                    return (
-                      <TableHead
-                        key={day}
-                        className={`text-center text-xs p-1 min-w-[40px] ${
-                          isSunday || isHoliday ? 'bg-red-50 text-red-700' : 
-                          isSaturday ? 'bg-blue-50 text-blue-700' : ''
-                        }`}
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-xs">{dayName}</span>
-                          <span className="font-bold">{day}</span>
-                        </div>
-                      </TableHead>
-                    );
-                  })}
+                  {daysMeta.map(({ d, dayName, isSunday, isSaturday, isHoliday }) => (
+                    <TableHead
+                      key={d}
+                      className={`text-center text-xs p-1 min-w-[40px] ${
+                        isSunday || isHoliday ? 'bg-red-50 text-red-700' : 
+                        isSaturday ? 'bg-blue-50 text-blue-700' : ''
+                      }`}
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-xs">{dayName}</span>
+                        <span className="font-bold">{d}</span>
+                      </div>
+                    </TableHead>
+                  ))}
                   <TableHead className="text-center text-xs p-1 bg-purple-50 border-l">CB</TableHead>
                 </TableRow>
               </TableHeader>
@@ -731,33 +725,31 @@ const BusinessTripsDashboard = () => {
                         </div>
                       </div>
                     </TableCell>
-                    {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                      const day = i + 1;
-                      const dayKey = String(day).padStart(2, '0');
+                    {daysMeta.map(({ d, dayKey, isSunday, isSaturday, isHoliday, dateStr }) => {
                       const dayData = employee.daily_data[dayKey];
-                      const { isSunday, isSaturday, isHoliday } = getDateInfo(day);
-                      
                       const hasWorkedHours = dayData && (dayData.ordinary > 0 || dayData.overtime > 0);
                       const isConverted = employee.meal_voucher_conversions.daily_data[dayKey] || false;
                       
                       return (
                         <TableCell
-                          key={day}
+                          key={d}
                           className={`text-center text-xs p-1 ${
                             isSunday || isHoliday ? 'bg-red-50' : 
                             isSaturday ? 'bg-blue-50' : ''
                           }`}
                         >
                           {hasWorkedHours && (
-                            <DayConversionToggle
-                              userId={employee.employee_id}
-                              userName={employee.employee_name}
-                              date={`${selectedMonth.split('-')[0]}-${selectedMonth.split('-')[1]}-${dayKey}`}
-                              companyId={employee.company_id}
-                              isConverted={isConverted}
-                              onConversionUpdated={refetch}
-                              size="sm"
-                            />
+                            <Suspense fallback={null}>
+                              <LazyDayConversionToggle
+                                userId={employee.employee_id}
+                                userName={employee.employee_name}
+                                date={dateStr}
+                                companyId={employee.company_id}
+                                isConverted={isConverted}
+                                onConversionUpdated={refetch}
+                                size="sm"
+                              />
+                            </Suspense>
                           )}
                         </TableCell>
                       );
