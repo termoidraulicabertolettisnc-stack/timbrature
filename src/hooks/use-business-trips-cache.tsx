@@ -376,7 +376,7 @@ export const useBusinessTripsCache = (selectedMonth: string) => {
     subscriptionsRef.current.forEach(sub => sub?.unsubscribe());
     subscriptionsRef.current = [];
 
-    const tables = ['timesheets', 'employee_absences', 'employee_settings', 'employee_meal_voucher_conversions', 'company_holidays'];
+    const tables = ['timesheets', 'employee_absences', 'employee_settings', 'employee_meal_voucher_conversions', 'overtime_conversions', 'company_holidays'];
     
     tables.forEach(tableName => {
       const channel = supabase
