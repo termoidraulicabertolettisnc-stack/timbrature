@@ -1112,9 +1112,7 @@ const BusinessTripsDashboard = () => {
                                 </TableCell>
                                 <TableCell className="p-1">
                                   <div className="flex gap-1">
-                                    <Button onClick={() => handleMassConversion(employee.employee_id, employee.employee_name, employee.company_id)} variant="outline" size="sm" className="h-6 px-2 text-xs">
-                                      Massa
-                                    </Button>
+                                    <Button onClick={() => handleMassConversion(employee.employee_id, employee.employee_name, employee.company_id)} variant="outline" size="sm" className="h-6 px-2 text-xs">Conversioni</Button>
                                   </div>
                                 </TableCell>
                               </TableRow>
