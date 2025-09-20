@@ -18,6 +18,7 @@ import { MassConversionDialog } from '@/components/MassConversionDialog';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BusinessTripSkeleton } from '@/components/ui/business-trip-skeleton';
+import OptimizedBusinessTripsDashboard from './OptimizedBusinessTripsDashboard';
 
 // Lazy load toggle to avoid mounting hundreds of components
 const LazyDayConversionToggle = React.lazy(() => 
@@ -64,6 +65,14 @@ interface BusinessTripData {
 }
 
 const BusinessTripsDashboard = () => {
+  // Return optimized version for now to solve performance issues
+  return <OptimizedBusinessTripsDashboard />;
+
+  // Original complex version kept for reference but not used
+  return <OriginalBusinessTripsDashboard />;
+};
+
+const OriginalBusinessTripsDashboard = () => {
   // ALL HOOKS MUST BE CALLED FIRST, BEFORE ANY CONDITIONAL RETURNS
   const { user } = useAuth();
   const { toast } = useToast();

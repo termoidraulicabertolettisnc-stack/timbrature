@@ -1,3 +1,4 @@
+import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -154,6 +155,26 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
   // Load meal voucher conversions
   const allConversionsData = await MealVoucherConversionService.getConversionsForUsers(userIds, startDate, endDate);
 
+  // Batch all temporal settings queries to reduce DB calls
+  const allTemporalSettings = await Promise.all(
+    profiles.map(p => 
+      supabase
+        .from('employee_settings')
+        .select('*')
+        .eq('user_id', p.user_id)
+        .lte('valid_from', endDate)
+        .or(`valid_to.is.null,valid_to.gt.${startDate}`)
+        .order('valid_from', { ascending: false })
+        .limit(1)
+        .single()
+        .then(res => ({ userId: p.user_id, settings: res.data }))
+    )
+  );
+
+  const temporalSettingsMap = Object.fromEntries(
+    allTemporalSettings.map(item => [item.userId, item.settings])
+  );
+
   // Process data for each employee
   const processedData: BusinessTripData[] = await Promise.all(
     profiles.map(async (profile) => {
@@ -211,7 +232,8 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         const date = new Date(`${ts.date}T00:00:00`);
         const isSaturday = date.getDay() === 6;
 
-        const temporalSettings = await getEmployeeSettingsForDate(ts.user_id, ts.date);
+        // Use pre-fetched temporal settings
+        const temporalSettings = temporalSettingsMap[profile.user_id];
         const effectiveSaturdayHandling = temporalSettings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
         const effectiveSaturdayRate = temporalSettings?.saturday_hourly_rate || defaultSaturdayRate;
 
@@ -352,18 +374,23 @@ export const useBusinessTripData = (selectedMonth: string) => {
   const { user } = useAuth();
   const store = useBusinessTripStore();
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ['business-trip-data', selectedMonth, user?.id],
     queryFn: () => fetchBusinessTripData(selectedMonth, user!.id),
     enabled: !!user,
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    select: (data) => {
-      // Update store with fresh data
-      store.setData(data.data);
-      store.setHolidays(data.holidays);
-      return data;
-    },
+    retry: 1, // Prevent aggressive retries that cause loops
   });
+
+  // Update store outside of select to prevent infinite loops
+  React.useEffect(() => {
+    if (query.data) {
+      store.setData(query.data.data);
+      store.setHolidays(query.data.holidays);
+    }
+  }, [query.data, store]);
+
+  return query;
 };
