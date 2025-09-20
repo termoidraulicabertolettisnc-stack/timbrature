@@ -1,13 +1,13 @@
 'use client'
 
-import React, { useState, useMemo, useCallback, Suspense } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useBusinessTripData } from '@/hooks/useBusinessTripData';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, Download, Users, MapPin, TrendingDown, Loader2 } from "lucide-react";
+import { Calendar, Download, Users, MapPin, TrendingDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
@@ -16,14 +16,6 @@ import { distributePayrollOvertime, applyPayrollOvertimeDistribution } from '@/u
 import { DayConversionToggle } from '@/components/DayConversionToggle';
 import { MassConversionDialog } from '@/components/MassConversionDialog';
 import { useToast } from '@/hooks/use-toast';
-import { Skeleton } from '@/components/ui/skeleton';
-import { BusinessTripSkeleton } from '@/components/ui/business-trip-skeleton';
-import OptimizedBusinessTripsDashboard from './OptimizedBusinessTripsDashboard';
-
-// Lazy load toggle to avoid mounting hundreds of components
-const LazyDayConversionToggle = React.lazy(() => 
-  import('@/components/DayConversionToggle').then(m => ({ default: m.DayConversionToggle }))
-);
 
 interface BusinessTripData {
   employee_id: string;
@@ -65,25 +57,42 @@ interface BusinessTripData {
 }
 
 const BusinessTripsDashboard = () => {
-  // Return optimized version to solve all performance issues
-  return <OptimizedBusinessTripsDashboard />;
-};
-
-const OriginalBusinessTripsDashboard = () => {
-  // ALL HOOKS MUST BE CALLED FIRST, BEFORE ANY CONDITIONAL RETURNS
   const { user } = useAuth();
   const { toast } = useToast();
+  const [businessTripData, setBusinessTripData] = useState<BusinessTripData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [holidays, setHolidays] = useState<string[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
 
-  // Use optimized hook for data fetching
-  const { data: queryData, isLoading, error, refetch } = useBusinessTripData(selectedMonth);
-  
-  const businessTripData = queryData?.data || [];
-  const holidays = queryData?.holidays || [];
-
+  // Italian holidays (fallback for standard holidays)
+  const getItalianHolidays = (year: number) => {
+    const holidays = new Set([
+      `${year}-01-01`, // Capodanno
+      `${year}-01-06`, // Epifania
+      `${year}-04-25`, // Festa della Liberazione
+      `${year}-05-01`, // Festa del Lavoro
+      `${year}-06-02`, // Festa della Repubblica
+      `${year}-08-15`, // Ferragosto
+      `${year}-11-01`, // Ognissanti
+      `${year}-12-08`, // Immacolata Concezione
+      `${year}-12-25`, // Natale
+      `${year}-12-26`, // Santo Stefano
+    ]);
+    
+    // Easter-related holidays (simplified calculation for 2024-2025)
+    if (year === 2024) {
+      holidays.add(`${year}-03-31`); // Pasqua 2024
+      holidays.add(`${year}-04-01`); // Lunedì dell'Angelo 2024
+    } else if (year === 2025) {
+      holidays.add(`${year}-04-20`); // Pasqua 2025
+      holidays.add(`${year}-04-21`); // Lunedì dell'Angelo 2025
+    }
+    
+    return holidays;
+  };
   const [conversionDialog, setConversionDialog] = useState<{
     open: boolean;
     userId: string;
@@ -110,70 +119,406 @@ const OriginalBusinessTripsDashboard = () => {
     workingDays: []
   });
 
-  // Pre-calculate month calendar once (CRITICAL OPTIMIZATION)
-  const { daysMeta, holidaysSet } = useMemo(() => {
-    const [y, m] = selectedMonth.split('-').map(Number);
-    const days = new Date(y, m, 0).getDate();
+  const getDaysInMonth = () => {
+    const [year, month] = selectedMonth.split('-');
+    return new Date(parseInt(year), parseInt(month), 0).getDate();
+  };
 
-    // Italian holidays Set for O(1) lookup
-    const itHolidays = new Set([
-      `${y}-01-01`, `${y}-01-06`, `${y}-04-25`, `${y}-05-01`, `${y}-06-02`,
-      `${y}-08-15`, `${y}-11-01`, `${y}-12-08`, `${y}-12-25`, `${y}-12-26`,
-      ...(y === 2024 ? [`${y}-03-31`, `${y}-04-01`] : []),
-      ...(y === 2025 ? [`${y}-04-20`, `${y}-04-21`] : []),
-    ]);
+  const getDateInfo = (day: number) => {
+    const [year, month] = selectedMonth.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, day);
+    const dayName = date.toLocaleDateString('it-IT', { weekday: 'short' });
+    const isSunday = date.getDay() === 0;
+    const isSaturday = date.getDay() === 6;
+    const dateString = `${year}-${month.padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    
+    // Check both company holidays and Italian standard holidays
+    const italianHolidays = getItalianHolidays(parseInt(year));
+    const isHoliday = holidays.includes(dateString) || italianHolidays.has(dateString);
+    
+    return { dayName, isSunday, isSaturday, isHoliday };
+  };
 
-    // Company holidays (from server) → Set for O(1)
-    const holidaysSet = new Set(holidays);
+  const fetchBusinessTripData = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      console.log(`🚀 [BusinessTripsDashboard] Inizio caricamento dati per ${selectedMonth}`);
+      
+      // Prima esegui le conversioni automatiche con validazione
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .single();
 
-    const daysMeta = Array.from({ length: days }, (_, i) => {
-      const d = i + 1;
-      const date = new Date(y, m - 1, d);
-      const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const dow = date.getDay();
-      const isSunday = dow === 0;
-      const isSaturday = dow === 6;
-      const isHoliday = holidaysSet.has(dateStr) || itHolidays.has(dateStr);
-      const dayName = date.toLocaleDateString('it-IT', { weekday: 'short' });
-      return {
-        d,
-        dayKey: String(d).padStart(2, '0'),
-        dayName,
-        isSunday,
-        isSaturday,
-        isHoliday,
-        dateStr,
-      };
+      // Le conversioni automatiche sono state rimosse - solo conversioni manuali supportate
+      console.log(`ℹ️ [BusinessTripsDashboard] Solo conversioni manuali supportate per ${selectedMonth}`);
+
+      const [year, month] = selectedMonth.split('-');
+      const startDate = `${year}-${month}-01`;
+      const endDate = `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`;
+
+      // Multi-tenant safety: scope by current user's company
+      const { data: me, error: meError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('user_id', user!.id)
+        .single();
+      if (meError) throw meError;
+
+      // Fetch holidays for the selected month
+      const { data: holidayData, error: holidayError } = await supabase
+        .from('company_holidays')
+        .select('date')
+        .eq('company_id', me!.company_id)
+        .gte('date', startDate)
+        .lte('date', endDate);
+      
+      if (holidayError) {
+        console.warn('Error fetching holidays:', holidayError);
+      }
+      
+      const holidayDates = holidayData?.map(h => h.date) || [];
+      setHolidays(holidayDates);
+
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('user_id, first_name, last_name, company_id')
+        .eq('is_active', true)
+        .eq('company_id', me!.company_id);
+      if (profilesError) throw profilesError;
+
+      const profiles = profilesData || [];
+      const userIds = profiles.map((p) => p.user_id);
+      if (userIds.length === 0) {
+        setBusinessTripData([]);
+        return;
+      }
+
+      const { data: timesheets, error: timesheetError } = await supabase
+        .from('timesheets')
+        .select('*')
+        .in('user_id', userIds)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .eq('is_absence', false);
+      if (timesheetError) throw timesheetError;
+
+      const { data: absences, error: absenceError } = await supabase
+        .from('employee_absences')
+        .select('*')
+        .in('user_id', userIds)
+        .gte('date', startDate)
+        .lte('date', endDate);
+      if (absenceError) throw absenceError;
+
+      const { data: companySettings, error: companySettingsError } = await supabase
+        .from('company_settings')
+        .select('*')
+        .in('company_id', profiles.map((p) => p.company_id));
+      if (companySettingsError) throw companySettingsError;
+
+      // Process automatic conversions once per company (già fatto sopra con validazione)
+      // await OvertimeConversionService.processAutomaticConversions(selectedMonth, me!.company_id);
+
+      // Import services
+      const [{ getEmployeeSettingsForDate }, { BenefitsService }, { MealVoucherConversionService }] = await Promise.all([
+        import('@/utils/temporalEmployeeSettings'),
+        import('@/services/BenefitsService'),
+        import('@/services/MealVoucherConversionService'),
+      ]);
+
+      // Load all meal voucher conversions for the period
+      const allConversionsData = await MealVoucherConversionService.getConversionsForUsers(userIds, startDate, endDate);
+
+      // Build simplified per-employee dataset
+      const processedData: BusinessTripData[] = await Promise.all(
+        profiles.map(async (profile) => {
+          const employeeTimesheets = (timesheets || []).filter((t) => t.user_id === profile.user_id);
+          const employeeAbsences = (absences || []).filter((a) => a.user_id === profile.user_id);
+          const companySettingsForEmployee = companySettings?.find((cs) => cs.company_id === profile.company_id);
+          const employeeConversions = allConversionsData[profile.user_id] || [];
+
+          const dailyData: BusinessTripData['daily_data'] = {};
+          let totalOrdinary = 0;
+          let totalOvertime = 0;
+          let absenceTotals: Record<string, number> = {};
+          let mealVoucherDays = 0;
+
+          // Initialize separate business trip types
+          const saturdayTrips = {
+            hours: 0,
+            amount: 0,
+            daily_data: {} as { [day: string]: number }
+          };
+
+          const dailyAllowances = {
+            days: 0,
+            amount: 0,
+            daily_data: {} as { [day: string]: boolean }
+          };
+
+          const mealVoucherConversions = {
+            days: 0,
+            amount: 0,
+            daily_data: {} as { [day: string]: boolean }
+          };
+
+          // NEW: initialize new fields
+          const mealVouchersDaily: { [day: string]: boolean } = {};
+          const dailyAllowanceAmounts: { [day: string]: number } = {};
+
+          const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
+          for (let day = 1; day <= daysInMonth; day++) {
+            const dayKey = String(day).padStart(2, '0');
+            dailyData[dayKey] = { ordinary: 0, overtime: 0, absence: null };
+            saturdayTrips.daily_data[dayKey] = 0;
+            dailyAllowances.daily_data[dayKey] = false;
+            mealVoucherConversions.daily_data[dayKey] = false;
+            // NEW: initialize new daily data
+            mealVouchersDaily[dayKey] = false;
+            dailyAllowanceAmounts[dayKey] = 0;
+          }
+
+          const defaultSaturdayRate = companySettingsForEmployee?.saturday_hourly_rate || 10;
+          const defaultMealVoucherAmount = companySettingsForEmployee?.meal_voucher_amount || 8.0;
+
+          // Process timesheets - separate Saturday trips from regular work
+          for (const ts of employeeTimesheets) {
+            const day = new Date(`${ts.date}T00:00:00`).getDate();
+            const dayKey = String(day).padStart(2, '0');
+            const date = new Date(`${ts.date}T00:00:00`);
+            const isSaturday = date.getDay() === 6;
+
+            const temporalSettings = await getEmployeeSettingsForDate(ts.user_id, ts.date);
+            const effectiveSaturdayHandling = temporalSettings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
+            const effectiveSaturdayRate = temporalSettings?.saturday_hourly_rate || defaultSaturdayRate;
+
+            if (isSaturday && effectiveSaturdayHandling === 'trasferta') {
+              // Saturday treated as business trip
+              const hours = ts.total_hours || 0;
+              saturdayTrips.hours += hours;
+              saturdayTrips.amount += hours * effectiveSaturdayRate;
+              saturdayTrips.daily_data[dayKey] = hours;
+            } else {
+              // Regular work day
+              const overtime = ts.overtime_hours || 0;
+              const ordinary = Math.max(0, (ts.total_hours || 0) - overtime);
+              
+              dailyData[dayKey].ordinary = ordinary;
+              dailyData[dayKey].overtime = overtime;
+              totalOrdinary += ordinary;
+              totalOvertime += overtime;
+            }
+
+            // Calculate meal benefits (includes conversion logic)
+            const mealBenefits = await BenefitsService.calculateMealBenefits(
+              ts,
+              temporalSettings ? {
+                meal_allowance_policy: temporalSettings.meal_allowance_policy,
+                meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
+                daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
+                lunch_break_type: temporalSettings.lunch_break_type,
+                saturday_handling: temporalSettings.saturday_handling,
+              } : undefined,
+              companySettingsForEmployee,
+              ts.date,
+            );
+
+            // TI (indennità giornaliera)
+            if (mealBenefits.dailyAllowance) {
+              dailyAllowances.days += 1;
+              dailyAllowances.daily_data[dayKey] = true;
+              const effectiveDailyAllowanceAmount = mealBenefits.dailyAllowanceAmount 
+                || temporalSettings?.daily_allowance_amount 
+                || companySettingsForEmployee?.default_daily_allowance_amount 
+                || 10;
+              dailyAllowances.amount += effectiveDailyAllowanceAmount;
+
+              // NEW: salva l'importo TI del giorno
+              dailyAllowanceAmounts[dayKey] = effectiveDailyAllowanceAmount;
+            }
+
+            // BDP "non convertito" (serve per CAP=30,98)
+            if (mealBenefits.mealVoucher) {
+              mealVoucherDays++;
+              if (!employeeConversions.some(conv => conv.date === ts.date && conv.converted_to_allowance)) {
+                mealVouchersDaily[dayKey] = true;  // BDP maturato e NON convertito
+              }
+            }
+
+            // CB (già fai la somma mensile + daily flag)
+            const isConverted = employeeConversions.some(conv => conv.date === ts.date && conv.converted_to_allowance);
+            if (isConverted) {
+              mealVoucherConversions.days += 1;
+              mealVoucherConversions.daily_data[dayKey] = true;
+              mealVoucherConversions.amount += defaultMealVoucherAmount;
+            }
+          }
+
+          // Process absences
+          for (const abs of employeeAbsences) {
+            const day = new Date(`${abs.date}T00:00:00`).getDate();
+            const dayKey = String(day).padStart(2, '0');
+            dailyData[dayKey].absence = abs.absence_type;
+            if (!absenceTotals[abs.absence_type]) absenceTotals[abs.absence_type] = 0;
+            absenceTotals[abs.absence_type] += abs.hours || 8;
+          }
+
+          // Calculate overtime conversions (monthly)
+          let overtimeConversions = {
+            hours: 0,
+            amount: 0,
+            monthly_total: false
+          };
+
+          let finalDailyData = dailyData;
+          let finalOvertimeTotal = totalOvertime;
+
+          try {
+            const conversionCalc = await OvertimeConversionService.calculateConversionDetails(
+              profile.user_id,
+              selectedMonth,
+              totalOvertime,
+            );
+            
+            if (conversionCalc.converted_hours > 0) {
+              overtimeConversions.hours = conversionCalc.converted_hours;
+              overtimeConversions.amount = conversionCalc.conversion_amount;
+              overtimeConversions.monthly_total = true;
+              
+              // Apply conversion distribution to daily data
+              const dailyDataForDistribution: { [day: string]: { ordinary: number; overtime: number; absence: string | null } } = {};
+              Object.keys(dailyData).forEach(day => {
+                dailyDataForDistribution[day] = {
+                  ordinary: dailyData[day].ordinary,
+                  overtime: dailyData[day].overtime,
+                  absence: dailyData[day].absence
+                };
+              });
+              
+              const distributions = distributePayrollOvertime(dailyDataForDistribution, conversionCalc.converted_hours);
+              finalDailyData = applyPayrollOvertimeDistribution(dailyDataForDistribution, distributions);
+              
+              // Recalculate total overtime after conversions
+              finalOvertimeTotal = Object.values(finalDailyData).reduce((sum, data) => sum + (data.overtime || 0), 0);
+            }
+          } catch (e) {
+            console.warn('Conversion calc error', profile.user_id, e);
+          }
+
+          return {
+            employee_id: profile.user_id,
+            employee_name: `${profile.first_name} ${profile.last_name}`,
+            company_id: profile.company_id,
+            daily_data: finalDailyData,
+            totals: {
+              ordinary: totalOrdinary,
+              overtime: finalOvertimeTotal,
+              absence_totals: absenceTotals,
+            },
+            meal_vouchers: mealVoucherDays,
+            meal_voucher_amount: mealVoucherDays * defaultMealVoucherAmount,
+            saturday_trips: saturdayTrips,
+            daily_allowances: dailyAllowances,
+            overtime_conversions: overtimeConversions,
+            meal_voucher_conversions: mealVoucherConversions,
+            // NEW: add new fields
+            meal_vouchers_daily_data: mealVouchersDaily,         // NEW
+            daily_allowances_amounts: dailyAllowanceAmounts,     // NEW
+            saturday_rate: defaultSaturdayRate,                  // NEW
+          };
+        })
+      );
+
+      setBusinessTripData(processedData);
+    } catch (error) {
+      console.error('Error fetching business trip data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchBusinessTripData();
+    }
+  }, [user, selectedMonth]);
+
+  const handleRefresh = () => {
+    fetchBusinessTripData();
+  };
+
+  const handleOvertimeConversion = (userId: string, userName: string, originalOvertimeHours: number) => {
+    setConversionDialog({
+      open: true,
+      userId,
+      userName,
+      originalOvertimeHours
+    });
+  };
+
+  const handleMassConversion = (userId: string, userName: string, companyId: string) => {
+    // Get working days for the month (days with worked hours)
+    const employee = businessTripData.find(emp => emp.employee_id === userId);
+    if (!employee) return;
+
+    const workingDays: string[] = [];
+    const [year, month] = selectedMonth.split('-');
+    
+    Object.entries(employee.daily_data).forEach(([dayKey, data]) => {
+      if ((data.ordinary > 0 || data.overtime > 0) && !data.absence) {
+        const date = `${year}-${month}-${dayKey}`;
+        workingDays.push(date);
+      }
     });
 
-    return { daysMeta, holidaysSet };
-  }, [selectedMonth, holidays]);
+    setMassConversionDialog({
+      open: true,
+      userId,
+      userName,
+      companyId,
+      workingDays
+    });
+  };
 
-  // Memoize totals calculation
-  const totals = useMemo(() => {
-    const totalEmployees = businessTripData.length;
-    const totalSaturdayHours = businessTripData.reduce((sum, emp) => sum + emp.saturday_trips.hours, 0);
-    const totalSaturdayAmount = businessTripData.reduce((sum, emp) => sum + emp.saturday_trips.amount, 0);
-    const totalDailyAllowanceDays = businessTripData.reduce((sum, emp) => sum + emp.daily_allowances.days, 0);
-    const totalDailyAllowanceAmount = businessTripData.reduce((sum, emp) => sum + emp.daily_allowances.amount, 0);
-    const totalOvertimeConversions = businessTripData.reduce((sum, emp) => sum + emp.overtime_conversions.amount, 0);
-    const totalMealVoucherConversions = businessTripData.reduce((sum, emp) => sum + emp.meal_voucher_conversions.amount, 0);
-    const grandTotal = totalSaturdayAmount + totalDailyAllowanceAmount + totalOvertimeConversions + totalMealVoucherConversions;
-    
-    return {
-      totalEmployees,
-      totalSaturdayHours,
-      totalSaturdayAmount,
-      totalDailyAllowanceDays,
-      totalDailyAllowanceAmount,
-      totalOvertimeConversions,
-      totalMealVoucherConversions,
-      grandTotal
-    };
-  }, [businessTripData]);
+  const handleConversionComplete = () => {
+    setConversionDialog({ open: false, userId: '', userName: '', originalOvertimeHours: 0 });
+    fetchBusinessTripData();
+  };
 
-  // Memoize expensive calculations
-  const employeeBreakdowns = useMemo(() => {
+  const handleMassConversionComplete = () => {
+    setMassConversionDialog({ open: false, userId: '', userName: '', companyId: '', workingDays: [] });
+    fetchBusinessTripData();
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Trasferte e Indennità</h1>
+            <p className="text-muted-foreground">Panoramica dettagliata delle trasferte mensili</p>
+          </div>
+        </div>
+        <div className="text-center py-12">Caricamento dati trasferte...</div>
+      </div>
+    );
+  }
+
+  // Calculate totals for summary cards
+  const totalEmployees = businessTripData.length;
+  const totalSaturdayHours = businessTripData.reduce((sum, emp) => sum + emp.saturday_trips.hours, 0);
+  const totalSaturdayAmount = businessTripData.reduce((sum, emp) => sum + emp.saturday_trips.amount, 0);
+  const totalDailyAllowanceDays = businessTripData.reduce((sum, emp) => sum + emp.daily_allowances.days, 0);
+  const totalDailyAllowanceAmount = businessTripData.reduce((sum, emp) => sum + emp.daily_allowances.amount, 0);
+  const totalOvertimeConversions = businessTripData.reduce((sum, emp) => sum + emp.overtime_conversions.amount, 0);
+  const totalMealVoucherConversions = businessTripData.reduce((sum, emp) => sum + emp.meal_voucher_conversions.amount, 0);
+  const grandTotal = totalSaturdayAmount + totalDailyAllowanceAmount + totalOvertimeConversions + totalMealVoucherConversions;
+  
+  const calculateEmployeeBreakdowns = () => {
     const CAP_STD = 46.48;  // senza BDP
     const CAP_BDP = 30.98;  // con BDP
 
@@ -409,83 +754,9 @@ const OriginalBusinessTripsDashboard = () => {
         undistributed: clamp2(undistributed)
       };
     });
-  }, [businessTripData]);
-
-  // Stable event handlers with useCallback
-  const handleRefresh = useCallback(() => {
-    refetch();
-  }, [refetch]);
-
-  const handleOvertimeConversion = useCallback((userId: string, userName: string, originalOvertimeHours: number) => {
-    setConversionDialog({
-      open: true,
-      userId,
-      userName,
-      originalOvertimeHours
-    });
-  }, []);
-
-  const handleMassConversion = useCallback((userId: string, userName: string, companyId: string) => {
-    // Get working days for the month (days with worked hours)
-    const employee = businessTripData.find(emp => emp.employee_id === userId);
-    if (!employee) return;
-
-    const workingDays: string[] = [];
-    const [year, month] = selectedMonth.split('-');
-    
-    Object.entries(employee.daily_data).forEach(([dayKey, data]) => {
-      if ((data.ordinary > 0 || data.overtime > 0) && !data.absence) {
-        const date = `${year}-${month}-${dayKey}`;
-        workingDays.push(date);
-      }
-    });
-
-    setMassConversionDialog({
-      open: true,
-      userId,
-      userName,
-      companyId,
-      workingDays
-    });
-  }, [businessTripData, selectedMonth]);
-
-  const handleConversionComplete = useCallback(() => {
-    setConversionDialog({ open: false, userId: '', userName: '', originalOvertimeHours: 0 });
-    refetch();
-  }, [refetch]);
-
-  const handleMassConversionComplete = useCallback(() => {
-    setMassConversionDialog({ open: false, userId: '', userName: '', companyId: '', workingDays: [] });
-    refetch();
-  }, [refetch]);
-
-  // NOW SAFE TO HAVE CONDITIONAL RETURNS AFTER ALL HOOKS
-  // Show loading skeleton while fetching
-  if (isLoading) {
-    return <BusinessTripSkeleton />;
-  }
-
-  // Show error state
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Trasferte e Indennità</h1>
-            <p className="text-muted-foreground">Panoramica dettagliata delle trasferte mensili</p>
-          </div>
-        </div>
-        <Card className="p-6">
-          <div className="text-center">
-            <p className="text-destructive mb-4">Errore durante il caricamento dei dati</p>
-            <Button onClick={handleRefresh} variant="outline">
-              Riprova
-            </Button>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  };
+  
+  const employeeBreakdowns = calculateEmployeeBreakdowns();
 
   return (
     <div className="space-y-6">
@@ -598,7 +869,10 @@ const OriginalBusinessTripsDashboard = () => {
                       </svg>
                     </div>
                     <div className="ml-3">
-                      <p className="text-sm text-yellow-800">{breakdown.needCapacityWarning}</p>
+                      <h3 className="text-sm font-medium text-yellow-800">Attenzione</h3>
+                      <div className="mt-1 text-sm text-yellow-700">
+                        {breakdown.needCapacityWarning}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -608,197 +882,463 @@ const OriginalBusinessTripsDashboard = () => {
         </div>
       </div>
 
-      {/* Summary Cards - Totals */}
-      <div className="space-y-4">
-        <h2 className="text-xl font-semibold">Riepilogo Mensile</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Totale TS</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">€{totals.totalSaturdayAmount.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">
-                {totals.totalSaturdayHours.toFixed(1)}h sabato
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Totale TI</CardTitle>
-              <MapPin className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">€{totals.totalDailyAllowanceAmount.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">
-                {totals.totalDailyAllowanceDays} giorni
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Totale CS</CardTitle>
-              <TrendingDown className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">€{totals.totalOvertimeConversions.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">
-                Conversioni straordinari
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Totale CB</CardTitle>
-              <Download className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">€{totals.totalMealVoucherConversions.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground">
-                Conversioni buoni
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
       {/* Detailed Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Dettaglio Giornaliero</CardTitle>
+          <CardTitle>Dettaglio Trasferte per Dipendente</CardTitle>
           <CardDescription>
-            Visualizzazione completa delle ore lavorate e trasferte per ogni dipendente
+            Struttura semplificata con righe separate per tipologia
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="sticky left-0 bg-background z-10 min-w-[120px]">Dipendente</TableHead>
-                  {daysMeta.map(({ d, dayName, isSunday, isSaturday, isHoliday }) => (
-                    <TableHead
-                      key={d}
-                      className={`text-center text-xs p-1 min-w-[40px] ${
-                        isSunday || isHoliday ? 'bg-red-50 text-red-700' : 
-                        isSaturday ? 'bg-blue-50 text-blue-700' : ''
-                      }`}
-                    >
-                      <div className="flex flex-col">
-                        <span className="text-xs">{dayName}</span>
-                        <span className="font-bold">{d}</span>
-                      </div>
-                    </TableHead>
-                  ))}
-                  <TableHead className="text-center text-xs p-1 bg-purple-50 border-l">CB</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {businessTripData.map((employee) => (
-                  <TableRow key={employee.employee_id}>
-                    <TableCell className="sticky left-0 bg-background z-10 font-medium text-sm p-2">
-                      <div className="flex flex-col">
-                        <span>{employee.employee_name}</span>
-                        <div className="flex gap-2 mt-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-xs h-6 px-2"
-                            onClick={() => handleOvertimeConversion(
-                              employee.employee_id,
-                              employee.employee_name,
-                              employee.totals.overtime
-                            )}
+          {businessTripData.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Nessun dato disponibile per il mese selezionato
+            </div>
+          ) : (
+            <TooltipProvider>
+              <div className="rounded-md border overflow-x-auto">
+                <Table className="text-sm">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="sticky left-0 bg-background z-10 min-w-[200px] text-xs font-medium border-r">Dipendente</TableHead>
+                      {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                        const day = i + 1;
+                        const { dayName, isSunday, isSaturday, isHoliday } = getDateInfo(day);
+                        return (
+                          <TableHead 
+                            key={day} 
+                            className={`text-center w-8 min-w-8 max-w-8 text-xs font-medium p-1 ${
+                              isSunday || isHoliday ? 'bg-red-50 text-red-700' : 
+                              isSaturday ? 'bg-orange-50 text-orange-700' : ''
+                            }`}
+                            title={`${dayName} ${day}`}
                           >
-                            CS
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-xs h-6 px-2"
-                            onClick={() => handleMassConversion(
-                              employee.employee_id,
-                              employee.employee_name,
-                              employee.company_id
-                            )}
-                          >
-                            CB
-                          </Button>
-                        </div>
-                      </div>
-                    </TableCell>
-                    {daysMeta.map(({ d, dayKey, isSunday, isSaturday, isHoliday, dateStr }) => {
-                      const dayData = employee.daily_data[dayKey];
-                      const hasWorkedHours = dayData && (dayData.ordinary > 0 || dayData.overtime > 0);
-                      const isConverted = employee.meal_voucher_conversions.daily_data[dayKey] || false;
-                      
-                      return (
-                        <TableCell
-                          key={d}
-                          className={`text-center text-xs p-1 ${
-                            isSunday || isHoliday ? 'bg-red-50' : 
-                            isSaturday ? 'bg-blue-50' : ''
-                          }`}
-                        >
-                          {hasWorkedHours && (
-                            <Suspense fallback={null}>
-                              <LazyDayConversionToggle
-                                userId={employee.employee_id}
-                                userName={employee.employee_name}
-                                date={dateStr}
-                                companyId={employee.company_id}
-                                isConverted={isConverted}
-                                onConversionUpdated={refetch}
+                            <div className="flex flex-col">
+                              <span className="font-bold">{day}</span>
+                              <span className="text-xs font-normal opacity-75">{dayName}</span>
+                            </div>
+                          </TableHead>
+                        );
+                      })}
+                      <TableHead className="text-center w-12 min-w-12 text-xs font-medium bg-gray-50 border-l">Tot</TableHead>
+                      <TableHead className="text-center w-16 min-w-16 text-xs font-medium bg-yellow-50">Buoni</TableHead>
+                      <TableHead className="text-center w-16 min-w-16 text-xs font-medium">Importo</TableHead>
+                      <TableHead className="min-w-[100px] text-xs font-medium">Azioni</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                     {businessTripData.map((employee) => (
+                       <React.Fragment key={employee.employee_id}>
+                          {/* Ordinary hours row */}
+                         <TableRow className="hover:bg-green-50/50">
+                           <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                             <span className="text-green-700 font-bold">O</span> - {employee.employee_name}
+                           </TableCell>
+                           {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                             const dayKey = String(i + 1).padStart(2, '0');
+                             const ordinary = employee.daily_data[dayKey]?.ordinary || 0;
+                              const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                              return (
+                                <TableCell 
+                                  key={i + 1} 
+                                  className={`text-center text-xs p-1 ${
+                                    isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                  } ${ordinary > 0 ? 'text-green-700 font-medium' : 'text-muted-foreground'}`}
+                                >
+                                  {ordinary > 0 ? ordinary.toFixed(1) : ''}
+                                </TableCell>
+                              );
+                           })}
+                           <TableCell className="text-center font-bold text-green-700 text-xs p-1 bg-gray-50 border-l">
+                             {employee.totals.ordinary.toFixed(1)}
+                           </TableCell>
+                           <TableCell className="text-center text-xs p-1 bg-yellow-50">
+                             {employee.meal_vouchers > 0 
+                               ? `${employee.meal_vouchers} (€${employee.meal_voucher_amount.toFixed(2)})`
+                               : ''
+                             }
+                           </TableCell>
+                           <TableCell className="text-center text-xs p-1">€0.00</TableCell>
+                           <TableCell className="p-1"></TableCell>
+                         </TableRow>
+
+                         {/* Overtime hours row */}
+                         <TableRow className="hover:bg-blue-50/50">
+                           <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                             <span className="text-blue-700 font-bold">S</span> - {employee.employee_name}
+                           </TableCell>
+                            {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                              const dayKey = String(i + 1).padStart(2, '0');
+                              const originalOvertime = employee.daily_data[dayKey]?.overtime || 0;
+                              // Calculate reduced overtime after proportional conversion
+                              const originalTotalOvertimeHours = employee.totals.overtime + employee.overtime_conversions.hours;
+                              const proportionalConversion = originalTotalOvertimeHours > 0 && employee.overtime_conversions.hours > 0
+                                ? (originalOvertime / originalTotalOvertimeHours) * employee.overtime_conversions.hours
+                                : 0;
+                              const reducedOvertime = Math.max(0, originalOvertime - proportionalConversion);
+                              const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                              return (
+                                <TableCell 
+                                  key={i + 1} 
+                                  className={`text-center text-xs p-1 ${
+                                    isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                  } ${reducedOvertime > 0 ? 'text-blue-700 font-medium' : 'text-muted-foreground'}`}
+                                >
+                                  {reducedOvertime > 0 ? reducedOvertime.toFixed(1) : ''}
+                                </TableCell>
+                              );
+                            })}
+                           <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-gray-50 border-l">
+                             {employee.totals.overtime.toFixed(1)}
+                           </TableCell>
+                           <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                           <TableCell className="text-center text-xs p-1">€0.00</TableCell>
+                           <TableCell className="p-1">
+                             {/* CORREZIONE: Mostra sempre il tasto se le conversioni sono abilitate o se ci sono già conversioni */}
+                             {(employee.totals.overtime > 0 || employee.overtime_conversions.hours > 0) && (
+                               <Button
+                                 variant="outline"
+                                 size="sm"
+                                 onClick={() => handleOvertimeConversion(
+                                   employee.employee_id,
+                                   employee.employee_name,
+                                   employee.totals.overtime // CORREZIONE: Passa solo gli straordinari attuali (già ridotti)
+                                 )}
+                               >
+                                 Conversioni
+                               </Button>
+                             )}
+                           </TableCell>
+                         </TableRow>
+
+                         {/* Absence rows */}
+                         {Object.entries(employee.totals.absence_totals).map(([absenceType, hours]) => (
+                           hours > 0 && (
+                             <TableRow key={`${employee.employee_id}-${absenceType}`} className="hover:bg-red-50/50">
+                               <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                                 <span className="text-red-700 font-bold">{absenceType}</span> - {employee.employee_name}
+                               </TableCell>
+                               {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                                 const dayKey = String(i + 1).padStart(2, '0');
+                                 const absence = employee.daily_data[dayKey]?.absence;
+                                  const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                                  return (
+                                    <TableCell 
+                                      key={i + 1} 
+                                      className={`text-center text-xs p-1 ${
+                                        isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                      }`}
+                                    >
+                                      {absence === absenceType ? (
+                                        <span className="text-red-700 font-bold text-xs">
+                                          {absence.charAt(0).toUpperCase()}
+                                        </span>
+                                      ) : ''}
+                                    </TableCell>
+                                  );
+                               })}
+                               <TableCell className="text-center font-bold text-red-700 text-xs p-1 bg-gray-50 border-l">
+                                 {hours.toFixed(1)}
+                               </TableCell>
+                               <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                               <TableCell className="text-center text-xs p-1">€0.00</TableCell>
+                               <TableCell className="p-1"></TableCell>
+                             </TableRow>
+                           )
+                         ))}
+
+                         {/* Saturday trips row */}
+                         {employee.saturday_trips.hours > 0 && (
+                           <TableRow className="hover:bg-orange-50/50">
+                             <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                               <span className="text-orange-700 font-bold">TS</span> - {employee.employee_name}
+                             </TableCell>
+                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                               const dayKey = String(i + 1).padStart(2, '0');
+                               const hours = employee.saturday_trips.daily_data[dayKey] || 0;
+                                const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                                return (
+                                  <TableCell 
+                                    key={i + 1} 
+                                    className={`text-center text-xs p-1 ${
+                                      isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                    } ${hours > 0 ? 'text-orange-700 font-medium' : 'text-muted-foreground'}`}
+                                  >
+                                    {hours > 0 ? hours.toFixed(1) : ''}
+                                  </TableCell>
+                                );
+                             })}
+                             <TableCell className="text-center font-bold text-orange-700 text-xs p-1 bg-gray-50 border-l">
+                               {employee.saturday_trips.hours.toFixed(1)}
+                             </TableCell>
+                             <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                             <TableCell className="text-center font-bold text-orange-700 text-xs p-1">
+                               €{employee.saturday_trips.amount.toFixed(2)}
+                             </TableCell>
+                             <TableCell className="p-1"></TableCell>
+                           </TableRow>
+                         )}
+
+                         {/* Daily allowances row */}
+                         {employee.daily_allowances.days > 0 && (
+                           <TableRow className="hover:bg-sky-50/50">
+                             <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                               <span className="text-sky-700 font-bold">TI</span> - {employee.employee_name}
+                             </TableCell>
+                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                               const dayKey = String(i + 1).padStart(2, '0');
+                               const hasAllowance = employee.daily_allowances.daily_data[dayKey];
+                                const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                                return (
+                                  <TableCell 
+                                    key={i + 1} 
+                                    className={`text-center text-xs p-1 ${
+                                      isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                    } ${hasAllowance ? 'text-sky-700 font-medium' : 'text-muted-foreground'}`}
+                                  >
+                                    {hasAllowance ? 'TI' : ''}
+                                  </TableCell>
+                                );
+                             })}
+                             <TableCell className="text-center font-bold text-sky-700 text-xs p-1 bg-gray-50 border-l">
+                               {employee.daily_allowances.days}
+                             </TableCell>
+                             <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                             <TableCell className="text-center font-bold text-sky-700 text-xs p-1">
+                               €{employee.daily_allowances.amount.toFixed(2)}
+                             </TableCell>
+                             <TableCell className="p-1"></TableCell>
+                           </TableRow>
+                         )}
+
+                         {/* Overtime conversions row */}
+                         {employee.overtime_conversions.hours > 0 && (
+                           <TableRow className="hover:bg-emerald-50/50">
+                             <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                               <span className="text-emerald-700 font-bold">CS</span> - {employee.employee_name}
+                             </TableCell>
+                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                               const dayKey = String(i + 1).padStart(2, '0');
+                               const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                                // Calculate proportional conversion hours for this day based on original overtime
+                                const originalDayOvertimeHours = employee.daily_data[dayKey]?.overtime || 0;
+                                const originalTotalOvertimeHours = employee.totals.overtime + employee.overtime_conversions.hours; // Original total before conversion
+                                const conversionHours = originalTotalOvertimeHours > 0 && employee.overtime_conversions.hours > 0
+                                  ? (originalDayOvertimeHours / originalTotalOvertimeHours) * employee.overtime_conversions.hours
+                                  : 0;
+                               return (
+                                 <TableCell 
+                                   key={i + 1} 
+                                   className={`text-center text-xs p-1 ${
+                                     isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                   } ${conversionHours > 0 ? 'text-emerald-700 font-medium' : 'text-muted-foreground'}`}
+                                 >
+                                   {conversionHours > 0 ? conversionHours.toFixed(1) : ''}
+                                 </TableCell>
+                               );
+                             })}
+                             <TableCell className="text-center font-bold text-emerald-700 text-xs p-1 bg-gray-50 border-l">
+                               {employee.overtime_conversions.hours.toFixed(1)}
+                             </TableCell>
+                             <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                             <TableCell className="text-center font-bold text-emerald-700 text-xs p-1">
+                               €{employee.overtime_conversions.amount.toFixed(2)}
+                             </TableCell>
+                             <TableCell className="p-1"></TableCell>
+                           </TableRow>
+                         )}
+
+                         {/* Meal voucher conversions row */}
+                         <TableRow className="hover:bg-purple-50/50">
+                           <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                             <span className="text-purple-700 font-bold">CB</span> - {employee.employee_name}
+                           </TableCell>
+                           {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                             const dayKey = String(i + 1).padStart(2, '0');
+                             const hasWorkedHours = (employee.daily_data[dayKey]?.ordinary || 0) > 0 || (employee.daily_data[dayKey]?.overtime || 0) > 0;
+                             const isConverted = employee.meal_voucher_conversions.daily_data[dayKey];
+                             const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                             return (
+                               <TableCell 
+                                 key={i + 1} 
+                                 className={`text-center text-xs p-1 ${
+                                   isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                 }`}
+                               >
+                                 {hasWorkedHours && (
+                                   <DayConversionToggle
+                                     userId={employee.employee_id}
+                                     userName={employee.employee_name}
+                                     date={`${selectedMonth.split('-')[0]}-${selectedMonth.split('-')[1]}-${dayKey}`}
+                                     companyId={employee.company_id}
+                                     isConverted={isConverted}
+                                     onConversionUpdated={fetchBusinessTripData}
+                                     size="sm"
+                                   />
+                                 )}
+                               </TableCell>
+                             );
+                           })}
+                           <TableCell className="text-center font-bold text-purple-700 text-xs p-1 bg-gray-50 border-l">
+                             {employee.meal_voucher_conversions.days}
+                           </TableCell>
+                           <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                           <TableCell className="text-center font-bold text-purple-700 text-xs p-1">
+                             €{employee.meal_voucher_conversions.amount.toFixed(2)}
+                           </TableCell>
+                            <TableCell className="p-1">
+                              <Button
+                                variant="outline"
                                 size="sm"
-                              />
-                            </Suspense>
-                          )}
-                        </TableCell>
-                      );
-                    })}
-                    <TableCell className="text-center font-bold text-purple-700 text-xs p-1 bg-gray-50 border-l">
-                      {employee.meal_voucher_conversions.days}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                                onClick={() => handleMassConversion(employee.employee_id, employee.employee_name, employee.company_id)}
+                              >
+                                Conversioni
+                              </Button>
+                            </TableCell>
+                         </TableRow>
+                       </React.Fragment>
+                     ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </TooltipProvider>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Legend */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Legenda Completa</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Work type abbreviations */}
+            <div>
+              <h4 className="text-sm font-medium mb-2">Tipologie di Ore</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-blue-200 rounded"></div>
+                  <span><strong>O</strong> - Ore Ordinarie</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-amber-200 rounded"></div>
+                  <span><strong>S</strong> - Ore Straordinarie</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Business trip types */}
+            <div>
+              <h4 className="text-sm font-medium mb-2">Tipologie di Trasferte</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-orange-200 rounded"></div>
+                  <span><strong>TS</strong> - Trasferte Sabato (ore * tariffa oraria)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-blue-200 rounded"></div>
+                  <span><strong>TI</strong> - Trasferte Indennità (giorni a €30.98 o €46.48)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-200 rounded"></div>
+                  <span><strong>CS</strong> - Conversioni Straordinari</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-purple-200 rounded"></div>
+                  <span><strong>CB</strong> - Conversioni Buoni Pasto (+€8.00)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Daily rates explanation */}
+            <div>
+              <h4 className="text-sm font-medium mb-2">Tariffe Trasferte Giornaliere</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-500 rounded"></div>
+                  <span><strong>€46.48</strong> - Giorni TI con conversioni buoni pasto (CB)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                  <span><strong>€30.98</strong> - Giorni TI senza conversioni buoni pasto</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Le conversioni buoni pasto (CB) aggiungono €8.00 e permettono di utilizzare la tariffa €46.48 invece di €30.98
+                </p>
+              </div>
+            </div>
+
+            {/* Absence types */}
+            <div>
+              <h4 className="text-sm font-medium mb-2">Tipologie di Assenze</h4>
+              <div className="space-y-2 text-sm text-gray-600">
+                <div className="flex items-center gap-2">
+                  <span><strong>F</strong> - Ferie</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span><strong>M</strong> - Malattia</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span><strong>P</strong> - Permesso</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span><strong>S</strong> - Sciopero</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span><strong>I</strong> - Infortunio</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span><strong>A</strong> - Altra assenza</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Day highlighting */}
+            <div>
+              <h4 className="text-sm font-medium mb-2">Evidenziazioni Giorni</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-red-100 border border-red-300 rounded"></div>
+                  <span>Domeniche e Festività</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-orange-100 border border-orange-300 rounded"></div>
+                  <span>Sabati</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-4 pt-4 border-t text-xs text-muted-foreground space-y-1">
+            <p>• <strong>Giorni Trasferta:</strong> Somma di giorni indennità + giorni sabato (calcolati come ore/8)</p>
+            <p>• <strong>€/Giorno Medio:</strong> Importo totale diviso per giorni di trasferta</p>
+            <p>• <strong>Struttura Separata:</strong> Ogni tipologia ha una riga dedicata per maggiore chiarezza</p>
+            <p>• <strong>Conversioni:</strong> CS è mensile, CB e TI sono giornalieri</p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Dialogs */}
       <OvertimeConversionDialog
         open={conversionDialog.open}
-        onOpenChange={(open) => {
-          setConversionDialog(prev => ({ ...prev, open }));
-          if (!open) {
-            refetch(); // Refresh data when dialog closes
-          }
-        }}
+        onOpenChange={(open) => setConversionDialog(prev => ({ ...prev, open }))}
         userId={conversionDialog.userId}
         userName={conversionDialog.userName}
         month={selectedMonth}
         originalOvertimeHours={conversionDialog.originalOvertimeHours}
+        onSuccess={handleConversionComplete}
       />
-
+      
       <MassConversionDialog
         open={massConversionDialog.open}
-        onOpenChange={(open) => {
-          setMassConversionDialog(prev => ({ ...prev, open }));
-          if (!open) {
-            refetch(); // Refresh data when dialog closes
-          }
-        }}
+        onOpenChange={(open) => setMassConversionDialog(prev => ({ ...prev, open }))}
         userId={massConversionDialog.userId}
         userName={massConversionDialog.userName}
         companyId={massConversionDialog.companyId}
-        workingDays={massConversionDialog.workingDays}
         month={selectedMonth}
+        workingDays={massConversionDialog.workingDays}
+        onConversionUpdated={handleMassConversionComplete}
       />
     </div>
   );
