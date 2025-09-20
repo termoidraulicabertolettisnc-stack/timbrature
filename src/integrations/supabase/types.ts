@@ -789,6 +789,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      debug_lunch_break_calculation: {
+        Args: { p_date: string; p_user_id: string }
+        Returns: {
+          company_lunch_break_type: string
+          employee_lunch_break_type: string
+          employee_settings_found: boolean
+          employee_settings_valid_from: string
+          employee_settings_valid_to: string
+          final_lunch_minutes: number
+        }[]
+      }
       debug_night_hours_calculation: {
         Args: {
           p_end_time: string
