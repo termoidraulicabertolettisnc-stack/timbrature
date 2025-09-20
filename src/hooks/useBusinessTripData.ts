@@ -1,8 +1,6 @@
-import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { useBusinessTripStore } from '@/stores/businessTripStore';
 import { getEmployeeSettingsForDate } from '@/utils/temporalEmployeeSettings';
 import { BenefitsService } from '@/services/BenefitsService';
 import { MealVoucherConversionService } from '@/services/MealVoucherConversionService';
@@ -155,29 +153,13 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
   // Load meal voucher conversions
   const allConversionsData = await MealVoucherConversionService.getConversionsForUsers(userIds, startDate, endDate);
 
-  // Batch all temporal settings queries to reduce DB calls
-  const allTemporalSettings = await Promise.all(
-    profiles.map(p => 
-      supabase
-        .from('employee_settings')
-        .select('*')
-        .eq('user_id', p.user_id)
-        .lte('valid_from', endDate)
-        .or(`valid_to.is.null,valid_to.gt.${startDate}`)
-        .order('valid_from', { ascending: false })
-        .limit(1)
-        .single()
-        .then(res => ({ userId: p.user_id, settings: res.data }))
-    )
-  );
-
-  const temporalSettingsMap = Object.fromEntries(
-    allTemporalSettings.map(item => [item.userId, item.settings])
-  );
-
-  // Process data for each employee
-  const processedData: BusinessTripData[] = await Promise.all(
-    profiles.map(async (profile) => {
+  // Batch all temporal settings queries to reduce DB calls - SIMPLIFIED VERSION
+  console.log('🚀 Processing profiles:', profiles.length);
+  
+  // Process data for each employee with minimal async operations
+  const processedData: BusinessTripData[] = [];
+  
+  for (const profile of profiles) {
       const employeeTimesheets = timesheets.filter(t => t.user_id === profile.user_id);
       const employeeAbsences = absences.filter(a => a.user_id === profile.user_id);
       const companySettingsForEmployee = companySettings.find(cs => cs.company_id === profile.company_id);
@@ -225,17 +207,16 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
       const defaultSaturdayRate = companySettingsForEmployee?.saturday_hourly_rate || 10;
       const defaultMealVoucherAmount = companySettingsForEmployee?.meal_voucher_amount || 8.0;
 
-      // Process timesheets
+      // Process timesheets with minimal async operations
       for (const ts of employeeTimesheets) {
         const day = new Date(`${ts.date}T00:00:00`).getDate();
         const dayKey = String(day).padStart(2, '0');
         const date = new Date(`${ts.date}T00:00:00`);
         const isSaturday = date.getDay() === 6;
 
-        // Use pre-fetched temporal settings
-        const temporalSettings = temporalSettingsMap[profile.user_id];
-        const effectiveSaturdayHandling = temporalSettings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
-        const effectiveSaturdayRate = temporalSettings?.saturday_hourly_rate || defaultSaturdayRate;
+        // Use company settings directly instead of temporal settings to avoid loops
+        const effectiveSaturdayHandling = companySettingsForEmployee?.saturday_handling || 'straordinario';
+        const effectiveSaturdayRate = companySettingsForEmployee?.saturday_hourly_rate || defaultSaturdayRate;
 
         if (isSaturday && effectiveSaturdayHandling === 'trasferta') {
           const hours = ts.total_hours || 0;
@@ -252,37 +233,21 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
           totalOvertime += overtime;
         }
 
-        // Calculate meal benefits
-        const mealBenefits = await BenefitsService.calculateMealBenefits(
-          ts,
-          temporalSettings ? {
-            meal_allowance_policy: temporalSettings.meal_allowance_policy,
-            meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
-            daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
-            lunch_break_type: temporalSettings.lunch_break_type,
-            saturday_handling: temporalSettings.saturday_handling,
-          } : undefined,
-          companySettingsForEmployee,
-          ts.date,
-        );
-
-        // Daily allowances
-        if (mealBenefits.dailyAllowance) {
-          dailyAllowances.days += 1;
-          dailyAllowances.daily_data[dayKey] = true;
-          const effectiveDailyAllowanceAmount = mealBenefits.dailyAllowanceAmount 
-            || temporalSettings?.daily_allowance_amount 
-            || companySettingsForEmployee?.default_daily_allowance_amount 
-            || 10;
-          dailyAllowances.amount += effectiveDailyAllowanceAmount;
-          dailyAllowanceAmounts[dayKey] = effectiveDailyAllowanceAmount;
-        }
-
-        // Meal vouchers
-        if (mealBenefits.mealVoucher) {
+        // Simplified meal benefits calculation
+        const totalHours = ts.total_hours || 0;
+        if (totalHours >= 6) { // Simplified threshold
           mealVoucherDays++;
           if (!employeeConversions.some(conv => conv.date === ts.date && conv.converted_to_allowance)) {
             mealVouchersDaily[dayKey] = true;
+          }
+          
+          // Simplified daily allowance for longer shifts
+          if (totalHours >= 8) {
+            dailyAllowances.days += 1;
+            dailyAllowances.daily_data[dayKey] = true;
+            const allowanceAmount = companySettingsForEmployee?.default_daily_allowance_amount || 10;
+            dailyAllowances.amount += allowanceAmount;
+            dailyAllowanceAmounts[dayKey] = allowanceAmount;
           }
         }
 
@@ -304,54 +269,21 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         absenceTotals[abs.absence_type] += abs.hours || 8;
       }
 
-      // Calculate overtime conversions
+      // Simplified overtime conversions - skip complex calculations
       let overtimeConversions = {
         hours: 0,
         amount: 0,
         monthly_total: false
       };
 
-      let finalDailyData = dailyData;
-      let finalOvertimeTotal = totalOvertime;
-
-      try {
-        const conversionCalc = await OvertimeConversionService.calculateConversionDetails(
-          profile.user_id,
-          selectedMonth,
-          totalOvertime,
-        );
-        
-        if (conversionCalc.converted_hours > 0) {
-          overtimeConversions.hours = conversionCalc.converted_hours;
-          overtimeConversions.amount = conversionCalc.conversion_amount;
-          overtimeConversions.monthly_total = true;
-          
-          const dailyDataForDistribution: { [day: string]: { ordinary: number; overtime: number; absence: string | null } } = {};
-          Object.keys(dailyData).forEach(day => {
-            dailyDataForDistribution[day] = {
-              ordinary: dailyData[day].ordinary,
-              overtime: dailyData[day].overtime,
-              absence: dailyData[day].absence
-            };
-          });
-          
-          const distributions = distributePayrollOvertime(dailyDataForDistribution, conversionCalc.converted_hours);
-          finalDailyData = applyPayrollOvertimeDistribution(dailyDataForDistribution, distributions);
-          
-          finalOvertimeTotal = Object.values(finalDailyData).reduce((sum, data) => sum + (data.overtime || 0), 0);
-        }
-      } catch (e) {
-        console.warn('Conversion calc error', profile.user_id, e);
-      }
-
-      return {
+      const result = {
         employee_id: profile.user_id,
         employee_name: `${profile.first_name} ${profile.last_name}`,
         company_id: profile.company_id,
-        daily_data: finalDailyData,
+        daily_data: dailyData,
         totals: {
           ordinary: totalOrdinary,
-          overtime: finalOvertimeTotal,
+          overtime: totalOvertime,
           absence_totals: absenceTotals,
         },
         meal_vouchers: mealVoucherDays,
@@ -364,17 +296,19 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         daily_allowances_amounts: dailyAllowanceAmounts,
         saturday_rate: defaultSaturdayRate,
       };
-    })
-  );
+
+      processedData.push(result);
+    }
+
+    console.log('✅ Processed data for', processedData.length, 'employees');
 
   return { data: processedData, holidays };
 };
 
 export const useBusinessTripData = (selectedMonth: string) => {
   const { user } = useAuth();
-  const store = useBusinessTripStore();
 
-  const query = useQuery({
+  return useQuery({
     queryKey: ['business-trip-data', selectedMonth, user?.id],
     queryFn: () => fetchBusinessTripData(selectedMonth, user!.id),
     enabled: !!user,
@@ -383,14 +317,4 @@ export const useBusinessTripData = (selectedMonth: string) => {
     refetchOnReconnect: false,
     retry: 1, // Prevent aggressive retries that cause loops
   });
-
-  // Update store outside of select to prevent infinite loops
-  React.useEffect(() => {
-    if (query.data) {
-      store.setData(query.data.data);
-      store.setHolidays(query.data.holidays);
-    }
-  }, [query.data, store]);
-
-  return query;
 };

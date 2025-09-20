@@ -65,11 +65,8 @@ interface BusinessTripData {
 }
 
 const BusinessTripsDashboard = () => {
-  // Return optimized version for now to solve performance issues
+  // Return optimized version to solve all performance issues
   return <OptimizedBusinessTripsDashboard />;
-
-  // Original complex version kept for reference but not used
-  return <OriginalBusinessTripsDashboard />;
 };
 
 const OriginalBusinessTripsDashboard = () => {
