@@ -536,6 +536,7 @@ export default function AdminTimesheets() {
 
   // Aggrega i dati per dipendente per la vista giornaliera
   const aggregateTimesheetsByEmployee = async (): Promise<EmployeeSummary[]> => {
+    console.log('🔍 aggregateTimesheetsByEmployee - starting...');
     const employeesMap = new Map<string, EmployeeSummary>();
 
     await Promise.all(filteredTimesheets.map(async (timesheet) => {
@@ -614,9 +615,14 @@ export default function AdminTimesheets() {
       if (timesheet.is_holiday) employee.holiday_hours += calculatedHours;
     }));
 
-    return Array.from(employeesMap.values()).sort((a, b) => 
+    const result = Array.from(employeesMap.values()).sort((a, b) => 
       `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
     );
+
+    console.log('🔍 aggregateTimesheetsByEmployee - result:', result);
+    console.log('🔍 aggregateTimesheetsByEmployee - result is array?', Array.isArray(result));
+    
+    return result;
   };
 
   if (loading) {
@@ -891,10 +897,17 @@ function DailySummaryView({
   const [mealBenefitsCache, setMealBenefitsCache] = useState<{[key: string]: any}>({});
 
   useEffect(() => {
+    console.log('🔍 DailySummaryView - useEffect triggered');
+    
     const loadEmployeeData = async () => {
       setLoading(true);
+      console.log('🔍 DailySummaryView - calling aggregateTimesheetsByEmployee...');
+      
       try {
         const employeeData = await aggregateTimesheetsByEmployee();
+        console.log('🔍 DailySummaryView - got employee data:', employeeData);
+        console.log('🔍 DailySummaryView - employee data is array?', Array.isArray(employeeData));
+        
         setEmployees(employeeData);
         
         // Pre-calculate meal benefits for all timesheets to use in rendering
@@ -913,15 +926,16 @@ function DailySummaryView({
         }
         
         setMealBenefitsCache(benefitsCache);
+        console.log('🔍 DailySummaryView - finished loading employee data');
       } catch (error) {
-        console.error('Error loading employee data:', error);
+        console.error('❌ DailySummaryView - Error loading employee data:', error);
       } finally {
         setLoading(false);
       }
     };
 
     loadEmployeeData();
-  }, [timesheets, aggregateTimesheetsByEmployee, employeeSettings, companySettings]);
+  }, [timesheets, employeeSettings, companySettings]);
 
   if (loading) {
     return (
