@@ -875,6 +875,16 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
+      test_employee_settings_lookup: {
+        Args: { p_date: string; p_user_id: string }
+        Returns: {
+          found_count: number
+          lunch_type: string
+          query_used: string
+          valid_from: string
+          valid_to: string
+        }[]
+      }
     }
     Enums: {
       absence_type: "A" | "F" | "FS" | "I" | "M" | "PR" | "PNR"
