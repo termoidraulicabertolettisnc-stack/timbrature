@@ -98,14 +98,16 @@ export class ExcelImportService {
       let lunch_start_time: string | undefined;
       let lunch_end_time: string | undefined;
 
-      if (entries.length > 1) {
-        // Find the gap between entries (lunch break)
+      if (entries.length === 2) {
+        // Simple case: single lunch break between two sessions
         const firstExit = new Date(entries[0].data_uscita);
         const secondEntry = new Date(entries[1].data_ingresso);
         
         lunch_start_time = firstExit.toISOString();
         lunch_end_time = secondEntry.toISOString();
       }
+      // For 3+ sessions, don't set automatic lunch times - too complex
+      // User can set them manually if needed
 
       const startCoords = this.parseCoordinates(firstEntry.coordinate_ingresso);
       const endCoords = this.parseCoordinates(lastEntry.coordinate_uscita);
