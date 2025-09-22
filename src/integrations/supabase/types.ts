@@ -841,6 +841,25 @@ export type Database = {
           user_name: string
         }[]
       }
+      debug_timesheet_lunch_calculation_v2: {
+        Args: { p_timesheet_id: string }
+        Returns: {
+          calculated_lunch_minutes: number
+          company_lunch_type: string
+          debug_branch: string
+          employee_lunch_type: string
+          employee_settings_found: boolean
+          employee_valid_from: string
+          employee_valid_to: string
+          exact_employee_query_result: string
+          final_total_hours: number
+          hours_worked_without_lunch: number
+          lunch_overlap_seconds: number
+          timesheet_date: string
+          user_id_check: string
+          user_name: string
+        }[]
+      }
       get_current_user_role_and_company: {
         Args: Record<PropertyKey, never>
         Returns: {
