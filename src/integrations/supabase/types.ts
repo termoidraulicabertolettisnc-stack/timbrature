@@ -891,6 +891,18 @@ export type Database = {
           valid_to: string
         }[]
       }
+      test_employee_settings_lookup_detailed: {
+        Args: { p_date: string; p_user_id: string }
+        Returns: {
+          found_id: string
+          lunch_break_min_hours: number
+          lunch_break_type: string
+          result_text: string
+          step: string
+          valid_from: string
+          valid_to: string
+        }[]
+      }
     }
     Enums: {
       absence_type: "A" | "F" | "FS" | "I" | "M" | "PR" | "PNR"
