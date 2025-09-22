@@ -129,6 +129,14 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
     }
   }, [open, employee.id, selectedCompanyId]);
 
+  const parseDecimalNumber = (value: string): number | null => {
+    if (!value) return null;
+    // Replace comma with dot for proper decimal parsing
+    const normalizedValue = value.replace(',', '.');
+    const parsed = parseFloat(normalizedValue);
+    return isNaN(parsed) ? null : parsed;
+  };
+
   const loadSettings = async () => {
     try {
       setLoading(true);
@@ -507,7 +515,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                     max="12"
                     step="0.5"
                     value={settings.lunch_break_min_hours || ''}
-                    onChange={(e) => updateSetting('lunch_break_min_hours', e.target.value ? parseFloat(e.target.value) : null)}
+                    onChange={(e) => updateSetting('lunch_break_min_hours', parseDecimalNumber(e.target.value))}
                     placeholder={companySettings?.lunch_break_min_hours?.toString() || '6'}
                   />
                   <p className="text-xs text-muted-foreground">
