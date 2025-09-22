@@ -21,6 +21,8 @@ import { Loader2 } from 'lucide-react';
 import LocationDisplay from './LocationDisplay';
 import LocationTrackingRoute from './LocationTrackingRoute';
 import { TimesheetWithProfile } from '@/types/timesheet';
+import { TimesheetSession } from '@/types/timesheet-session';
+import { TimesheetSessionsManager } from './TimesheetSessionsManager';
 
 interface Project {
   id: string;
