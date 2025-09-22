@@ -235,7 +235,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         updateData.end_time = null;
       }
 
-      // Handle lunch times based on mode
+      // FIXED: Normalize lunch fields to prevent conflicts (UI-level normalization)
       if (lunchBreakMode === 'times') {
         // Use specific start/end times - convert local time input to UTC
         if (formData.lunch_start_time) {
@@ -260,10 +260,10 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
           updateData.lunch_end_time = null;
         }
         
-        // Clear custom duration when using times
+        // CRITICAL: Clear duration to prevent conflicts (times mode takes priority)
         updateData.lunch_duration_minutes = null;
       } else {
-        // Use duration mode - clear specific times and set custom duration
+        // CRITICAL: Clear times to prevent conflicts (duration mode takes priority)
         updateData.lunch_start_time = null;
         updateData.lunch_end_time = null;
         updateData.lunch_duration_minutes = lunchDuration;
