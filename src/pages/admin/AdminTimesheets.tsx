@@ -640,6 +640,9 @@ export default function AdminTimesheets() {
 
   return (
     <div className="space-y-6">
+      {/* Debug Panel Temporaneo */}
+      <TimesheetDebugPanel />
+      
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold text-foreground">Gestione Timesheet</h2>
