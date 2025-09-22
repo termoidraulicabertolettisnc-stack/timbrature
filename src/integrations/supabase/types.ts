@@ -818,6 +818,29 @@ export type Database = {
           utc_start: string
         }[]
       }
+      debug_timesheet_lunch_calculation: {
+        Args: { p_timesheet_id: string }
+        Returns: {
+          calculated_lunch_minutes: number
+          company_lunch_type: string
+          debug_branch: string
+          employee_lunch_type: string
+          employee_settings_found: boolean
+          employee_valid_from: string
+          employee_valid_to: string
+          end_time_utc: string
+          final_total_hours: number
+          hours_worked_without_lunch: number
+          lunch_duration_minutes: number
+          lunch_end_time: string
+          lunch_overlap_seconds: number
+          lunch_start_time: string
+          start_time_utc: string
+          timesheet_date: string
+          total_duration_minutes: number
+          user_name: string
+        }[]
+      }
       get_current_user_role_and_company: {
         Args: Record<PropertyKey, never>
         Returns: {
