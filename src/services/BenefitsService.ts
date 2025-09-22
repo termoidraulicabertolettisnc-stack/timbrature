@@ -133,18 +133,7 @@ export class BenefitsService {
     };
   }
 
-  /**
-   * @deprecated Use calculateMealBenefits instead
-   * This method is kept for backward compatibility only
-   */
-  static calculateMealBenefitsSync(
-    timesheet: TimesheetData,
-    employeeSettings?: EmployeeSettings,
-    companySettings?: CompanySettings
-  ): MealBenefits {
-    console.warn('🚨 DEPRECATED: Use BenefitsService.calculateMealBenefits instead');
-    return calculateMealBenefits(timesheet, employeeSettings, companySettings);
-  }
+  // DEPRECATED METHOD REMOVED - Use calculateMealBenefits instead
 
   /**
    * Calculate meal benefits for multiple timesheets efficiently

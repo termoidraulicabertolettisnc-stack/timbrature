@@ -338,13 +338,14 @@ export default function AdminTimesheets() {
   };
 
   // Get meal benefits for a timesheet using centralized temporal calculation
-  const getMealBenefits = (timesheet: TimesheetWithProfile) => {
+  const getMealBenefits = async (timesheet: TimesheetWithProfile) => {
     const employeeSettingsForUser = employeeSettings[timesheet.user_id];
     BenefitsService.validateTemporalUsage('AdminTimesheets.getMealBenefits');
-    return BenefitsService.calculateMealBenefitsSync(
+    return await BenefitsService.calculateMealBenefits(
       timesheet, 
       employeeSettingsForUser, 
-      companySettings
+      companySettings,
+      timesheet.date
     );
   };
 
@@ -534,10 +535,10 @@ export default function AdminTimesheets() {
   });
 
   // Aggrega i dati per dipendente per la vista giornaliera
-  const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
+  const aggregateTimesheetsByEmployee = async (): Promise<EmployeeSummary[]> => {
     const employeesMap = new Map<string, EmployeeSummary>();
 
-    filteredTimesheets.forEach(timesheet => {
+    await Promise.all(filteredTimesheets.map(async (timesheet) => {
       if (!timesheet.profiles) return;
 
       const key = timesheet.user_id;
@@ -603,7 +604,7 @@ export default function AdminTimesheets() {
       employee.night_hours += calculatedNightHours;
 
       // Calcola buoni pasto
-      const mealBenefits = getMealBenefits(timesheet);
+      const mealBenefits = await getMealBenefits(timesheet);
       if (mealBenefits.mealVoucher) {
         employee.meal_vouchers += 1;
       }
@@ -611,7 +612,7 @@ export default function AdminTimesheets() {
       // Calcola ore sabato/festivi
       if (timesheet.is_saturday) employee.saturday_hours += calculatedHours;
       if (timesheet.is_holiday) employee.holiday_hours += calculatedHours;
-    });
+    }));
 
     return Array.from(employeesMap.values()).sort((a, b) => 
       `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
@@ -879,12 +880,58 @@ function DailySummaryView({
 }: {
   timesheets: TimesheetWithProfile[];
   absences: any[];
-  aggregateTimesheetsByEmployee: () => EmployeeSummary[];
+  aggregateTimesheetsByEmployee: () => Promise<EmployeeSummary[]>;
   employeeSettings: any;
   companySettings: any;
   onEditTimesheet: (timesheet: TimesheetWithProfile) => void;
   onDeleteTimesheet: (id: string) => void;
 }) {
+  const [employees, setEmployees] = useState<EmployeeSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [mealBenefitsCache, setMealBenefitsCache] = useState<{[key: string]: any}>({});
+
+  useEffect(() => {
+    const loadEmployeeData = async () => {
+      setLoading(true);
+      try {
+        const employeeData = await aggregateTimesheetsByEmployee();
+        setEmployees(employeeData);
+        
+        // Pre-calculate meal benefits for all timesheets to use in rendering
+        const benefitsCache: {[key: string]: any} = {};
+        
+        for (const employee of employeeData) {
+          for (const timesheet of employee.timesheets) {
+            const benefits = await BenefitsService.calculateMealBenefits(
+              timesheet, 
+              employeeSettings[timesheet.user_id], 
+              companySettings,
+              timesheet.date
+            );
+            benefitsCache[timesheet.id] = benefits;
+          }
+        }
+        
+        setMealBenefitsCache(benefitsCache);
+      } catch (error) {
+        console.error('Error loading employee data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadEmployeeData();
+  }, [timesheets, aggregateTimesheetsByEmployee, employeeSettings, companySettings]);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center py-8">Caricamento...</div>
+        </CardContent>
+      </Card>
+    );
+  }
   return (
     <Card>
       <CardHeader>
@@ -898,13 +945,13 @@ function DailySummaryView({
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {aggregateTimesheetsByEmployee().length === 0 ? (
+          {employees.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               Nessun timesheet trovato per i criteri selezionati
             </div>
           ) : (
             <div className="space-y-4">
-              {aggregateTimesheetsByEmployee().map((employee) => (
+              {employees.map((employee) => (
                 <Card key={employee.user_id} className="border-l-4 border-l-primary">
                   <CardContent className="pt-6">
                     <div className="flex items-start justify-between mb-4">
@@ -961,11 +1008,7 @@ function DailySummaryView({
                             </TableHeader>
                             <TableBody>
                               {employee.timesheets.map((timesheet) => {
-                                const mealBenefits = BenefitsService.calculateMealBenefitsSync(
-                                  timesheet, 
-                                  employeeSettings[timesheet.user_id], 
-                                  companySettings
-                                );
+                                const mealBenefits = mealBenefitsCache[timesheet.id] || { mealVoucher: false, dailyAllowance: false };
                                 
                                 return (
                                   <TableRow key={timesheet.id}>

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -76,41 +76,45 @@ export function WeeklyTimelineView({
   const weekEnd = endOfWeek(baseDate, { weekStartsOn: 1 });
   const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
-  const employeeData = useMemo(() => {
-    console.log('🔍 WeeklyTimelineView - Processing data:', {
-      timesheets_count: timesheets.length,
-      absences_count: absences.length,
-      dateFilter,
-      sample_timesheet: timesheets[0],
-      sample_absence: absences[0]
-    });
-    
-    console.log('🔍 WeeklyTimelineView - All absences:', absences);
-    
-    const employeesMap = new Map<string, EmployeeWeekData>();
+  const [employeeData, setEmployeeData] = useState<EmployeeWeekData[]>([]);
+  const [isProcessing, setIsProcessing] = useState(true);
 
-    // Inizializza i dipendenti dai timesheet
-    timesheets.forEach(timesheet => {
-      if (!timesheet.profiles) return;
+  useEffect(() => {
+    const processData = async () => {
+      console.log('🔍 WeeklyTimelineView - Processing data:', {
+        timesheets_count: timesheets.length,
+        absences_count: absences.length,
+        dateFilter,
+        sample_timesheet: timesheets[0],
+        sample_absence: absences[0]
+      });
+      
+      console.log('🔍 WeeklyTimelineView - All absences:', absences);
+      
+      const employeesMap = new Map<string, EmployeeWeekData>();
 
-      const key = timesheet.user_id;
-      if (!employeesMap.has(key)) {
-        const weekDayTimelines = weekDays.map(day => ({
-          date: format(day, 'yyyy-MM-dd'),
-          entries: [],
-          absences: []
-        }));
+      // Inizializza i dipendenti dai timesheet
+      timesheets.forEach(timesheet => {
+        if (!timesheet.profiles) return;
 
-        employeesMap.set(key, {
-          user_id: timesheet.user_id,
-          first_name: timesheet.profiles.first_name,
-          last_name: timesheet.profiles.last_name,
-          email: timesheet.profiles.email,
-          days: weekDayTimelines,
-          totals: { total_hours: 0, overtime_hours: 0, night_hours: 0 }
-        });
-      }
-    });
+        const key = timesheet.user_id;
+        if (!employeesMap.has(key)) {
+          const weekDayTimelines = weekDays.map(day => ({
+            date: format(day, 'yyyy-MM-dd'),
+            entries: [],
+            absences: []
+          }));
+
+          employeesMap.set(key, {
+            user_id: timesheet.user_id,
+            first_name: timesheet.profiles.first_name,
+            last_name: timesheet.profiles.last_name,
+            email: timesheet.profiles.email,
+            days: weekDayTimelines,
+            totals: { total_hours: 0, overtime_hours: 0, night_hours: 0 }
+          });
+        }
+      });
 
     // Aggiungi le assenze
     console.log('🔍 WeeklyTimelineView - Adding absences, count:', absences.length);
@@ -158,7 +162,7 @@ export function WeeklyTimelineView({
     });
 
     // Utility per dividere turni notturni
-    const splitNightShift = (timesheet: TimesheetWithProfile, employee: EmployeeWeekData) => {
+    const splitNightShift = async (timesheet: TimesheetWithProfile, employee: EmployeeWeekData) => {
       if (!timesheet.start_time) return;
 
       const startTime = new Date(timesheet.start_time);
@@ -180,13 +184,14 @@ export function WeeklyTimelineView({
       const endDate = format(endTime, 'yyyy-MM-dd');
       const isNightShift = startDate !== endDate || timesheet.night_hours > 0;
 
-      // Calcola meal voucher una sola volta
+      // Calcola meal voucher usando il nuovo metodo async
       const employeeSetting = employeeSettings[timesheet.user_id];
       BenefitsService.validateTemporalUsage('WeeklyTimelineView');
-      const mealBenefits = BenefitsService.calculateMealBenefitsSync(
+      const mealBenefits = await BenefitsService.calculateMealBenefits(
         timesheet,
         employeeSetting,
-        companySettings
+        companySettings,
+        timesheet.date
       );
 
       if (!isNightShift) {
@@ -284,12 +289,12 @@ export function WeeklyTimelineView({
     };
 
     // Processa i timesheet per ogni dipendente
-    timesheets.forEach(timesheet => {
+    await Promise.all(timesheets.map(async (timesheet) => {
       const employee = employeesMap.get(timesheet.user_id);
       if (!employee) return;
 
-      splitNightShift(timesheet, employee);
-    });
+      await splitNightShift(timesheet, employee);
+    }));
 
     const result = Array.from(employeesMap.values());
     console.log('📊 WeeklyTimelineView - Final result:', {
@@ -301,8 +306,12 @@ export function WeeklyTimelineView({
       }))
     });
     
-    return result;
-  }, [timesheets, absences, dateFilter, employeeSettings, companySettings]);
+    setEmployeeData(result);
+    setIsProcessing(false);
+  };
+
+  processData();
+}, [timesheets, absences, dateFilter, employeeSettings, companySettings]);
 
   // Usa hook per aggiornamenti real-time
   const realtimeData = useWeeklyRealtimeHours(timesheets);
