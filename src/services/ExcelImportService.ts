@@ -1,4 +1,6 @@
 import * as XLSX from 'exceljs';
+import { supabase } from '@/integrations/supabase/client';
+import { TimesheetSession } from '@/types/timesheet-session';
 
 export interface ExcelTimesheetRow {
   matricola?: string;
@@ -33,6 +35,9 @@ export interface ParsedTimesheet {
   lunch_start_time?: string;
   lunch_end_time?: string;
   total_hours: number;
+  clockInTimes: string[];
+  clockOutTimes: string[];
+  notes?: string;
 }
 
 export interface ImportResult {
@@ -114,10 +119,16 @@ export class ExcelImportService {
 
       // Calculate total hours from all entries
       let totalMinutes = 0;
+      const clockInTimes: string[] = [];
+      const clockOutTimes: string[] = [];
+      
       entries.forEach(entry => {
         const start = new Date(entry.data_ingresso);
         const end = new Date(entry.data_uscita);
         totalMinutes += (end.getTime() - start.getTime()) / (1000 * 60);
+        
+        clockInTimes.push(this.parseDateTime(entry.data_ingresso));
+        clockOutTimes.push(this.parseDateTime(entry.data_uscita));
       });
 
       const parsed: ParsedTimesheet = {
@@ -132,7 +143,9 @@ export class ExcelImportService {
         end_location_lng: endCoords.lng,
         lunch_start_time,
         lunch_end_time,
-        total_hours: Math.round((totalMinutes / 60) * 100) / 100
+        total_hours: Math.round((totalMinutes / 60) * 100) / 100,
+        clockInTimes,
+        clockOutTimes
       };
 
       result.set(key, parsed);

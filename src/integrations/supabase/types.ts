@@ -661,6 +661,54 @@ export type Database = {
           },
         ]
       }
+      timesheet_sessions: {
+        Row: {
+          created_at: string
+          end_location_lat: number | null
+          end_location_lng: number | null
+          end_time: string | null
+          id: string
+          notes: string | null
+          session_order: number
+          session_type: string
+          start_location_lat: number | null
+          start_location_lng: number | null
+          start_time: string
+          timesheet_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          end_location_lat?: number | null
+          end_location_lng?: number | null
+          end_time?: string | null
+          id?: string
+          notes?: string | null
+          session_order?: number
+          session_type?: string
+          start_location_lat?: number | null
+          start_location_lng?: number | null
+          start_time: string
+          timesheet_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          end_location_lat?: number | null
+          end_location_lng?: number | null
+          end_time?: string | null
+          id?: string
+          notes?: string | null
+          session_order?: number
+          session_type?: string
+          start_location_lat?: number | null
+          start_location_lng?: number | null
+          start_time?: string
+          timesheet_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       timesheets: {
         Row: {
           absence_type: Database["public"]["Enums"]["absence_type"] | null

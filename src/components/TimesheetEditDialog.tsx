@@ -40,7 +40,6 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
   const [projects, setProjects] = useState<Project[]>([]);
   const [defaultLunchMinutes, setDefaultLunchMinutes] = useState<number>(60); // Default 60 minutes
   
-  // Form state
   const [formData, setFormData] = useState({
     date: '',
     end_date: '',
@@ -53,6 +52,9 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
     is_saturday: false,
     is_holiday: false,
   });
+  
+  const [sessions, setSessions] = useState<Partial<TimesheetSession>[]>([]);
+  const [useSessionsMode, setUseSessionsMode] = useState(false);
 
   // Lunch break mode: 'times' for start/end times, 'duration' for duration in minutes
   const [lunchBreakMode, setLunchBreakMode] = useState<'times' | 'duration'>('duration');
