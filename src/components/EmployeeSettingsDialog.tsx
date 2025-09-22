@@ -36,6 +36,7 @@ interface EmployeeSettings {
   daily_allowance_amount: number | null;
   daily_allowance_policy: string | null;
   daily_allowance_min_hours: number | null;
+  lunch_break_min_hours: number | null;
   // Entry tolerance fields
   enable_entry_tolerance?: boolean | null;
   standard_start_time?: string | null;
@@ -59,6 +60,7 @@ interface CompanySettings {
   daily_allowance_amount: number;
   daily_allowance_policy: string;
   daily_allowance_min_hours: number;
+  lunch_break_min_hours: number;
   // Entry tolerance fields
   enable_entry_tolerance?: boolean;
   standard_start_time?: string;
@@ -100,6 +102,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
     daily_allowance_amount: null,
     daily_allowance_policy: null,
     daily_allowance_min_hours: null,
+    lunch_break_min_hours: null,
     // Entry tolerance fields
     enable_entry_tolerance: null,
     standard_start_time: null,
@@ -181,6 +184,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
           daily_allowance_amount: null,
           daily_allowance_policy: null,
           daily_allowance_min_hours: null,
+          lunch_break_min_hours: null,
           // Entry tolerance fields
           enable_entry_tolerance: null,
           standard_start_time: null,
@@ -303,6 +307,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
       daily_allowance_amount: null,
       daily_allowance_policy: null,
       daily_allowance_min_hours: null,
+      lunch_break_min_hours: null,
       // Entry tolerance fields  
       enable_entry_tolerance: null,
       standard_start_time: null,
@@ -491,6 +496,25 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                   </Select>
                   <p className="text-xs text-muted-foreground">
                     Valore effettivo: {getEffectiveValue(settings.lunch_break_type, companySettings?.lunch_break_type)}
+                  </p>
+                </div>
+                
+                <div>
+                  <Label>Ore Minime per Applicare Pausa Pranzo</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="12"
+                    step="0.5"
+                    value={settings.lunch_break_min_hours || ''}
+                    onChange={(e) => updateSetting('lunch_break_min_hours', e.target.value ? parseFloat(e.target.value) : null)}
+                    placeholder={companySettings?.lunch_break_min_hours?.toString() || '6'}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Valore effettivo: {getEffectiveValue(settings.lunch_break_min_hours, companySettings?.lunch_break_min_hours || 6)} ore
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    La pausa pranzo viene applicata automaticamente solo se il turno supera questo numero di ore
                   </p>
                 </div>
               </div>

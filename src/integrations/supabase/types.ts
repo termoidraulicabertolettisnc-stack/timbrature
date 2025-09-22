@@ -179,6 +179,7 @@ export type Database = {
           enable_overtime_conversion: boolean | null
           entry_tolerance_minutes: number | null
           id: string
+          lunch_break_min_hours: number | null
           lunch_break_type: Database["public"]["Enums"]["lunch_break_type"]
           meal_allowance_policy:
             | Database["public"]["Enums"]["meal_allowance_policy"]
@@ -211,6 +212,7 @@ export type Database = {
           enable_overtime_conversion?: boolean | null
           entry_tolerance_minutes?: number | null
           id?: string
+          lunch_break_min_hours?: number | null
           lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
           meal_allowance_policy?:
             | Database["public"]["Enums"]["meal_allowance_policy"]
@@ -243,6 +245,7 @@ export type Database = {
           enable_overtime_conversion?: boolean | null
           entry_tolerance_minutes?: number | null
           id?: string
+          lunch_break_min_hours?: number | null
           lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
           meal_allowance_policy?:
             | Database["public"]["Enums"]["meal_allowance_policy"]
@@ -411,6 +414,7 @@ export type Database = {
           enable_overtime_conversion: boolean | null
           entry_tolerance_minutes: number | null
           id: string
+          lunch_break_min_hours: number | null
           lunch_break_type:
             | Database["public"]["Enums"]["lunch_break_type"]
             | null
@@ -450,6 +454,7 @@ export type Database = {
           enable_overtime_conversion?: boolean | null
           entry_tolerance_minutes?: number | null
           id?: string
+          lunch_break_min_hours?: number | null
           lunch_break_type?:
             | Database["public"]["Enums"]["lunch_break_type"]
             | null
@@ -491,6 +496,7 @@ export type Database = {
           enable_overtime_conversion?: boolean | null
           entry_tolerance_minutes?: number | null
           id?: string
+          lunch_break_min_hours?: number | null
           lunch_break_type?:
             | Database["public"]["Enums"]["lunch_break_type"]
             | null

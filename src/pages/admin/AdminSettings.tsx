@@ -29,6 +29,7 @@ interface CompanySettings {
   default_daily_allowance_amount: number | null;
   default_daily_allowance_min_hours: number | null;
   meal_voucher_min_hours: number | null;
+  lunch_break_min_hours: number | null;
   // Entry tolerance fields
   enable_entry_tolerance?: boolean | null;
   standard_start_time?: string | null;
@@ -55,6 +56,7 @@ export default function AdminSettings() {
     default_daily_allowance_amount: null,
     default_daily_allowance_min_hours: null,
     meal_voucher_min_hours: null,
+    lunch_break_min_hours: null,
     // Entry tolerance fields
     enable_entry_tolerance: null,
     standard_start_time: null,
@@ -131,6 +133,7 @@ export default function AdminSettings() {
         daily_allowance_policy: 'disabled' as const,
         daily_allowance_min_hours: 6,
         meal_voucher_min_hours: 6,
+        lunch_break_min_hours: 6,
         // Entry tolerance defaults
         enable_entry_tolerance: false,
         standard_start_time: '08:00:00',
@@ -177,6 +180,7 @@ export default function AdminSettings() {
           default_daily_allowance_amount: settings.default_daily_allowance_amount,
           default_daily_allowance_min_hours: settings.default_daily_allowance_min_hours,
           meal_voucher_min_hours: settings.meal_voucher_min_hours,
+          lunch_break_min_hours: settings.lunch_break_min_hours,
           // Entry tolerance fields
           enable_entry_tolerance: settings.enable_entry_tolerance,
           standard_start_time: settings.standard_start_time,
@@ -350,6 +354,23 @@ export default function AdminSettings() {
                     <SelectItem value="libera">Libera (Segnata Manualmente)</SelectItem>
                   </SelectContent>
                 </Select>
+                
+                <div>
+                  <Label htmlFor="lunch_break_min_hours">Ore Minime per Applicare Pausa Pranzo</Label>
+                  <Input
+                    id="lunch_break_min_hours"
+                    type="number"
+                    min="0"
+                    max="12"
+                    step="0.5"
+                    value={settings.lunch_break_min_hours || ''}
+                    onChange={(e) => updateSetting('lunch_break_min_hours', parseFloat(e.target.value) || null)}
+                    placeholder="6"
+                  />
+                  <p className="text-sm text-muted-foreground mt-1">
+                    La pausa pranzo viene applicata automaticamente solo se il turno supera questo numero di ore
+                  </p>
+                </div>
               </div>
             </div>
           </CardContent>
