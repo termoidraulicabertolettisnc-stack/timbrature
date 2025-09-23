@@ -47,17 +47,24 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
   };
 
   const handleParse = async () => {
-    if (!file) return;
+    console.log('🔍 IMPORT DIALOG - handleParse called with file:', file?.name);
+    if (!file) {
+      console.log('❌ IMPORT DIALOG - No file selected');
+      return;
+    }
 
+    console.log('🔍 IMPORT DIALOG - Starting parse...');
     setParsing(true);
     try {
       const result = await ExcelImportService.parseExcelFile(file);
+      console.log('🔍 IMPORT DIALOG - Parse result:', result);
       setParseResult(result);
       setStep('preview');
     } catch (error) {
+      console.error('❌ IMPORT DIALOG - Parse error:', error);
       toast({
         title: "Errore",
-        description: "Errore durante l'analisi del file",
+        description: `Errore durante l'analisi del file: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`,
         variant: "destructive"
       });
     } finally {
