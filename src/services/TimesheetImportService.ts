@@ -4,17 +4,24 @@ import { ParsedTimesheet } from './ExcelImportService';
 
 export class TimesheetImportService {
   static async importTimesheet(timesheet: ParsedTimesheet, employee: { user_id: string }) {
+    // Check if this is an absence (no clock times)
+    const hasClockTimes = timesheet.clockInTimes.length > 0 && timesheet.clockOutTimes.length > 0;
+    
     // Prepare the timesheet data for insertion
     const timesheetData = {
       user_id: employee.user_id,
       date: timesheet.date,
+      // If no clock times, mark as absence and set total_hours to 0
+      is_absence: !hasClockTimes,
+      absence_type: !hasClockTimes ? 'F' as const : null,
+      total_hours: !hasClockTimes ? 0 : null,
       // Clear individual time fields - sessions will handle timing
       start_time: null,
       end_time: null,
       lunch_start_time: null,
       lunch_end_time: null,
       lunch_duration_minutes: null,
-      notes: timesheet.notes || null,
+      notes: timesheet.notes || (!hasClockTimes ? 'Assenza importata da Excel' : null),
       created_by: (await supabase.auth.getUser()).data.user?.id,
       project_id: null // Default to no project
     };
