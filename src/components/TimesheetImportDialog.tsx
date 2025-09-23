@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { Upload, FileSpreadsheet, Users, Clock, AlertTriangle, CheckCircle } from 'lucide-react';
 import { ExcelImportService, ParsedTimesheet, ImportResult } from '@/services/ExcelImportService';
+import { TimesheetImportService } from '@/services/TimesheetImportService';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -145,30 +146,14 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
             continue;
           }
 
-          // Use upsert for idempotent insert (will ignore if already exists due to unique index)
-          const { error } = await supabase.from('timesheets').upsert({
-            user_id: employee.user_id,
-            date: timesheet.date,
-            start_time: timesheet.start_time,
-            end_time: timesheet.end_time,
-            start_location_lat: timesheet.start_location_lat,
-            start_location_lng: timesheet.start_location_lng,
-            end_location_lat: timesheet.end_location_lat,
-            end_location_lng: timesheet.end_location_lng,
-            lunch_start_time: timesheet.lunch_start_time,
-            lunch_end_time: timesheet.lunch_end_time,
-            created_by: currentUserId,
-            notes: `Importato da Excel - ${file?.name}`
-          }, { 
-            onConflict: 'user_id,date', 
-            ignoreDuplicates: true 
-          });
-
-          if (error) {
-            console.error('Errore inserimento timbratura:', error);
-            importResults.errors++;
-          } else {
+          // Use TimesheetImportService for proper session handling
+          try {
+            await TimesheetImportService.importTimesheet(timesheet, employee);
             importResults.imported++;
+            console.log(`✅ Successfully imported timesheet for ${employee.user_id} on ${timesheet.date}`);
+          } catch (error) {
+            console.error('❌ Error importing timesheet:', error);
+            importResults.errors++;
           }
 
         } catch (error) {
