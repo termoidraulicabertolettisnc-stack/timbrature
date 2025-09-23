@@ -36,30 +36,46 @@ export class TimesheetImportService {
     // Create sessions for each clock-in/out pair
     const sessions: Omit<TimesheetSession, 'id' | 'created_at' | 'updated_at'>[] = [];
     
+    console.log(`🔍 Creating sessions for timesheet ${timesheetRecord.id}:`, {
+      date: timesheet.date,
+      clockInTimes: timesheet.clockInTimes,
+      clockOutTimes: timesheet.clockOutTimes,
+      expectedSessions: Math.min(timesheet.clockInTimes.length, timesheet.clockOutTimes.length)
+    });
+    
     // Add work sessions for each clock-in/out pair
-    for (let i = 0; i < timesheet.clockInTimes.length; i++) {
+    const maxSessions = Math.min(timesheet.clockInTimes.length, timesheet.clockOutTimes.length);
+    for (let i = 0; i < maxSessions; i++) {
       const clockIn = timesheet.clockInTimes[i];
       const clockOut = timesheet.clockOutTimes[i];
       
       if (clockIn && clockOut) {
+        console.log(`🔍 Creating session ${i + 1}:`, { clockIn, clockOut });
+        
         sessions.push({
           timesheet_id: timesheetRecord.id,
-          session_order: sessions.length + 1,
+          session_order: i + 1,
           start_time: clockIn,
           end_time: clockOut,
           session_type: 'work',
-          start_location_lat: timesheet.start_location_lat || null,
-          start_location_lng: timesheet.start_location_lng || null,
-          end_location_lat: timesheet.end_location_lat || null,
-          end_location_lng: timesheet.end_location_lng || null,
+          start_location_lat: i === 0 ? (timesheet.start_location_lat || null) : null,
+          start_location_lng: i === 0 ? (timesheet.start_location_lng || null) : null,
+          end_location_lat: i === maxSessions - 1 ? (timesheet.end_location_lat || null) : null,
+          end_location_lng: i === maxSessions - 1 ? (timesheet.end_location_lng || null) : null,
           notes: `Sessione lavoro ${i + 1}`
         });
       }
     }
+    
+    console.log(`🔍 Total sessions created: ${sessions.length}`);
 
     // If we have more than one work session, try to detect lunch breaks
     if (sessions.length > 1) {
+      console.log(`🔍 Detecting lunch breaks between ${sessions.length} sessions`);
+      
       // Look for gaps between sessions that could be lunch breaks
+      const lunchBreakSessions: Omit<TimesheetSession, 'id' | 'created_at' | 'updated_at'>[] = [];
+      
       for (let i = 0; i < sessions.length - 1; i++) {
         const currentSession = sessions[i];
         const nextSession = sessions[i + 1];
@@ -68,12 +84,16 @@ export class TimesheetImportService {
         const gapEnd = new Date(nextSession.start_time);
         const gapMinutes = (gapEnd.getTime() - gapStart.getTime()) / (1000 * 60);
         
+        console.log(`🔍 Gap between session ${i + 1} and ${i + 2}: ${gapMinutes} minutes`);
+        
         // If gap is between 15 minutes and 2 hours, consider it a lunch break
         if (gapMinutes >= 15 && gapMinutes <= 120) {
+          console.log(`🔍 Creating lunch break session for ${gapMinutes} minute gap`);
+          
           // Insert lunch break session
           const lunchBreakSession: Omit<TimesheetSession, 'id' | 'created_at' | 'updated_at'> = {
             timesheet_id: timesheetRecord.id,
-            session_order: currentSession.session_order + 0.5, // Will be reordered later
+            session_order: 0, // Will be set correctly after sorting
             start_time: currentSession.end_time,
             end_time: nextSession.start_time,
             session_type: 'lunch_break',
@@ -81,17 +101,24 @@ export class TimesheetImportService {
             start_location_lng: null,
             end_location_lat: null,
             end_location_lng: null,
-            notes: 'Pausa pranzo rilevata automaticamente'
+            notes: `Pausa pranzo automatica (${Math.round(gapMinutes)} min)`
           };
-          sessions.push(lunchBreakSession);
+          lunchBreakSessions.push(lunchBreakSession);
         }
       }
       
-      // Reorder sessions and fix session_order
+      // Add lunch break sessions to the main array
+      sessions.push(...lunchBreakSessions);
+      
+      // Reorder ALL sessions (work + lunch) chronologically and fix session_order
       sessions.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
       sessions.forEach((session, index) => {
         session.session_order = index + 1;
       });
+      
+      console.log(`🔍 Final sessions after lunch break detection: ${sessions.length} (${sessions.filter(s => s.session_type === 'work').length} work + ${sessions.filter(s => s.session_type === 'lunch_break').length} lunch)`);
+    } else {
+      console.log(`🔍 Single session detected, no lunch break detection needed`);
     }
 
     // Delete existing sessions for this timesheet first
@@ -107,6 +134,13 @@ export class TimesheetImportService {
 
     // Insert new sessions if any exist
     if (sessions.length > 0) {
+      console.log(`🔍 Inserting ${sessions.length} sessions into database:`, sessions.map(s => ({
+        order: s.session_order,
+        type: s.session_type,
+        start: s.start_time,
+        end: s.end_time
+      })));
+      
       const { error: sessionsError } = await supabase
         .from('timesheet_sessions')
         .insert(sessions);
@@ -115,6 +149,10 @@ export class TimesheetImportService {
         console.error('Error inserting sessions:', sessionsError);
         throw sessionsError;
       }
+      
+      console.log(`✅ Successfully inserted ${sessions.length} sessions`);
+    } else {
+      console.log(`⚠️ No sessions to insert for timesheet ${timesheetRecord.id}`);
     }
 
     return timesheetRecord;
