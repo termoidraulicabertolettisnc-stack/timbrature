@@ -57,18 +57,74 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
   
   const [sessions, setSessions] = useState<Partial<TimesheetSession>[]>([]);
   const [useSessionsMode, setUseSessionsMode] = useState(false);
+  const [loadingSessions, setLoadingSessions] = useState(false);
 
   // Lunch break mode: 'times' for start/end times, 'duration' for duration in minutes
   const [lunchBreakMode, setLunchBreakMode] = useState<'times' | 'duration'>('duration');
   const [lunchDuration, setLunchDuration] = useState<number>(60); // in minutes
 
-  // Load projects and employee settings when dialog opens
+  // Load projects, employee settings and sessions when dialog opens
   useEffect(() => {
     if (open && timesheet) {
       loadProjects();
       loadEmployeeSettings();
+      loadTimesheetSessions();
     }
   }, [open, timesheet]);
+
+  // Load timesheet sessions to determine if we should use sessions mode
+  const loadTimesheetSessions = async () => {
+    if (!timesheet) return;
+    
+    setLoadingSessions(true);
+    try {
+      const { data: sessionsData, error } = await supabase
+        .from('timesheet_sessions')
+        .select('*')
+        .eq('timesheet_id', timesheet.id)
+        .order('session_order');
+      
+      if (error) throw error;
+      
+      if (sessionsData && sessionsData.length > 0) {
+        // Type cast the sessions data to match our interface
+        const typedSessions: Partial<TimesheetSession>[] = sessionsData.map(session => ({
+          ...session,
+          session_type: session.session_type as 'work' | 'lunch_break' | 'other_break'
+        }));
+        setSessions(typedSessions);
+        // Use sessions mode if there are multiple work sessions or any lunch break sessions
+        const workSessions = sessionsData.filter(s => s.session_type === 'work');
+        const hasLunchBreakSessions = sessionsData.some(s => s.session_type === 'lunch_break');
+        setUseSessionsMode(workSessions.length > 1 || hasLunchBreakSessions);
+      } else {
+        // No sessions found, create a default session from timesheet data
+        const defaultSession: Partial<TimesheetSession> = {
+          session_order: 1,
+          session_type: 'work',
+          start_time: timesheet.start_time || undefined,
+          end_time: timesheet.end_time || undefined,
+          notes: null
+        };
+        setSessions([defaultSession]);
+        setUseSessionsMode(false);
+      }
+    } catch (error) {
+      console.error('Error loading timesheet sessions:', error);
+      // Fallback to default session
+      const defaultSession: Partial<TimesheetSession> = {
+        session_order: 1,
+        session_type: 'work',
+        start_time: timesheet.start_time || undefined,
+        end_time: timesheet.end_time || undefined,
+        notes: null
+      };
+      setSessions([defaultSession]);
+      setUseSessionsMode(false);
+    } finally {
+      setLoadingSessions(false);
+    }
+  };
 
   // Load employee settings to get default lunch break
   const loadEmployeeSettings = async () => {
@@ -183,33 +239,120 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
 
     setLoading(true);
     try {
-      // Validazioni prima dell'update
-      const startD = new Date(`${formData.date}T${formData.start_time || '00:00'}:00`);
-      const endD = new Date(`${formData.end_date || formData.date}T${formData.end_time || '00:00'}:00`);
-
-      if (formData.start_time && formData.end_time && endD < startD) {
-        toast({ 
-          title: 'Errore', 
-          description: 'L\'orario di fine è precedente all\'inizio', 
-          variant: 'destructive' 
-        });
-        setLoading(false);
-        return;
+      if (useSessionsMode) {
+        await handleSessionsSubmit();
+      } else {
+        await handleSimpleSubmit();
       }
+    } catch (error) {
+      console.error('Error updating timesheet:', error);
+      toast({
+        title: "Errore",
+        description: "Errore nella modifica del timesheet",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      // Validazione pausa pranzo quando si usa la modalità orari
-      if (lunchBreakMode === 'times' && (!!formData.lunch_start_time !== !!formData.lunch_end_time)) {
-        toast({ 
-          title: 'Errore', 
-          description: 'Specifica sia inizio che fine della pausa pranzo', 
-          variant: 'destructive' 
-        });
-        setLoading(false);
-        return;
-      }
+  const handleSessionsSubmit = async () => {
+    // Get current user
+    const currentUser = (await supabase.auth.getUser()).data.user;
 
-      // Ottieni l'utente corrente per updated_by
-      const currentUser = (await supabase.auth.getUser()).data.user;
+    // Update basic timesheet info
+    const updateData: any = {
+      date: formData.date,
+      end_date: formData.end_date,
+      project_id: formData.project_id === 'none' ? null : formData.project_id,
+      notes: formData.notes || null,
+      is_saturday: formData.is_saturday,
+      is_holiday: formData.is_holiday,
+      updated_by: currentUser?.id ?? timesheet!.user_id,
+      // Clear old time fields - sessions will handle this
+      start_time: null,
+      end_time: null,
+      lunch_start_time: null,
+      lunch_end_time: null,
+      lunch_duration_minutes: null
+    };
+
+    const { error: timesheetError } = await supabase
+      .from('timesheets')
+      .update(updateData)
+      .eq('id', timesheet!.id);
+
+    if (timesheetError) throw timesheetError;
+
+    // Delete existing sessions
+    const { error: deleteError } = await supabase
+      .from('timesheet_sessions')
+      .delete()
+      .eq('timesheet_id', timesheet!.id);
+
+    if (deleteError) throw deleteError;
+
+    // Insert new sessions
+    const validSessions = sessions.filter(session => 
+      session.start_time && session.end_time && session.session_type
+    );
+
+    if (validSessions.length > 0) {
+      const sessionsToInsert = validSessions.map(session => ({
+        timesheet_id: timesheet!.id,
+        session_order: session.session_order!,
+        session_type: session.session_type!,
+        start_time: session.start_time!,
+        end_time: session.end_time!,
+        notes: session.notes || null,
+        start_location_lat: session.start_location_lat || null,
+        start_location_lng: session.start_location_lng || null,
+        end_location_lat: session.end_location_lat || null,
+        end_location_lng: session.end_location_lng || null
+      }));
+
+      const { error: sessionsError } = await supabase
+        .from('timesheet_sessions')
+        .insert(sessionsToInsert);
+
+      if (sessionsError) throw sessionsError;
+    }
+
+    toast({
+      title: "Successo",
+      description: "Timesheet modificato con successo",
+    });
+
+    onSuccess();
+    onOpenChange(false);
+  };
+
+  const handleSimpleSubmit = async () => {
+    // Validazioni prima dell'update
+    const startD = new Date(`${formData.date}T${formData.start_time || '00:00'}:00`);
+    const endD = new Date(`${formData.end_date || formData.date}T${formData.end_time || '00:00'}:00`);
+
+    if (formData.start_time && formData.end_time && endD < startD) {
+      toast({ 
+        title: 'Errore', 
+        description: 'L\'orario di fine è precedente all\'inizio', 
+        variant: 'destructive' 
+      });
+      return;
+    }
+
+    // Validazione pausa pranzo quando si usa la modalità orari
+    if (lunchBreakMode === 'times' && (!!formData.lunch_start_time !== !!formData.lunch_end_time)) {
+      toast({ 
+        title: 'Errore', 
+        description: 'Specifica sia inizio che fine della pausa pranzo', 
+        variant: 'destructive' 
+      });
+      return;
+    }
+
+    // Ottieni l'utente corrente per updated_by
+    const currentUser = (await supabase.auth.getUser()).data.user;
 
       // Prepare the update data
       const updateData: any = {
@@ -273,30 +416,20 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         updateData.lunch_duration_minutes = lunchDuration;
       }
 
-      const { error } = await supabase
-        .from('timesheets')
-        .update(updateData)
-        .eq('id', timesheet.id);
+    const { error } = await supabase
+      .from('timesheets')
+      .update(updateData)
+      .eq('id', timesheet!.id);
 
-      if (error) throw error;
+    if (error) throw error;
 
-      toast({
-        title: "Successo",
-        description: "Timesheet modificato con successo",
-      });
+    toast({
+      title: "Successo",
+      description: "Timesheet modificato con successo",
+    });
 
-      onSuccess();
-      onOpenChange(false);
-    } catch (error) {
-      console.error('Error updating timesheet:', error);
-      toast({
-        title: "Errore",
-        description: "Errore nella modifica del timesheet",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+    onSuccess();
+    onOpenChange(false);
   };
 
   const handleInputChange = (field: string, value: any) => {
@@ -360,95 +493,128 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="start_time">Orario di inizio</Label>
-              <Input
-                id="start_time"
-                type="time"
-                value={formData.start_time}
-                onChange={(e) => handleInputChange('start_time', e.target.value)}
-              />
+          {/* Mode Toggle */}
+          <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+            <div className="space-y-1">
+              <div className="font-medium">Modalità di modifica</div>
+              <div className="text-sm text-muted-foreground">
+                {useSessionsMode 
+                  ? "Gestione avanzata con sessioni multiple" 
+                  : "Gestione semplificata con orario unico"
+                }
+              </div>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="end_time">Orario di fine</Label>
-              <Input
-                id="end_time"
-                type="time"
-                value={formData.end_time}
-                onChange={(e) => handleInputChange('end_time', e.target.value)}
-              />
-            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setUseSessionsMode(!useSessionsMode)}
+              disabled={loadingSessions}
+            >
+              {useSessionsMode ? "Modalità Semplice" : "Modalità Avanzata"}
+            </Button>
           </div>
 
-          <div className="space-y-4">
-            <div className="space-y-3">
-              <Label>Modalità pausa pranzo</Label>
-              <RadioGroup 
-                value={lunchBreakMode} 
-                onValueChange={(value: 'times' | 'duration') => setLunchBreakMode(value)}
-                className="flex flex-col space-y-2"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="times" id="times" />
-                  <Label htmlFor="times">Specifica orari di inizio e fine</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="duration" id="duration" />
-                  <Label htmlFor="duration">Specifica solo la durata</Label>
-                </div>
-              </RadioGroup>
+          {useSessionsMode ? (
+            <div className="space-y-4">
+              <TimesheetSessionsManager
+                sessions={sessions}
+                onChange={setSessions}
+                date={formData.date}
+              />
             </div>
-
-            {lunchBreakMode === 'times' ? (
+          ) : (
+            <>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="lunch_start_time">Inizio pausa pranzo</Label>
+                  <Label htmlFor="start_time">Orario di inizio</Label>
                   <Input
-                    id="lunch_start_time"
+                    id="start_time"
                     type="time"
-                    value={formData.lunch_start_time}
-                    onChange={(e) => handleInputChange('lunch_start_time', e.target.value)}
+                    value={formData.start_time}
+                    onChange={(e) => handleInputChange('start_time', e.target.value)}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="lunch_end_time">Fine pausa pranzo</Label>
+                  <Label htmlFor="end_time">Orario di fine</Label>
                   <Input
-                    id="lunch_end_time"
+                    id="end_time"
                     type="time"
-                    value={formData.lunch_end_time}
-                    onChange={(e) => handleInputChange('lunch_end_time', e.target.value)}
+                    value={formData.end_time}
+                    onChange={(e) => handleInputChange('end_time', e.target.value)}
                   />
                 </div>
               </div>
-            ) : (
-              <div className="space-y-2">
-                <Label htmlFor="lunch_duration">Durata pausa pranzo</Label>
-                <div className="text-sm text-muted-foreground mb-2">
-                  Pausa predefinita del dipendente: {defaultLunchMinutes} minuti
+
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  <Label>Modalità pausa pranzo</Label>
+                  <RadioGroup 
+                    value={lunchBreakMode} 
+                    onValueChange={(value: 'times' | 'duration') => setLunchBreakMode(value)}
+                    className="flex flex-col space-y-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="times" id="times" />
+                      <Label htmlFor="times">Specifica orari di inizio e fine</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="duration" id="duration" />
+                      <Label htmlFor="duration">Specifica solo la durata</Label>
+                    </div>
+                  </RadioGroup>
                 </div>
-                <Select 
-                  value={lunchDuration.toString()} 
-                  onValueChange={(value) => setLunchDuration(parseInt(value))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleziona durata" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0">Nessuna pausa</SelectItem>
-                    <SelectItem value="15">15 minuti</SelectItem>
-                    <SelectItem value="30">30 minuti</SelectItem>
-                    <SelectItem value="45">45 minuti</SelectItem>
-                    <SelectItem value="60">1 ora</SelectItem>
-                    <SelectItem value="90">1 ora e 30 minuti</SelectItem>
-                    <SelectItem value="120">2 ore</SelectItem>
-                  </SelectContent>
-                </Select>
+
+                {lunchBreakMode === 'times' ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="lunch_start_time">Inizio pausa pranzo</Label>
+                      <Input
+                        id="lunch_start_time"
+                        type="time"
+                        value={formData.lunch_start_time}
+                        onChange={(e) => handleInputChange('lunch_start_time', e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="lunch_end_time">Fine pausa pranzo</Label>
+                      <Input
+                        id="lunch_end_time"
+                        type="time"
+                        value={formData.lunch_end_time}
+                        onChange={(e) => handleInputChange('lunch_end_time', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="lunch_duration">Durata pausa pranzo</Label>
+                    <div className="text-sm text-muted-foreground mb-2">
+                      Pausa predefinita del dipendente: {defaultLunchMinutes} minuti
+                    </div>
+                    <Select 
+                      value={lunchDuration.toString()} 
+                      onValueChange={(value) => setLunchDuration(parseInt(value))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleziona durata" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">Nessuna pausa</SelectItem>
+                        <SelectItem value="15">15 minuti</SelectItem>
+                        <SelectItem value="30">30 minuti</SelectItem>
+                        <SelectItem value="45">45 minuti</SelectItem>
+                        <SelectItem value="60">1 ora</SelectItem>
+                        <SelectItem value="90">1 ora e 30 minuti</SelectItem>
+                        <SelectItem value="120">2 ore</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
 
           {/* Location tracking section */}
           {(timesheet.start_location_lat || timesheet.start_location_lng || timesheet.end_location_lat || timesheet.end_location_lng) && (
