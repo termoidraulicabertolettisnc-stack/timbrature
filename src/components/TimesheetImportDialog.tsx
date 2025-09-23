@@ -138,27 +138,51 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
         const timesheet = parseResult.success[i];
         
         try {
+          console.log(`🔍 Processing row ${i + 1}/${total}:`, {
+            employee_name: timesheet.employee_name,
+            codice_fiscale: timesheet.codice_fiscale,
+            date: timesheet.date,
+            total_hours: timesheet.total_hours,
+            clockInTimes: timesheet.clockInTimes?.length || 0,
+            clockOutTimes: timesheet.clockOutTimes?.length || 0
+          });
+
           // Find employee by fiscal code or name
           const employee = await findEmployeeByFiscalCode(timesheet.codice_fiscale, timesheet.employee_name);
           
           if (!employee) {
-            console.warn(`Dipendente non trovato per codice fiscale: ${timesheet.codice_fiscale}`);
+            console.warn(`❌ Dipendente non trovato per codice fiscale: ${timesheet.codice_fiscale} (${timesheet.employee_name})`);
             importResults.skipped++;
             continue;
           }
 
+          console.log(`👤 Employee found:`, {
+            user_id: employee.user_id,
+            name: `${employee.first_name} ${employee.last_name}`,
+            company_id: employee.company_id
+          });
+
           // Use TimesheetImportService for proper session handling
           try {
-            await TimesheetImportService.importTimesheet(timesheet, employee);
+            const result = await TimesheetImportService.importTimesheet(timesheet, employee);
             importResults.imported++;
-            console.log(`✅ Successfully imported timesheet for ${employee.user_id} on ${timesheet.date}`);
-          } catch (error) {
-            console.error('❌ Error importing timesheet:', error);
+            console.log(`✅ Successfully imported timesheet for ${employee.user_id} on ${timesheet.date}:`, result.id);
+          } catch (importError) {
+            console.error(`❌ TimesheetImportService error for ${timesheet.employee_name} on ${timesheet.date}:`, {
+              error: importError,
+              message: importError instanceof Error ? importError.message : 'Unknown error',
+              timesheet: timesheet,
+              employee: employee
+            });
             importResults.errors++;
           }
 
-        } catch (error) {
-          console.error('Errore durante importazione riga:', error);
+        } catch (outerError) {
+          console.error(`❌ General error processing row ${i + 1}:`, {
+            error: outerError,
+            message: outerError instanceof Error ? outerError.message : 'Unknown error',
+            timesheet: timesheet
+          });
           importResults.errors++;
         } finally {
           setProgress(((i + 1) / total) * 100);
