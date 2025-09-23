@@ -35,20 +35,20 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
     console.log('🔍 FILE SELECT - Selected file:', selectedFile?.name, selectedFile?.type);
     
     if (selectedFile) {
-      if (selectedFile.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
-          selectedFile.name.endsWith('.xlsx')) {
-        console.log('✅ FILE SELECT - File accepted');
-        setFile(selectedFile);
-        setParseResult(null);
-        setStep('upload');
-      } else {
+      const isXlsx = selectedFile.name.toLowerCase().endsWith('.xlsx');
+      if (!isXlsx) {
         console.log('❌ FILE SELECT - Invalid file type');
-        toast({
-          title: "Errore",
-          description: "Seleziona un file Excel (.xlsx)",
-          variant: "destructive"
+        toast({ 
+          title: "Formato non supportato", 
+          description: "Sono supportati solo file .xlsx", 
+          variant: "destructive" 
         });
+        return;
       }
+      console.log('✅ FILE SELECT - File accepted');
+      setFile(selectedFile);
+      setParseResult(null);
+      setStep('upload');
     } else {
       console.log('❌ FILE SELECT - No file selected');
     }
