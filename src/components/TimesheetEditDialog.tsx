@@ -494,24 +494,39 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
             </div>
           </div>
 
-          {/* Mode Toggle */}
+          {/* Mode Toggle - Always available */}
           <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
             <div className="space-y-1">
               <div className="font-medium">Modalità di modifica</div>
               <div className="text-sm text-muted-foreground">
                 {useSessionsMode 
-                  ? "Gestione avanzata con sessioni multiple" 
-                  : "Gestione semplificata con orario unico"
+                  ? "Gestione avanzata: permette più entrate/uscite nella stessa giornata" 
+                  : "Gestione semplice: un singolo orario di entrata e uscita"
                 }
               </div>
             </div>
             <Button
               type="button"
-              variant="outline"
-              onClick={() => setUseSessionsMode(!useSessionsMode)}
+              variant={useSessionsMode ? "default" : "outline"}
+              onClick={() => {
+                if (!useSessionsMode) {
+                  // Switching to sessions mode - ensure we have at least one session
+                  if (sessions.length === 0) {
+                    const defaultSession: Partial<TimesheetSession> = {
+                      session_order: 1,
+                      session_type: 'work',
+                      start_time: formData.start_time ? `${formData.date}T${formData.start_time}:00.000Z` : '',
+                      end_time: formData.end_time ? `${formData.end_date || formData.date}T${formData.end_time}:00.000Z` : '',
+                      notes: null
+                    };
+                    setSessions([defaultSession]);
+                  }
+                }
+                setUseSessionsMode(!useSessionsMode);
+              }}
               disabled={loadingSessions}
             >
-              {useSessionsMode ? "Modalità Semplice" : "Modalità Avanzata"}
+              {useSessionsMode ? "Modalità Semplice" : "Sessioni Multiple"}
             </Button>
           </div>
 
