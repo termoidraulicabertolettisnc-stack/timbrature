@@ -34,6 +34,7 @@ import { TimesheetDebugPanel } from '@/components/debug/TimesheetDebugPanel';
 import { MonthlyCalendarView } from '@/components/MonthlyCalendarView';
 import { WeeklyTimelineView } from '@/components/WeeklyTimelineView';
 import { TimesheetImportDialog } from '@/components/TimesheetImportDialog';
+import { TestImportButton } from '@/components/TestImportButton';
 
 // Componente per mostrare ore con calcolo in tempo reale
 function HoursDisplay({ timesheet }: { timesheet: TimesheetWithProfile }) {
@@ -688,6 +689,7 @@ export default function AdminTimesheets() {
             <FileSpreadsheet className="h-4 w-4" />
             Importa Excel
           </Button>
+          <TestImportButton />
         </div>
       </div>
 
