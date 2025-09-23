@@ -1,4 +1,4 @@
-import * as XLSX from 'exceljs';
+import * as ExcelJS from 'exceljs';
 import { supabase } from '@/integrations/supabase/client';
 import { TimesheetSession } from '@/types/timesheet-session';
 
@@ -169,7 +169,7 @@ export class ExcelImportService {
 
     try {
       console.log('🔍 EXCEL SERVICE - Creating workbook...');
-      const workbook = new XLSX.Workbook();
+      const workbook = new ExcelJS.Workbook();
       const buffer = await file.arrayBuffer();
       console.log('🔍 EXCEL SERVICE - Buffer size:', buffer.byteLength);
       
@@ -236,6 +236,7 @@ export class ExcelImportService {
       });
 
     } catch (error) {
+      console.error('❌ EXCEL SERVICE - Critical error:', error);
       result.errors.push({
         row: 0,
         error: `Errore durante l'analisi del file: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`
