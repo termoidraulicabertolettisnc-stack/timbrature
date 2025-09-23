@@ -94,14 +94,22 @@ export class TimesheetImportService {
       });
     }
 
-    // Insert sessions if any exist
+    // Delete existing sessions for this timesheet first
+    const { error: deleteError } = await supabase
+      .from('timesheet_sessions')
+      .delete()
+      .eq('timesheet_id', timesheetRecord.id);
+
+    if (deleteError) {
+      console.error('Error deleting existing sessions:', deleteError);
+      throw deleteError;
+    }
+
+    // Insert new sessions if any exist
     if (sessions.length > 0) {
       const { error: sessionsError } = await supabase
         .from('timesheet_sessions')
-        .upsert(sessions, {
-          onConflict: 'timesheet_id,session_order',
-          ignoreDuplicates: false
-        });
+        .insert(sessions);
 
       if (sessionsError) {
         console.error('Error inserting sessions:', sessionsError);
