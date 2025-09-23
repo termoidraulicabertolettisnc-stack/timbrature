@@ -10,7 +10,7 @@ export class TimesheetImportService {
       date: timesheet.date,
       start_time: timesheet.start_time,
       end_time: timesheet.end_time,
-      total_hours: timesheet.total_hours,
+      // total_hours will be calculated by the trigger from sessions
       notes: timesheet.notes || null,
       created_by: (await supabase.auth.getUser()).data.user?.id,
       project_id: null // Default to no project
