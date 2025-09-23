@@ -171,29 +171,48 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
             company_id: employee.company_id
           });
 
-          // Use TimesheetImportService for proper session handling
-          try {
-            const result = await TimesheetImportService.importTimesheet(timesheet, employee);
-            importResults.imported++;
-            console.log(`✅ Successfully imported timesheet for ${employee.user_id} on ${timesheet.date}:`, result.id);
-          } catch (importError) {
-            console.error(`❌ TimesheetImportService error for ${timesheet.employee_name} on ${timesheet.date}:`, {
-              error: importError,
-              message: importError instanceof Error ? importError.message : 'Unknown error',
-              timesheet: timesheet,
-              employee: employee
-            });
-            importResults.errors++;
-          }
+           try {
+             console.log(`🔍 CALLING TimesheetImportService.importTimesheet:`, {
+               timesheet_data: {
+                 employee_name: timesheet.employee_name,
+                 date: timesheet.date,
+                 total_hours: timesheet.total_hours,
+                 clockInTimes: timesheet.clockInTimes,
+                 clockOutTimes: timesheet.clockOutTimes
+               },
+               employee_data: {
+                 user_id: employee.user_id,
+                 name: `${employee.first_name} ${employee.last_name}`
+               }
+             });
+             
+             const result = await TimesheetImportService.importTimesheet(timesheet, employee);
+             importResults.imported++;
+             console.log(`✅ Successfully imported timesheet for ${employee.user_id} on ${timesheet.date}:`, result.id);
+           } catch (importError) {
+             console.error(`❌ DETAILED TimesheetImportService ERROR for ${timesheet.employee_name} on ${timesheet.date}:`, {
+               error_name: importError?.constructor?.name,
+               error_message: importError instanceof Error ? importError.message : 'Unknown error',
+               error_stack: importError instanceof Error ? importError.stack : undefined,
+               error_full: importError,
+               timesheet_data: timesheet,
+               employee_data: employee,
+               current_user_id: currentUserId
+             });
+             importResults.errors++;
+           }
 
-        } catch (outerError) {
-          console.error(`❌ General error processing row ${i + 1}:`, {
-            error: outerError,
-            message: outerError instanceof Error ? outerError.message : 'Unknown error',
-            timesheet: timesheet
-          });
-          importResults.errors++;
-        } finally {
+         } catch (outerError) {
+           console.error(`❌ GENERAL ERROR processing row ${i + 1}:`, {
+             error_name: outerError?.constructor?.name,
+             error_message: outerError instanceof Error ? outerError.message : 'Unknown error',
+             error_stack: outerError instanceof Error ? outerError.stack : undefined,
+             error_full: outerError,
+             timesheet_data: timesheet,
+             row_number: i + 1
+           });
+           importResults.errors++;
+         } finally {
           setProgress(((i + 1) / total) * 100);
         }
       }

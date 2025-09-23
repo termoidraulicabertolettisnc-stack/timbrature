@@ -4,8 +4,27 @@ import { ParsedTimesheet } from './ExcelImportService';
 
 export class TimesheetImportService {
   static async importTimesheet(timesheet: ParsedTimesheet, employee: { user_id: string }) {
+    console.log(`🔍 IMPORT START - TimesheetImportService.importTimesheet called:`, {
+      timesheet: {
+        employee_name: timesheet.employee_name,
+        date: timesheet.date,
+        total_hours: timesheet.total_hours,
+        clockInTimes: timesheet.clockInTimes?.length || 0,
+        clockOutTimes: timesheet.clockOutTimes?.length || 0
+      },
+      employee: employee
+    });
+
     // Check if this is an absence (no clock times)
     const hasClockTimes = timesheet.clockInTimes.length > 0 && timesheet.clockOutTimes.length > 0;
+    
+    console.log(`🔍 hasClockTimes: ${hasClockTimes}`);
+    
+    // Get current user for created_by field
+    const currentUserResult = await supabase.auth.getUser();
+    const currentUserId = currentUserResult.data.user?.id;
+    
+    console.log(`🔍 Current user ID: ${currentUserId}`);
     
     // Prepare the timesheet data for insertion
     const timesheetData = {
@@ -22,9 +41,11 @@ export class TimesheetImportService {
       lunch_end_time: null,
       lunch_duration_minutes: null,
       notes: timesheet.notes || (!hasClockTimes ? 'Assenza importata da Excel' : null),
-      created_by: (await supabase.auth.getUser()).data.user?.id,
+      created_by: currentUserId,
       project_id: null // Default to no project
     };
+
+    console.log(`🔍 TIMESHEET DATA TO INSERT:`, timesheetData);
 
     const { data: timesheetRecord, error: timesheetError } = await supabase
       .from('timesheets')
@@ -36,9 +57,14 @@ export class TimesheetImportService {
       .single();
 
     if (timesheetError) {
-      console.error('Error inserting timesheet:', timesheetError);
+      console.error('❌ ERROR INSERTING TIMESHEET:', {
+        error: timesheetError,
+        data: timesheetData
+      });
       throw timesheetError;
     }
+
+    console.log(`✅ TIMESHEET UPSERTED SUCCESSFULLY:`, timesheetRecord);
 
     // Create sessions for each clock-in/out pair
     const sessions: Omit<TimesheetSession, 'id' | 'created_at' | 'updated_at'>[] = [];

@@ -843,6 +843,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_lorenzo_test_data: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       debug_lunch_break_calculation: {
         Args: { p_date: string; p_user_id: string }
         Returns: {
