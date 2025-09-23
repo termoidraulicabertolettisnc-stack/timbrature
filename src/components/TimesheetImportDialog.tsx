@@ -20,6 +20,7 @@ interface TimesheetImportDialogProps {
 }
 
 export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: TimesheetImportDialogProps) {
+  console.log('🔍 DIALOG - TimesheetImportDialog rendered, open:', open);
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -29,25 +30,37 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
   const { toast } = useToast();
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('🔍 FILE SELECT - handleFileSelect called');
     const selectedFile = event.target.files?.[0];
+    console.log('🔍 FILE SELECT - Selected file:', selectedFile?.name, selectedFile?.type);
+    
     if (selectedFile) {
       if (selectedFile.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
           selectedFile.name.endsWith('.xlsx')) {
+        console.log('✅ FILE SELECT - File accepted');
         setFile(selectedFile);
         setParseResult(null);
         setStep('upload');
       } else {
+        console.log('❌ FILE SELECT - Invalid file type');
         toast({
           title: "Errore",
           description: "Seleziona un file Excel (.xlsx)",
           variant: "destructive"
         });
       }
+    } else {
+      console.log('❌ FILE SELECT - No file selected');
     }
   };
 
   const handleParse = async () => {
-    console.log('🔍 IMPORT DIALOG - handleParse called with file:', file?.name);
+console.log('🔍 IMPORT DIALOG - Services check:', { 
+  ExcelImportService: typeof ExcelImportService,
+  TimesheetImportService: typeof TimesheetImportService,
+  parseExcelFile: typeof ExcelImportService.parseExcelFile
+});
+console.log('🔍 IMPORT DIALOG - handleParse called with file:', file?.name);
     if (!file) {
       console.log('❌ IMPORT DIALOG - No file selected');
       return;
