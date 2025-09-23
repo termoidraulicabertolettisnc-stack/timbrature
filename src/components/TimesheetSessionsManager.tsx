@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Trash2, Plus, Clock } from 'lucide-react';
 import { TimesheetSession } from '@/types/timesheet-session';
 import { format, parse } from 'date-fns';
+import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 
 interface TimesheetSessionsManagerProps {
   sessions: Partial<TimesheetSession>[];
@@ -53,9 +54,10 @@ export const TimesheetSessionsManager: React.FC<TimesheetSessionsManagerProps> =
     try {
       // If time contains date already, return as is
       if (time.includes('T')) return time;
-      // Otherwise combine with date
-      const dateTime = `${date}T${time}:00.000Z`;
-      return dateTime;
+      // Otherwise combine with date and convert from Italian timezone to UTC
+      const localDateTime = new Date(`${date}T${time}:00`);
+      const utcDateTime = fromZonedTime(localDateTime, 'Europe/Rome');
+      return utcDateTime.toISOString();
     } catch (error) {
       return time;
     }
@@ -65,8 +67,10 @@ export const TimesheetSessionsManager: React.FC<TimesheetSessionsManagerProps> =
     if (!dateTime) return '';
     try {
       if (dateTime.includes('T')) {
-        const time = dateTime.split('T')[1];
-        return time.split(':').slice(0, 2).join(':');
+        // Convert UTC time to Italian timezone for display
+        const utcDate = new Date(dateTime);
+        const localDate = toZonedTime(utcDate, 'Europe/Rome');
+        return format(localDate, 'HH:mm');
       }
       return dateTime;
     } catch (error) {
