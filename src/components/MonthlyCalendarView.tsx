@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, parseISO, isSameDay, addMonths, subMonths } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { toZonedTime } from 'date-fns-tz';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -148,11 +149,11 @@ export function MonthlyCalendarView({
           employee.days[date].meal_vouchers += 1;
         }
       } else {
-        // Turno notturno - distribuisci ore tra due giorni - usando UTC+1 (Europa/Roma)
-        const startHourUTC = startTime.getUTCHours() + startTime.getUTCMinutes() / 60 + 1; // Convert to Europe/Rome
-        const endHourUTC = endTime.getUTCHours() + endTime.getUTCMinutes() / 60 + 1; // Convert to Europe/Rome
-        const startHour = startHourUTC >= 24 ? startHourUTC - 24 : (startHourUTC < 0 ? startHourUTC + 24 : startHourUTC);
-        const endHour = endHourUTC >= 24 ? endHourUTC - 24 : (endHourUTC < 0 ? endHourUTC + 24 : endHourUTC);
+        // Turno notturno - distribuisci ore tra due giorni usando il fuso orario corretto
+        const startTimeLocal = toZonedTime(startTime, 'Europe/Rome');
+        const endTimeLocal = toZonedTime(endTime, 'Europe/Rome');
+        const startHour = startTimeLocal.getHours() + startTimeLocal.getMinutes() / 60;
+        const endHour = endTimeLocal.getHours() + endTimeLocal.getMinutes() / 60;
         
         // Calcola ore per il primo giorno (fino a mezzanotte)
         const firstDayHours = Math.max(0, 24 - startHour);

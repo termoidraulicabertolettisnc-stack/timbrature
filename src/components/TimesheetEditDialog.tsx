@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { format, parseISO } from 'date-fns';
+import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog,
@@ -365,33 +366,33 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         updated_by: currentUser?.id ?? timesheet.user_id,
       };
 
-      // Handle start_time - convert local time input to UTC
+      // Handle start_time - convert local time input to UTC using correct timezone
       if (formData.start_time) {
         const localDate = new Date(`${formData.date}T${formData.start_time}:00`);
-        updateData.start_time = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
+        updateData.start_time = fromZonedTime(localDate, 'Europe/Rome').toISOString();
       } else {
         updateData.start_time = null;
       }
 
-      // Handle end_time - convert local time input to UTC
+      // Handle end_time - convert local time input to UTC using correct timezone
       if (formData.end_time) {
         const endDate = formData.end_date || formData.date;
         const localDate = new Date(`${endDate}T${formData.end_time}:00`);
-        updateData.end_time = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
+        updateData.end_time = fromZonedTime(localDate, 'Europe/Rome').toISOString();
       } else {
         updateData.end_time = null;
       }
 
       // FIXED: Normalize lunch fields to prevent conflicts (UI-level normalization)
       if (lunchBreakMode === 'times') {
-        // Use specific start/end times - convert local time input to UTC
+        // Use specific start/end times - convert local time input to UTC using correct timezone
         if (formData.lunch_start_time) {
           // Scegli il giorno giusto per la pausa - se attraversa la mezzanotte, usa end_date
           const lunchDate = formData.lunch_start_time < formData.start_time && formData.end_date !== formData.date 
             ? formData.end_date 
             : formData.date;
           const localDate = new Date(`${lunchDate}T${formData.lunch_start_time}:00`);
-          updateData.lunch_start_time = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
+          updateData.lunch_start_time = fromZonedTime(localDate, 'Europe/Rome').toISOString();
         } else {
           updateData.lunch_start_time = null;
         }
@@ -402,7 +403,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
             ? formData.end_date 
             : formData.date;
           const localDate = new Date(`${lunchDate}T${formData.lunch_end_time}:00`);
-          updateData.lunch_end_time = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
+          updateData.lunch_end_time = fromZonedTime(localDate, 'Europe/Rome').toISOString();
         } else {
           updateData.lunch_end_time = null;
         }

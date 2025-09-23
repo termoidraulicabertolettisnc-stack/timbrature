@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { toZonedTime } from 'date-fns-tz';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -205,8 +206,8 @@ export function WeeklyTimelineView({
           if (dayIndex === -1) return;
 
           const day = employee.days[dayIndex];
-          const startHourUTC = startTime.getUTCHours() + startTime.getUTCMinutes() / 60 + 1; // Convert to Europe/Rome
-          const startHour = startHourUTC >= 24 ? startHourUTC - 24 : (startHourUTC < 0 ? startHourUTC + 24 : startHourUTC);
+          const startTimeLocal = toZonedTime(startTime, 'Europe/Rome');
+          const startHour = startTimeLocal.getHours() + startTimeLocal.getMinutes() / 60;
           const endHour = Math.min(24, startHour + totalDuration);
           const position = (startHour / 24) * 100;
           const width = ((endHour - startHour) / 24) * 100;
