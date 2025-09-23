@@ -155,6 +155,12 @@ export class ExcelImportService {
   }
 
   static async parseExcelFile(file: File): Promise<ImportResult> {
+    console.log('🔍 EXCEL SERVICE - parseExcelFile started:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type
+    });
+
     const result: ImportResult = {
       success: [],
       errors: [],
@@ -162,15 +168,21 @@ export class ExcelImportService {
     };
 
     try {
+      console.log('🔍 EXCEL SERVICE - Creating workbook...');
       const workbook = new XLSX.Workbook();
       const buffer = await file.arrayBuffer();
+      console.log('🔍 EXCEL SERVICE - Buffer size:', buffer.byteLength);
+      
       await workbook.xlsx.load(buffer);
+      console.log('🔍 EXCEL SERVICE - Workbook loaded successfully');
 
       const worksheet = workbook.getWorksheet(1);
       if (!worksheet) {
+        console.error('❌ EXCEL SERVICE - No worksheet found');
         result.errors.push({ row: 0, error: 'Nessun foglio di lavoro trovato nel file Excel' });
         return result;
       }
+      console.log('🔍 EXCEL SERVICE - Worksheet found, row count:', worksheet.rowCount);
 
       const rows: ExcelTimesheetRow[] = [];
 
@@ -211,9 +223,17 @@ export class ExcelImportService {
         }
       });
 
+      console.log('🔍 EXCEL SERVICE - Total rows processed:', rows.length);
+      
       // Group and aggregate entries by employee and date
       const grouped = this.groupByEmployeeAndDate(rows);
       result.success = Array.from(grouped.values());
+      
+      console.log('🔍 EXCEL SERVICE - Final result:', {
+        success_count: result.success.length,
+        error_count: result.errors.length,
+        sample_success: result.success[0]
+      });
 
     } catch (error) {
       result.errors.push({
