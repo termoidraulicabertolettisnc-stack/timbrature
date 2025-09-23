@@ -138,23 +138,32 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
         const timesheet = parseResult.success[i];
         
         try {
-          console.log(`🔍 Processing row ${i + 1}/${total}:`, {
-            employee_name: timesheet.employee_name,
-            codice_fiscale: timesheet.codice_fiscale,
-            date: timesheet.date,
-            total_hours: timesheet.total_hours,
-            clockInTimes: timesheet.clockInTimes?.length || 0,
-            clockOutTimes: timesheet.clockOutTimes?.length || 0
-          });
+           console.log(`🔍 Processing row ${i + 1}/${total}:`, {
+             employee_name: timesheet.employee_name,
+             codice_fiscale: timesheet.codice_fiscale,
+             date: timesheet.date,
+             total_hours: timesheet.total_hours,
+             clockInTimes: timesheet.clockInTimes?.length || 0,
+             clockOutTimes: timesheet.clockOutTimes?.length || 0
+           });
 
-          // Find employee by fiscal code or name
-          const employee = await findEmployeeByFiscalCode(timesheet.codice_fiscale, timesheet.employee_name);
-          
-          if (!employee) {
-            console.warn(`❌ Dipendente non trovato per codice fiscale: ${timesheet.codice_fiscale} (${timesheet.employee_name})`);
-            importResults.skipped++;
-            continue;
-          }
+           // Find employee by fiscal code or name
+           const employee = await findEmployeeByFiscalCode(timesheet.codice_fiscale, timesheet.employee_name);
+           
+           if (!employee) {
+             console.error(`❌ EMPLOYEE NOT FOUND - ROW ${i + 1}:`, {
+               searched_codice_fiscale: timesheet.codice_fiscale,
+               searched_employee_name: timesheet.employee_name,
+               companyId: (await supabase
+                 .from('profiles')
+                 .select('company_id')
+                 .eq('user_id', currentUserId)
+                 .single()
+               ).data?.company_id
+             });
+             importResults.errors++;
+             continue;
+           }
 
           console.log(`👤 Employee found:`, {
             user_id: employee.user_id,
