@@ -204,6 +204,9 @@ export default function AdminTimesheets() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
   const [selectedTimesheetDate, setSelectedTimesheetDate] = useState<string>('');
+  
+  // Debug log per importDialogOpen
+  console.log('🔍 ADMIN PAGE - importDialogOpen state:', importDialogOpen);
 
   // Funzioni per aggiungere timesheet e assenze da specifici giorni
   const handleAddTimesheet = (date: string, userId: string) => {
@@ -681,11 +684,14 @@ export default function AdminTimesheets() {
             <UserPlus className="h-4 w-4" />
             Aggiungi Assenza
           </Button>
-          <Button 
-            variant="outline"
-            onClick={() => setImportDialogOpen(true)}
-            className="gap-2"
-          >
+           <Button 
+             variant="outline"
+             onClick={() => {
+               console.log('🔍 BUTTON CLICK - Importa Excel clicked');
+               setImportDialogOpen(true);
+             }}
+             className="gap-2"
+           >
             <FileSpreadsheet className="h-4 w-4" />
             Importa Excel
           </Button>
@@ -877,14 +883,18 @@ export default function AdminTimesheets() {
         }}
       />
 
-      {/* Dialog per importazione Excel */}
-      <TimesheetImportDialog
-        open={importDialogOpen}
-        onOpenChange={setImportDialogOpen}
-        onImportComplete={() => {
-          // Il real-time listener si occuperà dell'aggiornamento
-        }}
-      />
+       {/* Dialog per importazione Excel */}
+       <TimesheetImportDialog
+         open={importDialogOpen}
+         onOpenChange={(open) => {
+           console.log('🔍 ADMIN PAGE - TimesheetImportDialog onOpenChange called with:', open);
+           setImportDialogOpen(open);
+         }}
+         onImportComplete={() => {
+           console.log('🔍 ADMIN PAGE - TimesheetImportDialog onImportComplete called');
+           // Il real-time listener si occuperà dell'aggiornamento
+         }}
+       />
     </div>
   );
 }
