@@ -235,6 +235,14 @@ export default function AdminTimesheets() {
 
   // Setup realtime subscription for timesheets
   useEffect(() => {
+    let isPageVisible = !document.hidden;
+    
+    const handleVisibilityChange = () => {
+      isPageVisible = !document.hidden;
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
     const channel = supabase
       .channel('admin-timesheets-realtime')
       .on(
@@ -245,13 +253,17 @@ export default function AdminTimesheets() {
           table: 'timesheets'
         },
         () => {
-          console.log('🔄 Ricaricamento timesheets per cambio real-time');
-          loadTimesheets();
+          // Solo ricarica se la pagina è visibile per evitare ricaricamenti continui
+          if (isPageVisible) {
+            console.log('🔄 Ricaricamento timesheets per cambio real-time (pagina visibile)');
+            loadTimesheets();
+          }
         }
       )
       .subscribe();
 
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       supabase.removeChannel(channel);
     };
   }, []);
@@ -356,20 +368,24 @@ export default function AdminTimesheets() {
     }
 
     try {
+      // Aggiornamento ottimistico - rimuovi subito dall'UI
+      setTimesheets(prev => prev.filter(ts => ts.id !== id));
+
       const { error } = await supabase
         .from('timesheets')
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        // Se l'eliminazione fallisce, ricarica i dati per ripristinare lo stato corretto
+        loadTimesheets();
+        throw error;
+      }
 
       toast({
         title: "Successo",
         description: "Timesheet eliminato con successo",
       });
-
-      // Ricarica i dati
-      loadTimesheets();
     } catch (error) {
       console.error('Error deleting timesheet:', error);
       toast({
@@ -836,7 +852,6 @@ export default function AdminTimesheets() {
         onOpenChange={setEditDialogOpen}
         timesheet={editingTimesheet}
         onSuccess={() => {
-          loadTimesheets();
           setEditDialogOpen(false);
           setEditingTimesheet(null);
         }}
@@ -848,7 +863,6 @@ export default function AdminTimesheets() {
         onOpenChange={setInsertDialogOpen}
         selectedDate={selectedTimesheetDate ? parseISO(selectedTimesheetDate) : new Date()}
         onSuccess={() => {
-          loadTimesheets();
           setInsertDialogOpen(false);
         }}
       />
@@ -858,7 +872,6 @@ export default function AdminTimesheets() {
         open={absenceDialogOpen}
         onOpenChange={setAbsenceDialogOpen}
         onSuccess={() => {
-          loadTimesheets(); // Ricarica anche le assenze
           setAbsenceDialogOpen(false);
         }}
       />
@@ -868,7 +881,7 @@ export default function AdminTimesheets() {
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
         onImportComplete={() => {
-          loadTimesheets();
+          // Il real-time listener si occuperà dell'aggiornamento
         }}
       />
     </div>
