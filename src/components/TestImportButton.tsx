@@ -94,9 +94,64 @@ export const TestImportButton = () => {
     }
   };
 
+  const cleanupLorenzo = async () => {
+    try {
+      const currentUser = await supabase.auth.getUser();
+      if (!currentUser.data.user) {
+        throw new Error('User not authenticated');
+      }
+
+      const { data: company } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('user_id', currentUser.data.user.id)
+        .single();
+      
+      const { data: lorenzo } = await supabase
+        .from('profiles')
+        .select('user_id, first_name, last_name')
+        .eq('company_id', company?.company_id)
+        .ilike('first_name', 'Lorenzo%')
+        .single();
+
+      if (!lorenzo) {
+        throw new Error('Lorenzo not found in company');
+      }
+
+      // Delete timesheets for August 2025
+      const { data: deletedTimesheets } = await supabase
+        .from('timesheets')
+        .delete()
+        .eq('user_id', lorenzo.user_id)
+        .gte('date', '2025-08-01')
+        .lte('date', '2025-08-31')
+        .select('id');
+
+      console.log('🗑️ Deleted timesheets:', deletedTimesheets);
+
+      toast({
+        title: "Cleanup completato",
+        description: `Eliminati ${deletedTimesheets?.length || 0} timesheets di Lorenzo per agosto 2025`,
+      });
+
+    } catch (error) {
+      console.error('❌ Cleanup failed:', error);
+      toast({
+        title: "Cleanup fallito",
+        description: error instanceof Error ? error.message : "Errore sconosciuto",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
-    <Button onClick={testExcelImport} variant="outline">
-      🧪 Test Import Lorenzo's Data
-    </Button>
+    <div className="flex gap-2">
+      <Button onClick={cleanupLorenzo} variant="destructive" size="sm">
+        🗑️ Pulisci dati Lorenzo
+      </Button>
+      <Button onClick={testExcelImport} variant="outline">
+        🧪 Test Import Lorenzo's Data
+      </Button>
+    </div>
   );
 };
