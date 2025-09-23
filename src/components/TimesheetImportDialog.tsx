@@ -66,10 +66,11 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
   };
 
   const getMyCompany = async () => {
+    const { data: auth } = await supabase.auth.getUser();
     const { data } = await supabase
       .from('profiles')
       .select('company_id')
-      .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+      .eq('user_id', auth.user?.id)
       .single();
     return data?.company_id;
   };
@@ -142,7 +143,7 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
           
           if (!employee) {
             console.warn(`Dipendente non trovato per codice fiscale: ${timesheet.codice_fiscale}`);
-            importResults.errors++;
+            importResults.skipped++;
             continue;
           }
 
@@ -210,7 +211,7 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
         <Input
           id="file"
           type="file"
-          accept=".xlsx,.xls"
+          accept=".xlsx"
           onChange={handleFileSelect}
         />
       </div>
@@ -355,7 +356,16 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
   );
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog 
+      open={open} 
+      onOpenChange={(next) => {
+        if (!next) { 
+          handleClose(); 
+        } else { 
+          onOpenChange(true); 
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Importa Timbrature Excel</DialogTitle>

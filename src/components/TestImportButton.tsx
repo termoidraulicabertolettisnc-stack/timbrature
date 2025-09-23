@@ -1,11 +1,12 @@
 import React from 'react';
 import { Button } from './ui/button';
-import { ExcelImportService } from '@/services/ExcelImportService';
 import { TimesheetImportService } from '@/services/TimesheetImportService';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from './ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
 export const TestImportButton = () => {
+  const { toast } = useToast();
+  
   const testExcelImport = async () => {
     try {
       // Create test data matching Lorenzo's Excel format
@@ -33,13 +34,30 @@ export const TestImportButton = () => {
       console.log('🧪 TESTING EXCEL IMPORT SIMULATION');
       console.log('📋 Test data:', testData);
 
-      // First, create or find the test user
+      // Find Lorenzo employee (same logic as TimesheetImportDialog)
       const currentUser = await supabase.auth.getUser();
       if (!currentUser.data.user) {
         throw new Error('User not authenticated');
       }
 
-      const testEmployee = { user_id: currentUser.data.user.id };
+      const { data: company } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('user_id', currentUser.data.user.id)
+        .single();
+      
+      const { data: lorenzo } = await supabase
+        .from('profiles')
+        .select('user_id, first_name, last_name')
+        .eq('company_id', company?.company_id)
+        .ilike('first_name', 'Lorenzo%')
+        .single();
+
+      if (!lorenzo) {
+        throw new Error('Lorenzo not found in company');
+      }
+
+      const testEmployee = { user_id: lorenzo.user_id };
       
       console.log('🧪 Calling TimesheetImportService.importTimesheet...');
       
@@ -48,14 +66,15 @@ export const TestImportButton = () => {
       
       console.log('✅ Import completed successfully:', result);
       
-      // Query the result to verify
+      // Query the result to verify (handle different return formats)
+      const createdId = (result as any).id ?? (result as any).timesheetId ?? result.id;
       const { data: resultTimesheet } = await supabase
         .from('timesheets')
         .select(`
           *,
           timesheet_sessions (*)
         `)
-        .eq('id', result.id)
+        .eq('id', createdId)
         .single();
         
       console.log('🔍 Final result in database:', resultTimesheet);
