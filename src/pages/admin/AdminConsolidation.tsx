@@ -197,8 +197,9 @@ export default function AdminConsolidation() {
       }
       user.worked_days += 1;
       
-      // Use centralized meal benefit calculation
+      // Use centralized temporal meal benefit calculation
       const employeeSettingsForUser = employeeSettings[userId];
+      BenefitsService.validateTemporalUsage('AdminConsolidation.processConsolidatedData');
       
       // Note: Making this async would require refactoring the entire processConsolidatedData function
       // For now, we'll convert the record to the expected format and use temporal calculation
