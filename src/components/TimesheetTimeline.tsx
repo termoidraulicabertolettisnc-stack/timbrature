@@ -269,7 +269,6 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
   };
 
   // Orari di riferimento dinamici
-  const START_HOUR = 6;
   const HOUR_HEIGHT = 60; // pixels per hour
   
   // Converte timestamp in minuti dal midnight
