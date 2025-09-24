@@ -33,4 +33,12 @@ export interface TimesheetWithProfile {
   projects: {
     name: string;
   } | null;
+  timesheet_sessions?: {
+    id: string;
+    session_order: number;
+    start_time: string;
+    end_time: string | null;
+    session_type: string;
+    notes: string | null;
+  }[];
 }

@@ -392,6 +392,14 @@ export default function AdminTimesheets() {
           ),
           projects (
             name
+          ),
+          timesheet_sessions (
+            id,
+            session_order,
+            start_time,
+            end_time,
+            session_type,
+            notes
           )
         `);
 

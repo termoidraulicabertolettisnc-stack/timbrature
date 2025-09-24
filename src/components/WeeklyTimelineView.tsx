@@ -159,6 +159,139 @@ export function WeeklyTimelineView({
 
     // Utility per dividere turni notturni
     const splitNightShift = (timesheet: TimesheetWithProfile, employee: EmployeeWeekData) => {
+      // Se abbiamo sessioni multiple, calcoliamo da quelle
+      if (timesheet.timesheet_sessions && timesheet.timesheet_sessions.length > 0) {
+        const workSessions = timesheet.timesheet_sessions
+          .filter(session => session.session_type === 'work')
+          .sort((a, b) => a.session_order - b.session_order);
+        
+        let totalDuration = 0;
+        let totalRegularHours = 0;
+        let totalOvertimeHours = 0;
+        let earliestStart: Date | null = null;
+        let latestEnd: Date | null = null;
+        let hasActiveSessions = false;
+
+        workSessions.forEach(session => {
+          if (!session.start_time) return;
+          
+          const sessionStart = new Date(session.start_time);
+          if (!earliestStart || sessionStart < earliestStart) {
+            earliestStart = sessionStart;
+          }
+
+          if (session.end_time) {
+            const sessionEnd = new Date(session.end_time);
+            if (!latestEnd || sessionEnd > latestEnd) {
+              latestEnd = sessionEnd;
+            }
+            
+            const sessionDuration = (sessionEnd.getTime() - sessionStart.getTime()) / (1000 * 60 * 60);
+            totalDuration += sessionDuration;
+          } else {
+            // Sessione attiva
+            hasActiveSessions = true;
+            const currentTime = new Date();
+            if (!latestEnd || currentTime > latestEnd) {
+              latestEnd = currentTime;
+            }
+            
+            const sessionDuration = (currentTime.getTime() - sessionStart.getTime()) / (1000 * 60 * 60);
+            totalDuration += sessionDuration;
+          }
+        });
+
+        if (!earliestStart || totalDuration <= 0) return;
+
+        const finalEndTime = latestEnd || new Date();
+        
+        // Calcola ore regolari e straordinari
+        totalRegularHours = Math.min(totalDuration, 8);
+        totalOvertimeHours = Math.max(0, totalDuration - 8);
+
+        // Controlla se il turno attraversa la mezzanotte
+        const startDate = format(earliestStart, 'yyyy-MM-dd');
+        const endDate = format(finalEndTime, 'yyyy-MM-dd');
+        const isNightShift = startDate !== endDate || timesheet.night_hours > 0;
+
+        // Calcola meal voucher
+        const employeeSetting = employeeSettings[timesheet.user_id];
+        BenefitsService.validateTemporalUsage('WeeklyTimelineView');
+        const mealBenefits = BenefitsService.calculateMealBenefitsSync(
+          timesheet,
+          employeeSetting,
+          companySettings
+        );
+
+        if (!isNightShift) {
+          // Turno normale
+          const dayIndex = employee.days.findIndex(day => day.date === timesheet.date);
+          if (dayIndex === -1) return;
+
+          const day = employee.days[dayIndex];
+          const startHourUTC = earliestStart.getUTCHours() + earliestStart.getUTCMinutes() / 60 + 1;
+          const startHour = startHourUTC >= 24 ? startHourUTC - 24 : (startHourUTC < 0 ? startHourUTC + 24 : startHourUTC);
+          const endHour = Math.min(24, startHour + totalDuration);
+          const position = (startHour / 24) * 100;
+          const width = ((endHour - startHour) / 24) * 100;
+
+          const entry: TimelineEntry = {
+            timesheet,
+            start_time: format(earliestStart, 'HH:mm:ss'),
+            end_time: latestEnd ? format(latestEnd, 'HH:mm:ss') : null,
+            duration: totalDuration,
+            regular_duration: totalRegularHours,
+            overtime_duration: totalOvertimeHours,
+            position,
+            width,
+            mealVoucher: mealBenefits.mealVoucher,
+            isActive: hasActiveSessions
+          };
+
+          day.entries.push(entry);
+          
+          // Aggiorna i totali dell'employee
+          employee.totals.total_hours += totalDuration;
+          employee.totals.overtime_hours += totalOvertimeHours;
+          employee.totals.night_hours += timesheet.night_hours || 0;
+        } else {
+          // Logic per turno notturno con sessioni multiple (da implementare se necessario)
+          // Per ora usiamo la logica semplificata
+          const dayIndex = employee.days.findIndex(day => day.date === timesheet.date);
+          if (dayIndex === -1) return;
+
+          const day = employee.days[dayIndex];
+          const startHourUTC = earliestStart.getUTCHours() + earliestStart.getUTCMinutes() / 60 + 1;
+          const startHour = startHourUTC >= 24 ? startHourUTC - 24 : (startHourUTC < 0 ? startHourUTC + 24 : startHourUTC);
+          const endHour = Math.min(24, startHour + totalDuration);
+          const position = (startHour / 24) * 100;
+          const width = ((endHour - startHour) / 24) * 100;
+
+          const entry: TimelineEntry = {
+            timesheet,
+            start_time: format(earliestStart, 'HH:mm:ss'),
+            end_time: latestEnd ? format(latestEnd, 'HH:mm:ss') : null,
+            duration: totalDuration,
+            regular_duration: totalRegularHours,
+            overtime_duration: totalOvertimeHours,
+            position,
+            width,
+            mealVoucher: mealBenefits.mealVoucher,
+            isActive: hasActiveSessions
+          };
+
+          day.entries.push(entry);
+          
+          // Aggiorna i totali dell'employee
+          employee.totals.total_hours += totalDuration;
+          employee.totals.overtime_hours += totalOvertimeHours;
+          employee.totals.night_hours += timesheet.night_hours || 0;
+        }
+        
+        return;
+      }
+
+      // Logica originale per timesheet senza sessioni
       if (!timesheet.start_time) return;
 
       const startTime = new Date(timesheet.start_time);
