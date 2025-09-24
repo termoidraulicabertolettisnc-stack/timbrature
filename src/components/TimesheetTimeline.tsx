@@ -505,280 +505,32 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
           // Timesheet normale dello stesso giorno
           actualStartMinutes = startMinutes;
           actualEndMinutes = endMinutes;
-      } else {
-        // FIX: Verifica più flessibile per timesheet del giorno corrente
-        // Controlla se il timesheet appartiene a questo giorno considerando anche la data di inizio
-        const timesheetDate = parseISO(timesheet.start_time || timesheet.date);
-        const isCurrentDay = isSameDay(timesheetDate, dayDate);
-        
-        if (isCurrentDay) {
-          // È del giorno corrente, processa normalmente
-          actualStartMinutes = startMinutes;
-          actualEndMinutes = rawEndMinutes;
         } else {
-          // Non è il giorno giusto per questo timesheet
-          console.log(`🔍 [${currentDayStr}] Timesheet ${timesheet.id} skipped - belongs to different day`);
-          return;
-        }
-      }
-
-      const lunchStartMinutes = timesheet.lunch_start_time ? timeToMinutes(timesheet.lunch_start_time) : null;
-      const lunchEndMinutes = timesheet.lunch_end_time ? timeToMinutes(timesheet.lunch_end_time) : null;
-
-      const totalHours = timesheet.total_hours || 0;
-      const overtimeHours = timesheet.overtime_hours || 0;
-      const nightHours = timesheet.night_hours || 0;
-      const regularHours = totalHours - overtimeHours;
-
-      // Determina se tutto il lavoro è notturno
-      const startHour = Math.floor(actualStartMinutes / 60);
-      const endHour = Math.floor(actualEndMinutes / 60);
-      const isFullyNightShift = nightHours > 0 && (startHour < 6 || endHour >= 22 || startHour >= 20);
-
-      // Se è turno completamente notturno, tutto il blocco è notturno
-      if (isFullyNightShift) {
-        // Gestisci pausa pranzo se presente (solo se entro i limiti del giorno corrente)
-        if (lunchStartMinutes && lunchEndMinutes && 
-            lunchStartMinutes > actualStartMinutes && lunchEndMinutes < actualEndMinutes &&
-            !isFromPreviousDay) {
+          // FIX: Verifica più flessibile per timesheet del giorno corrente
+          // Controlla se il timesheet appartiene a questo giorno considerando anche la data di inizio
+          const timesheetDate = parseISO(timesheet.start_time || timesheet.date);
+          const isCurrentDay = isSameDay(timesheetDate, dayDate);
           
-          // Prima parte: dall'inizio alla pausa pranzo
-          blocks.push({
-            timesheet,
-            startMinutes: actualStartMinutes,
-            endMinutes: lunchStartMinutes,
-            isLunchBreak: false,
-            type: 'night',
-            startDate: timesheetStartDate,
-            endDate: timesheetEndDate
-          });
-          
-          // Pausa pranzo
-          blocks.push({
-            timesheet,
-            startMinutes: lunchStartMinutes,
-            endMinutes: lunchEndMinutes,
-            isLunchBreak: true,
-            type: 'work',
-            startDate: timesheetStartDate,
-            endDate: timesheetEndDate
-          });
-          
-          // Seconda parte: dalla pausa pranzo alla fine
-          blocks.push({
-            timesheet,
-            startMinutes: lunchEndMinutes,
-            endMinutes: actualEndMinutes,
-            isLunchBreak: false,
-            type: 'night',
-            startDate: timesheetStartDate,
-            endDate: timesheetEndDate
-          });
-        } else {
-          // Blocco continuo notturno
-          blocks.push({
-            timesheet,
-            startMinutes: actualStartMinutes,
-            endMinutes: actualEndMinutes,
-            isLunchBreak: false,
-            type: 'night',
-            startDate: timesheetStartDate,
-            endDate: timesheetEndDate
-          });
-        }
-      } else if (overtimeHours > 0 && totalHours > 8) {
-        // Se ci sono straordinari, dividi il tempo tra ore ordinarie e straordinarie
-        const totalWorkMinutes = actualEndMinutes - actualStartMinutes - (
-          lunchStartMinutes && lunchEndMinutes && !isFromPreviousDay ? (lunchEndMinutes - lunchStartMinutes) : 0
-        );
-        const regularMinutes = Math.round((regularHours / totalHours) * totalWorkMinutes);
-        const overtimeStartMinutes = actualStartMinutes + regularMinutes + (
-          lunchStartMinutes && lunchEndMinutes && !isFromPreviousDay ? (lunchEndMinutes - lunchStartMinutes) : 0
-        );
-
-        // Gestisci pausa pranzo se presente (solo se entro i limiti del giorno corrente)
-        if (lunchStartMinutes && lunchEndMinutes && 
-            lunchStartMinutes > actualStartMinutes && lunchEndMinutes < actualEndMinutes &&
-            !isFromPreviousDay) {
-        
-        if (lunchStartMinutes < overtimeStartMinutes) {
-          // La pausa pranzo è durante le ore ordinarie
-            // Ore ordinarie prima della pausa
-            blocks.push({
-              timesheet,
-              startMinutes: actualStartMinutes,
-              endMinutes: lunchStartMinutes,
-              isLunchBreak: false,
-              type: 'work',
-              startDate: timesheetStartDate,
-              endDate: timesheetEndDate
-            });
-          
-          // Pausa pranzo
-          blocks.push({
-            timesheet,
-            startMinutes: lunchStartMinutes,
-            endMinutes: lunchEndMinutes,
-            isLunchBreak: true,
-            type: 'work',
-            startDate: timesheetStartDate,
-            endDate: timesheetEndDate
-          });
-          
-          // Determina se ci sono ancora ore ordinarie dopo la pausa
-          if (lunchEndMinutes < overtimeStartMinutes) {
-            // Ore ordinarie dopo la pausa
-            blocks.push({
-              timesheet,
-              startMinutes: lunchEndMinutes,
-              endMinutes: overtimeStartMinutes,
-              isLunchBreak: false,
-              type: 'work',
-              startDate: timesheetStartDate,
-              endDate: timesheetEndDate
-            });
-            
-              // Ore straordinarie
-              blocks.push({
-                timesheet,
-                startMinutes: overtimeStartMinutes,
-                endMinutes: actualEndMinutes,
-                isLunchBreak: false,
-                type: 'overtime',
-                startDate: timesheetStartDate,
-                endDate: timesheetEndDate
-              });
+          if (isCurrentDay) {
+            // È del giorno corrente, processa normalmente
+            actualStartMinutes = startMinutes;
+            actualEndMinutes = endMinutes;
           } else {
-              // Straordinari iniziano subito dopo la pausa
-              blocks.push({
-                timesheet,
-                startMinutes: lunchEndMinutes,
-                endMinutes: actualEndMinutes,
-                isLunchBreak: false,
-                type: 'overtime',
-                startDate: timesheetStartDate,
-                endDate: timesheetEndDate
-              });
+            // Non è il giorno giusto per questo timesheet
+            console.log(`🔍 [${currentDayStr}] Timesheet ${timesheet.id} skipped - belongs to different day`);
+            return;
           }
-        } else {
-          // La pausa pranzo è durante le ore straordinarie
-            // Ore ordinarie
-            blocks.push({
-              timesheet,
-              startMinutes: actualStartMinutes,
-              endMinutes: overtimeStartMinutes,
-              isLunchBreak: false,
-              type: 'work',
-              startDate: timesheetStartDate,
-              endDate: timesheetEndDate
-            });
-          
-          // Straordinari prima della pausa
-          blocks.push({
-            timesheet,
-            startMinutes: overtimeStartMinutes,
-            endMinutes: lunchStartMinutes,
-            isLunchBreak: false,
-            type: 'overtime',
-            startDate: timesheetStartDate,
-            endDate: timesheetEndDate
-          });
-          
-          // Pausa pranzo
-          blocks.push({
-            timesheet,
-            startMinutes: lunchStartMinutes,
-            endMinutes: lunchEndMinutes,
-            isLunchBreak: true,
-            type: 'work',
-            startDate: timesheetStartDate,
-            endDate: timesheetEndDate
-          });
-          
-            // Straordinari dopo la pausa
-            blocks.push({
-              timesheet,
-              startMinutes: lunchEndMinutes,
-              endMinutes: actualEndMinutes,
-              isLunchBreak: false,
-              type: 'overtime',
-              startDate: timesheetStartDate,
-              endDate: timesheetEndDate
-          });
         }
-        } else {
-          // Nessuna pausa pranzo specifica
-          // Ore ordinarie
-          blocks.push({
-            timesheet,
-            startMinutes: actualStartMinutes,
-            endMinutes: overtimeStartMinutes,
-            isLunchBreak: false,
-            type: 'work',
-            startDate: timesheetStartDate,
-            endDate: timesheetEndDate
-          });
-          
-          // Ore straordinarie
-          blocks.push({
-            timesheet,
-            startMinutes: overtimeStartMinutes,
-            endMinutes: actualEndMinutes,
-            isLunchBreak: false,
-            type: 'overtime',
-            startDate: timesheetStartDate,
-            endDate: timesheetEndDate
-          });
-        }
-      } else {
-        // Nessun straordinario, tutto è lavoro normale
-        if (lunchStartMinutes && lunchEndMinutes && 
-            lunchStartMinutes > actualStartMinutes && lunchEndMinutes < actualEndMinutes &&
-            !isFromPreviousDay) {
-          
-          // Prima parte: dall'inizio alla pausa pranzo
-          blocks.push({
-            timesheet,
-            startMinutes: actualStartMinutes,
-            endMinutes: lunchStartMinutes,
-            isLunchBreak: false,
-            type: 'work',
-            startDate: timesheetStartDate,
-            endDate: timesheetEndDate
-          });
-          
-          // Pausa pranzo
-          blocks.push({
-            timesheet,
-            startMinutes: lunchStartMinutes,
-            endMinutes: lunchEndMinutes,
-            isLunchBreak: true,
-            type: 'work',
-            startDate: timesheetStartDate,
-            endDate: timesheetEndDate
-          });
-          
-          // Seconda parte: dalla pausa pranzo alla fine
-          blocks.push({
-            timesheet,
-            startMinutes: lunchEndMinutes,
-            endMinutes: actualEndMinutes,
-            isLunchBreak: false,
-            type: 'work',
-            startDate: timesheetStartDate,
-            endDate: timesheetEndDate
-          });
-        } else {
-          // Blocco continuo senza pausa pranzo
-          blocks.push({
-            timesheet,
-            startMinutes: actualStartMinutes,
-            endMinutes: actualEndMinutes,
-            isLunchBreak: false,
-            type: 'work',
-            startDate: timesheetStartDate,
-            endDate: timesheetEndDate
-          });
+
+        // Crea un blocco singolo per il timesheet legacy
+        blocks.push({
+          timesheet,
+          startMinutes: actualStartMinutes,
+          endMinutes: actualEndMinutes,
+          isLunchBreak: false,
+          type: 'work',
+          startDate: timesheetStartDate,
+          endDate: timesheetEndDate
         });
       }
     });
@@ -810,443 +562,315 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
       
       return format(time, 'HH:mm');
     } catch (error) {
-      console.warn('Error formatting time:', timeString, error);
-      return timeString; // Return original string as fallback
-    }
-  };
-
-  const formatTimeWithDate = (timeString: string | null, dateString: string): string => {
-    if (!timeString) return '';
-    try {
-      const time = parseISO(timeString);
-      const date = parseISO(dateString);
-      if (!isValid(time) || !isValid(date)) return timeString;
-      
-      return `${format(date, 'dd/MM')} ${format(time, 'HH:mm')}`;
-    } catch {
       return timeString;
     }
   };
 
-  const formatHours = (hours: number | null) => {
-    if (!hours) return '0h';
-    return `${hours.toFixed(1)}h`;
+  // Controlla se ci sono assenze per il giorno
+  const getAbsencesForDay = (day: Date) => {
+    const currentDayStr = format(day, 'yyyy-MM-dd');
+    return absences.filter(absence => absence.date === currentDayStr);
   };
 
-  const dayNames = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+  // Render absence block
+  const renderAbsenceBlock = (absence: any, dayStr: string) => {
+    let absenceIcon = CircleSlash;
+    let absenceLabel = 'Assenza';
+    let absenceClass = 'bg-muted/50 text-muted-foreground border-muted';
 
-  // Estendi i giorni per includere giorni necessari per sessioni multi-giorno
-  const extendedDays = [...weekDays];
-  const needsExtraDay = realtimeTimesheets.some(ts => {
-    if (!ts.end_date) return false;
-    return ts.end_date !== ts.date; // Ha una data di fine diversa
-  });
+    if (absence.type === 'ferie') {
+      absenceIcon = TreePalm;
+      absenceLabel = 'Ferie';
+      absenceClass = 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    } else if (absence.type === 'malattia') {
+      absenceIcon = Stethoscope;
+      absenceLabel = 'Malattia';
+      absenceClass = 'bg-red-100 text-red-800 border-red-200';
+    } else if (absence.type === 'permesso') {
+      absenceIcon = AlertTriangle;
+      absenceLabel = 'Permesso';
+      absenceClass = 'bg-orange-100 text-orange-800 border-orange-200';
+    }
 
-  if (needsExtraDay && weekDays.length === 6) {
-    // Aggiungi domenica se non c'è già
-    const lastDay = weekDays[weekDays.length - 1];
-    const nextDay = new Date(lastDay);
-    nextDay.setDate(nextDay.getDate() + 1);
-    extendedDays.push(nextDay);
-  }
+    const Icon = absenceIcon;
+
+    return (
+      <div
+        key={`absence-${absence.id}-${dayStr}`}
+        className={cn(
+          "border-2 border-dashed p-4 text-center rounded-lg",
+          absenceClass
+        )}
+      >
+        <Icon className="h-6 w-6 mx-auto mb-2" />
+        <div className="text-sm font-medium">
+          {absenceLabel}
+        </div>
+        {absence.notes && (
+          <div className="text-xs mt-1 opacity-75">
+            {absence.notes}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Get timesheet blocks for a specific day with session filtering
+  const getTimesheetsForDay = (day: Date): TimesheetWithProfile[] => {
+    const currentDayStr = format(day, 'yyyy-MM-dd');
+    
+    return realtimeTimesheets.filter(ts => {
+      // Include: (1) TS che iniziano oggi, (2) TS che finiscono oggi (multi-giorno)
+      const isStartDay = ts.date === currentDayStr;
+      const isEndDay = ts.end_date === currentDayStr;
+      const hasTimes = ts.start_time && (ts.end_time || !ts.end_time); // Include ongoing timesheets
+      
+      // Se ci sono sessioni multiple, controlla se una delle sessioni appartiene a questo giorno
+      if (ts.timesheet_sessions && ts.timesheet_sessions.length > 0) {
+        const hasSessionOnDay = ts.timesheet_sessions.some(session => {
+          if (!session.start_time) return false;
+          
+          const sessionStart = new Date(session.start_time);
+          const sessionStartDate = format(sessionStart, 'yyyy-MM-dd');
+          
+          // Per sessioni aperte, calcola data di fine
+          let sessionEndDate = sessionStartDate;
+          if (session.end_time) {
+            const sessionEnd = new Date(session.end_time);
+            sessionEndDate = format(sessionEnd, 'yyyy-MM-dd');
+          }
+          
+          return sessionStartDate === currentDayStr || sessionEndDate === currentDayStr;
+        });
+        
+        return hasSessionOnDay;
+      }
+      
+      return hasTimes && (isStartDay || isEndDay);
+    });
+  };
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Clock className="h-5 w-5" />
-          Timeline Settimanale
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="flex gap-4 overflow-x-auto">
-          {/* Colonna degli orari */}
-          <div className="flex-shrink-0 w-16">
-            <div className="h-8 mb-2" /> {/* Spazio per header giorni */}
-            <div className="relative" style={{ height: TIMELINE_HEIGHT }}>
-              {timelineHours.map((hour, index) => {
-                const displayHour = hour > 24 ? hour - 24 : hour;
-                const hourLabel = displayHour.toString().padStart(2, '0') + ':00';
-                const isAfterMidnight = hour > 24 || (hour < DYNAMIC_START_HOUR && DYNAMIC_END_HOUR > 24);
-                
-                return (
-                  <div
-                    key={`${hour}-${index}`}
-                    className={cn(
-                      "absolute left-0 text-sm font-medium",
-                      isAfterMidnight ? "text-orange-500" : "text-muted-foreground"
-                    )}
-                    style={{ top: (hour - DYNAMIC_START_HOUR) * HOUR_HEIGHT - 8 }}
-                  >
-                    {hourLabel}
-                    {isAfterMidnight && (
-                      <span className="text-xs text-orange-400 ml-1">+1</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Colonne per ogni giorno */}
-          {extendedDays.map((day, dayIndex) => {
-            const currentDayStr = format(day, 'yyyy-MM-dd');
-            // Includi timesheet che iniziano questo giorno O che finiscono questo giorno (multi-giorno)
-            const dayTimesheets = realtimeTimesheets.filter(ts => {
-              const isStartDay = ts.date === currentDayStr;
-              const isEndDay = ts.end_date === currentDayStr;
-              // Per timesheet in corso, considera solo il giorno di inizio
-              const isOngoingToday = !ts.end_time && ts.date === currentDayStr;
-              // CORREZIONE: Include timesheet validi (con start_time) 
-              const hasValidStartTime = !!ts.start_time;
-              return hasValidStartTime && (isStartDay || isEndDay || isOngoingToday);
-            });
-            
-            console.log(`🔍 [${currentDayStr}] Timesheet dopo filtering migliorato:`, dayTimesheets.length);
-            
-            const timeBlocks = calculateTimeBlocks(dayTimesheets, day);
-            
-            return (
-              <div key={day.toISOString()} className="flex-1 min-w-[120px]">
-                {/* Header giorno */}
-                <div className="h-8 mb-2 text-center">
-                  <div className="text-sm font-medium">{dayNames[dayIndex]}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {format(day, 'dd/MM')}
-                  </div>
+    <TooltipProvider>
+      <div className="flex flex-col h-full">
+        {/* Timeline Container */}
+        <div className="flex-1 overflow-hidden">
+          <div className="grid grid-cols-8 gap-4 h-full">
+            {/* Time labels column */}
+            <div className="col-span-1 relative">
+              <div className="sticky top-0 bg-background z-10 pb-2">
+                <div className="text-sm font-medium text-muted-foreground h-6 flex items-center">
+                  Ore
                 </div>
+              </div>
+              <div className="relative" style={{ height: TIMELINE_HEIGHT }}>
+                {timelineHours.map((hour, index) => (
+                  <div
+                    key={index}
+                    className="absolute left-0 text-xs text-muted-foreground flex items-center"
+                    style={{ top: index * HOUR_HEIGHT }}
+                  >
+                    <span className="text-right w-8">
+                      {hour.toString().padStart(2, '0')}:00
+                    </span>
+                    {/* Midnight marker for multi-day sessions */}
+                    {hour === 0 && DYNAMIC_START_HOUR !== 0 && (
+                      <span className="ml-2 text-blue-500 font-medium">
+                        (24:00)
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
 
-                {/* Timeline giorno */}
-                <div className="relative bg-secondary/20 border border-border rounded-lg" style={{ height: TIMELINE_HEIGHT }}>
-                  {/* Griglia ore */}
-                  {timelineHours.slice(0, -1).map((hour, index) => {
-                    const adjustedTop = hour >= 24 ? (hour - DYNAMIC_START_HOUR) * HOUR_HEIGHT : (hour - DYNAMIC_START_HOUR) * HOUR_HEIGHT;
-                    return (
+            {/* Days columns */}
+            {weekDays.map((day, dayIndex) => {
+              const dayTimesheets = getTimesheetsForDay(day);
+              const dayAbsences = getAbsencesForDay(day);
+              const timeBlocks = calculateTimeBlocks(dayTimesheets, day);
+              const dayStr = format(day, 'yyyy-MM-dd');
+
+              return (
+                <div key={dayIndex} className="col-span-1 relative">
+                  {/* Day header */}
+                  <div className="sticky top-0 bg-background z-10 pb-2">
+                    <div className="text-sm font-medium text-center h-6 flex flex-col items-center justify-center">
+                      <div className="capitalize">
+                        {format(day, 'EEE', { locale: it })}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {format(day, 'dd/MM')}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Timeline column */}
+                  <div className="relative border-l border-border/40" style={{ height: TIMELINE_HEIGHT }}>
+                    {/* Hour grid lines */}
+                    {timelineHours.map((_, index) => (
                       <div
-                        key={`grid-${hour}-${index}`}
-                        className="absolute left-0 right-0 border-t border-border/30"
-                        style={{ top: adjustedTop }}
+                        key={index}
+                        className="absolute left-0 right-0 border-t border-border/20"
+                        style={{ top: index * HOUR_HEIGHT }}
                       />
-                    );
-                  })}
+                    ))}
 
-                  {/* Assenze del giorno */}
-                  {(() => {
-                    const dayAbsences = absences.filter(absence => absence.date === currentDayStr);
-                    console.log(`🔍 TimesheetTimeline - Day ${currentDayStr} absences:`, dayAbsences);
-                    return dayAbsences;
-                  })().map((absence, absenceIndex) => {
-                    const getAbsenceTypeLabel = (type: string) => {
-                      const absenceTypes: Record<string, { label: string; icon: any; color: string; bgColor: string }> = {
-                        'F': { label: 'Ferie/Permesso', icon: TreePalm, color: 'text-emerald-600', bgColor: 'bg-emerald-100' },
-                        'M': { label: 'Malattia', icon: Stethoscope, color: 'text-red-600', bgColor: 'bg-red-100' },
-                        'I': { label: 'Infortunio', icon: AlertTriangle, color: 'text-orange-600', bgColor: 'bg-orange-100' },
-                        'PNR': { label: 'Permesso non retribuito', icon: CircleSlash, color: 'text-gray-600', bgColor: 'bg-gray-100' }
-                      };
-                      return absenceTypes[type] || { label: type, icon: Clock, color: 'text-blue-600', bgColor: 'bg-blue-100' };
-                    };
+                    {/* Absences */}
+                    {dayAbsences.length > 0 && (
+                      <div className="absolute inset-0 z-20 p-2 flex flex-col justify-center">
+                        {dayAbsences.map(absence => renderAbsenceBlock(absence, dayStr))}
+                      </div>
+                    )}
 
-                    const absenceInfo = getAbsenceTypeLabel(absence.absence_type);
-                    const IconComponent = absenceInfo.icon;
-
-                    return (
-                      <TooltipProvider key={`absence-${absenceIndex}`}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div
-                              className={cn(
-                                "absolute left-2 right-2 rounded border-2 border-dashed flex items-center justify-center",
-                                absenceInfo.bgColor,
-                                absenceInfo.color,
-                                "hover:opacity-80 transition-opacity"
-                              )}
-                              style={{
-                                top: 10,
-                                height: Math.max(40, TIMELINE_HEIGHT - 20),
-                                minHeight: '40px'
-                              }}
-                            >
-                              <div className="flex flex-col items-center gap-2">
-                                <IconComponent className="h-6 w-6" />
-                                <span className="text-xs font-medium text-center">
-                                  {absenceInfo.label}
-                                </span>
-                              </div>
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="max-w-xs">
-                            <div className="space-y-2">
-                              <div className="font-medium">
-                                {absence.profiles?.first_name} {absence.profiles?.last_name}
-                              </div>
-                              <div className="flex items-center gap-2 text-sm">
-                                <IconComponent className="h-3 w-3" />
-                                <span className="font-medium">{absenceInfo.label}</span>
-                              </div>
-                              <div className="text-sm">
-                                <span className="font-medium">Data:</span> {format(parseISO(absence.date), 'dd/MM/yyyy', { locale: it })}
-                              </div>
-                              {absence.reason && (
-                                <div className="text-sm">
-                                  <span className="font-medium">Motivo:</span> {absence.reason}
-                                </div>
-                              )}
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    );
-                  })}
-
-                  {/* Blocchi temporali */}
-                  <TooltipProvider>
+                    {/* Time blocks */}
                     {timeBlocks.map((block, blockIndex) => {
-                      const top = minutesToPosition(block.startMinutes);
-                      let bottom = minutesToPosition(block.endMinutes);
+                      const blockHeight = minutesToPosition(block.endMinutes) - minutesToPosition(block.startMinutes);
+                      const blockTop = minutesToPosition(block.startMinutes);
                       
-                      // Se il blocco si estende oltre la timeline visibile, limitalo
-                      if (bottom > TIMELINE_HEIGHT) {
-                        bottom = TIMELINE_HEIGHT;
-                      }
-                      
-                      const height = bottom - top;
-                      
-                      if (height <= 0) return null;
+                      const workedHours = calculateWorkedHours(block.timesheet);
+                      const mealBenefits = getMealBenefits(block.timesheet);
 
                       return (
-                        <Tooltip key={blockIndex}>
+                        <Tooltip key={`${block.timesheet.id}-${blockIndex}`}>
                           <TooltipTrigger asChild>
                             <div
                               className={cn(
-                                "absolute rounded cursor-pointer transition-all hover:scale-105 hover:z-10 border",
-                                "left-2 right-2", // Full width with small margins
-                                {
-                                  // Ore ordinarie - usa colori semantici
-                                  "bg-timeline-work border-timeline-work text-timeline-work-foreground hover:bg-timeline-work/90": 
-                                    block.type === 'work' && !block.isLunchBreak,
-                                  // Straordinari - usa colori semantici
-                                  "bg-timeline-overtime border-timeline-overtime text-timeline-overtime-foreground hover:bg-timeline-overtime/90": 
-                                    block.type === 'overtime' && !block.isLunchBreak,
-                                  // Ore notturne - usa colori semantici
-                                  "bg-timeline-night border-timeline-night text-timeline-night-foreground hover:bg-timeline-night/90": 
-                                    block.type === 'night' && !block.isLunchBreak,
-                                  // Pausa pranzo - usa colori semantici
-                                  "bg-timeline-lunch border-timeline-lunch text-timeline-lunch-foreground hover:bg-timeline-lunch/80": 
-                                    block.isLunchBreak,
-                                  // Evidenziato se selezionato
-                                  "ring-2 ring-ring scale-105": 
-                                    selectedTimesheet === block.timesheet.id
-                                }
+                                "absolute left-1 right-1 rounded-md border cursor-pointer transition-all duration-200 hover:shadow-md z-10",
+                                block.isLunchBreak 
+                                  ? "bg-muted/50 border-muted text-muted-foreground" 
+                                  : block.type === 'overtime'
+                                  ? "bg-yellow-100 border-yellow-300 text-yellow-800"
+                                  : block.type === 'night'
+                                  ? "bg-blue-100 border-blue-300 text-blue-800"
+                                  : "bg-green-100 border-green-300 text-green-800",
+                                selectedTimesheet === block.timesheet.id ? "ring-2 ring-primary" : ""
                               )}
                               style={{
-                                top,
-                                height: Math.max(height, 4),
-                                minHeight: '4px'
+                                top: blockTop,
+                                height: Math.max(blockHeight, 20)
                               }}
                               onClick={() => {
                                 setSelectedTimesheet(
                                   selectedTimesheet === block.timesheet.id ? null : block.timesheet.id
                                 );
-                                // Apri il dialog di modifica se è fornita la callback
-                                if (onTimesheetClick) {
-                                  onTimesheetClick(block.timesheet);
-                                }
+                                onTimesheetClick?.(block.timesheet);
                               }}
                             >
-                              {(() => {
-                                // Usa le ore effettive dal timesheet invece del calcolo visivo
-                                const totalHours = block.timesheet.total_hours || 0;
-                                const overtimeHours = block.timesheet.overtime_hours || 0;
-                                const nightHours = block.timesheet.night_hours || 0;
-                                const regularHours = totalHours - overtimeHours - nightHours;
+                              <div className="p-1 flex flex-col h-full text-xs">
+                                <div className="flex items-center gap-1 mb-1">
+                                  {block.isLunchBreak ? (
+                                    <Utensils className="h-3 w-3" />
+                                  ) : block.type === 'overtime' ? (
+                                    <Zap className="h-3 w-3" />
+                                  ) : block.type === 'night' ? (
+                                    <Moon className="h-3 w-3" />
+                                  ) : (
+                                    <Clock className="h-3 w-3" />
+                                  )}
+                                  <span className="text-xs font-medium truncate">
+                                    {block.timesheet.profiles 
+                                      ? `${block.timesheet.profiles.first_name} ${block.timesheet.profiles.last_name}`
+                                      : 'N/A'
+                                    }
+                                  </span>
+                                </div>
                                 
-                                const blockDurationHours = block.type === 'work' ? 
-                                  regularHours.toFixed(1) :
-                                  block.type === 'overtime' ? 
-                                  overtimeHours.toFixed(1) :
-                                  nightHours.toFixed(1);
+                                <div className="text-xs">
+                                  {formatTime(block.timesheet.start_time)} - {formatTime(block.timesheet.end_time) || 'In corso'}
+                                </div>
                                 
-                                // Pausa pranzo
-                                if (block.isLunchBreak) {
-                                  if (height >= 20) {
-                                    return (
-                                      <div className="flex items-center justify-center h-full text-xs font-medium">
-                                        <Utensils className="h-3 w-3" />
-                                      </div>
-                                    );
-                                  }
-                                  return null;
-                                }
-                                
-                                // Icona e durata per altri tipi
-                                const IconComponent = block.type === 'work' ? Clock : 
-                                                    block.type === 'overtime' ? Zap : Moon;
-                                
-                                // Blocchi molto piccoli: solo icona
-                                if (height < 30) {
-                                  return (
-                                    <div className="flex items-center justify-center h-full">
-                                      <IconComponent className="h-3 w-3" />
-                                    </div>
-                                  );
-                                }
-                                
-                                // Blocchi medi: icona + durata
-                                if (height < 50) {
-                                  return (
-                                    <div className="flex flex-col items-center justify-center h-full text-xs font-medium">
-                                      <IconComponent className="h-3 w-3 mb-1" />
-                                      <span>{blockDurationHours}h</span>
-                                    </div>
-                                  );
-                                }
-                                
-                                // Blocchi grandi: icona + durata (senza progetto)
-                                return (
-                                  <div className="flex flex-col items-center justify-center h-full text-xs font-medium">
-                                    <IconComponent className="h-4 w-4 mb-1" />
-                                    <span>{blockDurationHours}h</span>
-                                  </div>
-                                );
-                              })()}
+                                {/* Benefits indicators */}
+                                <div className="flex gap-1 mt-1">
+                                  {mealBenefits.mealVoucher && (
+                                    <Badge variant="secondary" className="text-xs px-1 py-0">
+                                      <Utensils className="h-2 w-2 mr-1" />
+                                      MV
+                                    </Badge>
+                                  )}
+                                  {mealBenefits.dailyAllowance && (
+                                    <Badge variant="secondary" className="text-xs px-1 py-0">
+                                      <Euro className="h-2 w-2 mr-1" />
+                                      DA
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </TooltipTrigger>
                           <TooltipContent side="right" className="max-w-xs">
                             <div className="space-y-2">
                               <div className="font-medium">
-                                {block.timesheet.profiles?.first_name} {block.timesheet.profiles?.last_name}
+                                {block.timesheet.profiles 
+                                  ? `${block.timesheet.profiles.first_name} ${block.timesheet.profiles.last_name}`
+                                  : 'N/A'
+                                }
                               </div>
-                              
-                              {/* Tipo di blocco */}
-                              <div className="flex items-center gap-2 text-sm">
-                                {block.isLunchBreak ? (
-                                  <>
-                                    <Utensils className="h-3 w-3" />
-                                    <span className="font-medium">Pausa pranzo</span>
-                                  </>
-                                ) : block.type === 'work' ? (
-                                  <>
-                                    <Clock className="h-3 w-3" />
-                                    <span className="font-medium">Ore ordinarie</span>
-                                  </>
-                                ) : block.type === 'overtime' ? (
-                                  <>
-                                    <Zap className="h-3 w-3" />
-                                    <span className="font-medium">Straordinario</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Moon className="h-3 w-3" />
-                                    <span className="font-medium">Ore notturne</span>
-                                  </>
+                              <div className="text-sm">
+                                <div>Inizio: {formatTime(block.timesheet.start_time)}</div>
+                                <div>Fine: {formatTime(block.timesheet.end_time) || 'In corso'}</div>
+                                <div>Ore lavorate: {workedHours.toFixed(2)}h</div>
+                                {block.timesheet.overtime_hours && (
+                                  <div>Straordinari: {block.timesheet.overtime_hours.toFixed(2)}h</div>
+                                )}
+                                {block.timesheet.night_hours && (
+                                  <div>Ore notturne: {block.timesheet.night_hours.toFixed(2)}h</div>
                                 )}
                               </div>
-                              
-                              {/* Durata specifica del blocco */}
-                              <div className="text-sm">
-                                <span className="font-medium">Durata blocco:</span> {((block.endMinutes - block.startMinutes) / 60).toFixed(1)}h
-                              </div>
-                              
-                              {/* Orario del blocco */}
-                              <div className="text-sm">
-                                <span className="font-medium">Orario blocco:</span> {Math.floor(block.startMinutes / 60).toString().padStart(2, '0')}:{(block.startMinutes % 60).toString().padStart(2, '0')} - {Math.floor(block.endMinutes / 60).toString().padStart(2, '0')}:{(block.endMinutes % 60).toString().padStart(2, '0')}
-                              </div>
-                              
-                              {block.timesheet.projects && (
-                                <div className="text-sm">
-                                  <span className="font-medium">Progetto:</span> {block.timesheet.projects.name}
+                              {block.timesheet.notes && (
+                                <div className="text-sm text-muted-foreground">
+                                  Note: {block.timesheet.notes}
                                 </div>
                               )}
-                              
-                              {/* Informazioni generali timesheet */}
-                              <div className="border-t pt-2 mt-2">
-                                <div className="text-sm">
-                                  <span className="font-medium">Giornata completa:</span> 
-                                  {block.startDate !== block.endDate ? (
-                                    <>
-                                      {formatTimeWithDate(block.timesheet.start_time, block.startDate)} - {formatTimeWithDate(block.timesheet.end_time, block.endDate)}
-                                      <Badge variant="outline" className="text-xs ml-2">Multi-giorno</Badge>
-                                    </>
-                                  ) : (
-                                    `${formatTime(block.timesheet.start_time)} - ${formatTime(block.timesheet.end_time)}`
-                                  )}
+                              <div className="text-sm">
+                                <div className="flex gap-2">
+                                  <span className={mealBenefits.mealVoucher ? "text-green-600" : "text-muted-foreground"}>
+                                    Buono pasto: {mealBenefits.mealVoucher ? "✓" : "✗"}
+                                  </span>
+                                  <span className={mealBenefits.dailyAllowance ? "text-green-600" : "text-muted-foreground"}>
+                                    Diaria: {mealBenefits.dailyAllowance ? "✓" : "✗"}
+                                  </span>
                                 </div>
-                                <div className="text-sm">
-                                  <span className="font-medium">Ore totali:</span> {formatHours(block.timesheet.total_hours)}
-                                </div>
-                                {block.timesheet.overtime_hours && block.timesheet.overtime_hours > 0 && (
-                                  <div className="text-sm">
-                                    <span className="font-medium">Straordinario totale:</span> {formatHours(block.timesheet.overtime_hours)}
-                                  </div>
-                                )}
-                                {block.timesheet.night_hours && block.timesheet.night_hours > 0 && (
-                                  <div className="text-sm">
-                                    <span className="font-medium">Ore notturne totali:</span> {formatHours(block.timesheet.night_hours)}
-                                  </div>
-                                )}
-                                {block.timesheet.lunch_start_time && block.timesheet.lunch_end_time && (
-                                  <div className="text-sm">
-                                    <span className="font-medium">Pausa pranzo:</span> {formatTime(block.timesheet.lunch_start_time)} - {formatTime(block.timesheet.lunch_end_time)}
-                                  </div>
-                                )}
-                                <div className="flex gap-1 flex-wrap mt-1">
-                                  {block.timesheet.is_saturday && <Badge variant="secondary" className="text-xs">Sab</Badge>}
-                                  {block.timesheet.is_holiday && <Badge variant="secondary" className="text-xs">Fest</Badge>}
-                                  {getMealBenefits(block.timesheet).mealVoucher && <Badge variant="default" className="text-xs flex items-center gap-1">
-                                    <Utensils className="h-2.5 w-2.5" />
-                                    Buono
-                                  </Badge>}
-                                  {getMealBenefits(block.timesheet).dailyAllowance && <Badge variant="outline" className="text-xs flex items-center gap-1">
-                                    <Euro className="h-2.5 w-2.5" />
-                                    Indennità
-                                  </Badge>}
-                                </div>
-                                {block.timesheet.notes && (
-                                  <div className="text-sm mt-1">
-                                    <span className="font-medium">Note:</span> {block.timesheet.notes}
-                                  </div>
-                                )}
                               </div>
                             </div>
                           </TooltipContent>
                         </Tooltip>
                       );
                     })}
-                  </TooltipProvider>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
-        {/* Legenda */}
-        <div className="mt-4 flex flex-wrap gap-4 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-timeline-work border border-timeline-work rounded flex items-center justify-center">
-              <Clock className="h-2.5 w-2.5 text-timeline-work-foreground" />
+        {/* Legend */}
+        <Card className="mt-4">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Legenda</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex flex-wrap gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-green-100 border border-green-300 rounded"></div>
+                <span>Ore ordinarie</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-yellow-100 border border-yellow-300 rounded"></div>
+                <span>Straordinari</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-blue-100 border border-blue-300 rounded"></div>
+                <span>Ore notturne</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-muted/50 border border-muted border-dashed rounded"></div>
+                <span>Pausa pranzo</span>
+              </div>
             </div>
-            <span>Ore ordinarie</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-timeline-overtime border border-timeline-overtime rounded flex items-center justify-center">
-              <Zap className="h-2.5 w-2.5 text-timeline-overtime-foreground" />
-            </div>
-            <span>Straordinari</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-timeline-night border border-timeline-night rounded flex items-center justify-center">
-              <Moon className="h-2.5 w-2.5 text-timeline-night-foreground" />
-            </div>
-            <span>Ore notturne</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-timeline-lunch border border-timeline-lunch rounded flex items-center justify-center">
-              <Utensils className="h-2.5 w-2.5 text-timeline-lunch-foreground" />
-            </div>
-            <span>Pausa pranzo</span>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+          </CardContent>
+        </Card>
+      </div>
+    </TooltipProvider>
   );
 }
