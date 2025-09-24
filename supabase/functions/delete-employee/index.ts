@@ -216,9 +216,9 @@ const handler = async (req: Request): Promise<Response> => {
       supabaseAdmin.from('employee_settings').delete().eq('user_id', userToDelete.id)
     );
 
-    // 6. Delete timesheet sessions first (child records)
+    // 6. Delete timesheet sessions first (child records) - using JOIN since timesheet_sessions doesn't have user_id
     await safeDelete('timesheet_sessions', 
-      supabaseAdmin.from('timesheet_sessions').delete().eq('user_id', userToDelete.id)
+      supabaseAdmin.rpc('delete_user_timesheet_sessions', { target_user_id: userToDelete.id })
     );
 
     // 7. Delete timesheets (parent records)
