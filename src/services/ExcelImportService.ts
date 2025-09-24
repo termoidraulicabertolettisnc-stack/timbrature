@@ -1,4 +1,7 @@
-import * as XLSX from 'exceljs';
+import * as ExcelJS from 'exceljs';
+import { DateTime } from 'luxon';
+import { supabase } from '@/integrations/supabase/client';
+import { TimesheetSession } from '@/types/timesheet-session';
 
 export interface ExcelTimesheetRow {
   matricola?: string;
@@ -33,6 +36,9 @@ export interface ParsedTimesheet {
   lunch_start_time?: string;
   lunch_end_time?: string;
   total_hours: number;
+  clockInTimes: string[];
+  clockOutTimes: string[];
+  notes?: string;
 }
 
 export interface ImportResult {
@@ -42,25 +48,45 @@ export interface ImportResult {
 }
 
 export class ExcelImportService {
+  private static readExcelDate(cell: ExcelJS.Cell): Date {
+    const v = (cell as any).value;
+    if (v instanceof Date) return v;
+    if (typeof v === 'number') {
+      // seriale Excel (giorni dal 1899-12-30)
+      const base = DateTime.fromISO('1899-12-30T00:00:00', { zone: 'UTC' });
+      return base.plus({ days: v }).toJSDate();
+    }
+    const s = String(cell.text || '').trim();
+    // tenta formati italiani comuni
+    let dt = DateTime.fromFormat(s, 'dd/LL/yyyy HH:mm:ss', { zone: 'Europe/Rome' });
+    if (!dt.isValid) dt = DateTime.fromFormat(s, 'dd/LL/yyyy HH:mm', { zone: 'Europe/Rome' });
+    if (!dt.isValid) {
+      const d = new Date(s);
+      if (!isNaN(+d)) return d;
+      throw new Error(`Formato data non riconosciuto: "${s}"`);
+    }
+    return dt.toJSDate();
+  }
+
+  private static isoUTCFromRome(d: Date): string {
+    return DateTime.fromJSDate(d, { zone: 'Europe/Rome' }).toUTC().toISO()!;
+  }
+
+  private static ymdRome(d: Date): string {
+    return DateTime.fromJSDate(d, { zone: 'Europe/Rome' }).toFormat('yyyy-LL-dd');
+  }
+
   private static parseCoordinates(coordString?: string): { lat?: number; lng?: number } {
     if (!coordString) return {};
-    
     try {
-      const coords = JSON.parse(coordString);
-      return {
-        lat: coords.latitude,
-        lng: coords.longitude
-      };
+      const j = JSON.parse(coordString);
+      return { lat: j.latitude ?? j.lat, lng: j.longitude ?? j.lng };
     } catch {
-      return {};
+      const m = coordString.match(/(-?\d+(\.\d+)?)[,;]\s*(-?\d+(\.\d+)?)/);
+      return m ? { lat: parseFloat(m[1]), lng: parseFloat(m[3]) } : {};
     }
   }
 
-  private static parseDateTime(dateTimeString: string): string {
-    // Convert Excel datetime to ISO string
-    const date = new Date(dateTimeString);
-    return date.toISOString();
-  }
 
   private static groupByEmployeeAndDate(rows: ExcelTimesheetRow[]): Map<string, ParsedTimesheet> {
     const grouped = new Map<string, { entries: ExcelTimesheetRow[]; }>();
@@ -71,8 +97,8 @@ export class ExcelImportService {
         return;
       }
 
-      const date = new Date(row.data_ingresso).toISOString().split('T')[0];
-      const key = `${row.codice_fiscale}_${date}`;
+      const dateLocalRome = this.ymdRome(new Date(row.data_ingresso));
+      const key = `${row.codice_fiscale}_${dateLocalRome}`;
       
       if (!grouped.has(key)) {
         grouped.set(key, { entries: [] });
@@ -98,39 +124,53 @@ export class ExcelImportService {
       let lunch_start_time: string | undefined;
       let lunch_end_time: string | undefined;
 
-      if (entries.length > 1) {
-        // Find the gap between entries (lunch break)
+      if (entries.length === 2) {
         const firstExit = new Date(entries[0].data_uscita);
         const secondEntry = new Date(entries[1].data_ingresso);
-        
-        lunch_start_time = firstExit.toISOString();
-        lunch_end_time = secondEntry.toISOString();
+        const gapMin = (secondEntry.getTime() - firstExit.getTime()) / 60000;
+        if (gapMin >= 15 && gapMin <= 180) {
+          lunch_start_time = entries[0].data_uscita;
+          lunch_end_time = entries[1].data_ingresso;
+        }
       }
+      // For 3+ sessions, don't set automatic lunch times - too complex
+      // User can set them manually if needed
 
       const startCoords = this.parseCoordinates(firstEntry.coordinate_ingresso);
       const endCoords = this.parseCoordinates(lastEntry.coordinate_uscita);
 
       // Calculate total hours from all entries
       let totalMinutes = 0;
+      const clockInTimes: string[] = [];
+      const clockOutTimes: string[] = [];
+      
       entries.forEach(entry => {
         const start = new Date(entry.data_ingresso);
         const end = new Date(entry.data_uscita);
         totalMinutes += (end.getTime() - start.getTime()) / (1000 * 60);
+        
+        clockInTimes.push(entry.data_ingresso);
+        clockOutTimes.push(entry.data_uscita);
       });
+
+      const firstIn  = new Date(firstEntry.data_ingresso);
+      const lastOut  = new Date(lastEntry.data_uscita);
 
       const parsed: ParsedTimesheet = {
         employee_name: firstEntry.dipendente,
         codice_fiscale: firstEntry.codice_fiscale,
-        date: new Date(firstEntry.data_ingresso).toISOString().split('T')[0],
-        start_time: this.parseDateTime(firstEntry.data_ingresso),
-        end_time: this.parseDateTime(lastEntry.data_uscita),
+        date: this.ymdRome(firstIn),
+        start_time: firstEntry.data_ingresso,
+        end_time: lastEntry.data_uscita,
         start_location_lat: startCoords.lat,
         start_location_lng: startCoords.lng,
         end_location_lat: endCoords.lat,
         end_location_lng: endCoords.lng,
         lunch_start_time,
         lunch_end_time,
-        total_hours: Math.round((totalMinutes / 60) * 100) / 100
+        total_hours: Math.round((totalMinutes / 60) * 100) / 100,
+        clockInTimes,
+        clockOutTimes
       };
 
       result.set(key, parsed);
@@ -140,6 +180,12 @@ export class ExcelImportService {
   }
 
   static async parseExcelFile(file: File): Promise<ImportResult> {
+    console.log('🔍 EXCEL SERVICE - parseExcelFile started:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type
+    });
+
     const result: ImportResult = {
       success: [],
       errors: [],
@@ -147,15 +193,21 @@ export class ExcelImportService {
     };
 
     try {
-      const workbook = new XLSX.Workbook();
+      console.log('🔍 EXCEL SERVICE - Creating workbook...');
+      const workbook = new ExcelJS.Workbook();
       const buffer = await file.arrayBuffer();
+      console.log('🔍 EXCEL SERVICE - Buffer size:', buffer.byteLength);
+      
       await workbook.xlsx.load(buffer);
+      console.log('🔍 EXCEL SERVICE - Workbook loaded successfully');
 
       const worksheet = workbook.getWorksheet(1);
       if (!worksheet) {
+        console.error('❌ EXCEL SERVICE - No worksheet found');
         result.errors.push({ row: 0, error: 'Nessun foglio di lavoro trovato nel file Excel' });
         return result;
       }
+      console.log('🔍 EXCEL SERVICE - Worksheet found, row count:', worksheet.rowCount);
 
       const rows: ExcelTimesheetRow[] = [];
 
@@ -163,44 +215,68 @@ export class ExcelImportService {
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return; // Skip header
 
-        const rowData: ExcelTimesheetRow = {
-          matricola: row.getCell(1).text,
-          dipendente: row.getCell(2).text,
-          codice_fiscale: row.getCell(3).text,
-          luogo_di_lavoro: row.getCell(4).text,
-          luogo_di_timbratura: row.getCell(5).text,
-          data_ingresso: row.getCell(6).text,
-          data_uscita: row.getCell(7).text,
-          ore_timbrate: row.getCell(8).text,
-          coordinate_ingresso: row.getCell(9).text,
-          coordinate_uscita: row.getCell(10).text,
-          coordinate_eliminate: row.getCell(11).text,
-          data_eliminazione_coordinate: row.getCell(12).text,
-          giornata_di_riferimento: row.getCell(13).text,
-          ore_contrattuali: row.getCell(14).text,
-          ore_contrattuali_effettive: row.getCell(15).text,
-          ore_lavorate: row.getCell(16).text,
-          ore_lavorate_effettive: row.getCell(17).text,
-        };
+        try {
+          const inDate = this.readExcelDate(row.getCell(6));
+          const outDate = this.readExcelDate(row.getCell(7));
 
-        // Only process rows with required data
-        if (rowData.dipendente && rowData.codice_fiscale && rowData.data_ingresso && rowData.data_uscita) {
-          rows.push(rowData);
-        } else if (rowData.dipendente || rowData.data_ingresso) {
-          // Log error for incomplete rows that seem to have some data
+          const rowData: ExcelTimesheetRow = {
+            matricola: row.getCell(1).text,
+            dipendente: row.getCell(2).text,
+            codice_fiscale: row.getCell(3).text,
+            luogo_di_lavoro: row.getCell(4).text,
+            luogo_di_timbratura: row.getCell(5).text,
+            data_ingresso: this.isoUTCFromRome(inDate),
+            data_uscita: this.isoUTCFromRome(outDate),
+            ore_timbrate: row.getCell(8).text,
+            coordinate_ingresso: row.getCell(9).text,
+            coordinate_uscita: row.getCell(10).text,
+            coordinate_eliminate: row.getCell(11).text,
+            data_eliminazione_coordinate: row.getCell(12).text,
+            giornata_di_riferimento: row.getCell(13).text,
+            ore_contrattuali: row.getCell(14).text,
+            ore_contrattuali_effettive: row.getCell(15).text,
+            ore_lavorate: row.getCell(16).text,
+            ore_lavorate_effettive: row.getCell(17).text,
+          };
+
+          // Only process rows with required data
+          if (rowData.dipendente && rowData.codice_fiscale && rowData.data_ingresso && rowData.data_uscita) {
+            rows.push(rowData);
+          } else if (rowData.dipendente || row.getCell(6).text || row.getCell(7).text) {
+            // Log error for incomplete rows that seem to have some data
+            result.errors.push({
+              row: rowNumber,
+              error: 'Riga incompleta: mancano dati obbligatori',
+              data: rowData
+            });
+          }
+        } catch (dateError) {
           result.errors.push({
             row: rowNumber,
-            error: 'Riga incompleta: mancano dati obbligatori',
-            data: rowData
+            error: `Errore parsing data: ${dateError instanceof Error ? dateError.message : 'Errore sconosciuto'}`,
+            data: {
+              dipendente: row.getCell(2).text,
+              data_ingresso: row.getCell(6).text,
+              data_uscita: row.getCell(7).text
+            }
           });
         }
       });
 
+      console.log('🔍 EXCEL SERVICE - Total rows processed:', rows.length);
+      
       // Group and aggregate entries by employee and date
       const grouped = this.groupByEmployeeAndDate(rows);
       result.success = Array.from(grouped.values());
+      
+      console.log('🔍 EXCEL SERVICE - Final result:', {
+        success_count: result.success.length,
+        error_count: result.errors.length,
+        sample_success: result.success[0]
+      });
 
     } catch (error) {
+      console.error('❌ EXCEL SERVICE - Critical error:', error);
       result.errors.push({
         row: 0,
         error: `Errore durante l'analisi del file: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`

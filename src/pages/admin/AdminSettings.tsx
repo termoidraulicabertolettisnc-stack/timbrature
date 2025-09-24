@@ -29,6 +29,7 @@ interface CompanySettings {
   default_daily_allowance_amount: number | null;
   default_daily_allowance_min_hours: number | null;
   meal_voucher_min_hours: number | null;
+  lunch_break_min_hours: number | null;
   // Entry tolerance fields
   enable_entry_tolerance?: boolean | null;
   standard_start_time?: string | null;
@@ -55,6 +56,7 @@ export default function AdminSettings() {
     default_daily_allowance_amount: null,
     default_daily_allowance_min_hours: null,
     meal_voucher_min_hours: null,
+    lunch_break_min_hours: null,
     // Entry tolerance fields
     enable_entry_tolerance: null,
     standard_start_time: null,
@@ -131,6 +133,7 @@ export default function AdminSettings() {
         daily_allowance_policy: 'disabled' as const,
         daily_allowance_min_hours: 6,
         meal_voucher_min_hours: 6,
+        lunch_break_min_hours: 6,
         // Entry tolerance defaults
         enable_entry_tolerance: false,
         standard_start_time: '08:00:00',
@@ -177,6 +180,7 @@ export default function AdminSettings() {
           default_daily_allowance_amount: settings.default_daily_allowance_amount,
           default_daily_allowance_min_hours: settings.default_daily_allowance_min_hours,
           meal_voucher_min_hours: settings.meal_voucher_min_hours,
+          lunch_break_min_hours: settings.lunch_break_min_hours,
           // Entry tolerance fields
           enable_entry_tolerance: settings.enable_entry_tolerance,
           standard_start_time: settings.standard_start_time,
@@ -207,6 +211,14 @@ export default function AdminSettings() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const parseDecimalNumber = (value: string): number | null => {
+    if (!value) return null;
+    // Replace comma with dot for proper decimal parsing
+    const normalizedValue = value.replace(',', '.');
+    const parsed = parseFloat(normalizedValue);
+    return isNaN(parsed) ? null : parsed;
   };
 
   const updateSetting = (key: keyof CompanySettings, value: any) => {
@@ -305,7 +317,7 @@ export default function AdminSettings() {
                       value={settings.standard_weekly_hours?.[day] || 0}
                       onChange={(e) => {
                         const newHours = settings.standard_weekly_hours ? { ...settings.standard_weekly_hours } : {};
-                        newHours[day] = e.target.value ? parseFloat(e.target.value) : 0;
+                        newHours[day] = e.target.value ? parseDecimalNumber(e.target.value) : 0;
                         updateSetting('standard_weekly_hours', newHours);
                       }}
                       className="text-center"
@@ -350,6 +362,23 @@ export default function AdminSettings() {
                     <SelectItem value="libera">Libera (Segnata Manualmente)</SelectItem>
                   </SelectContent>
                 </Select>
+                
+                <div>
+                  <Label htmlFor="lunch_break_min_hours">Ore Minime per Applicare Pausa Pranzo</Label>
+                  <Input
+                    id="lunch_break_min_hours"
+                    type="number"
+                    min="0"
+                    max="12"
+                    step="0.5"
+                    value={settings.lunch_break_min_hours || ''}
+                    onChange={(e) => updateSetting('lunch_break_min_hours', parseDecimalNumber(e.target.value))}
+                    placeholder="6"
+                  />
+                  <p className="text-sm text-muted-foreground mt-1">
+                    La pausa pranzo viene applicata automaticamente solo se il turno supera questo numero di ore
+                  </p>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -417,7 +446,7 @@ export default function AdminSettings() {
                   min="0"
                   step="0.01"
                   value={settings.saturday_hourly_rate || ''}
-                  onChange={(e) => updateSetting('saturday_hourly_rate', parseFloat(e.target.value) || null)}
+                  onChange={(e) => updateSetting('saturday_hourly_rate', parseDecimalNumber(e.target.value))}
                   placeholder="10.00"
                 />
               </div>
@@ -469,7 +498,7 @@ export default function AdminSettings() {
                       type="number"
                       step="0.01"
                       value={settings.default_daily_allowance_amount || ''}
-                      onChange={(e) => updateSetting('default_daily_allowance_amount', parseFloat(e.target.value) || null)}
+                      onChange={(e) => updateSetting('default_daily_allowance_amount', parseDecimalNumber(e.target.value))}
                       placeholder="10.00"
                       className="mt-1"
                       required
@@ -510,7 +539,7 @@ export default function AdminSettings() {
                       type="number"
                       step="0.01"
                       value={settings.meal_voucher_amount || ''}
-                      onChange={(e) => updateSetting('meal_voucher_amount', parseFloat(e.target.value) || null)}
+                      onChange={(e) => updateSetting('meal_voucher_amount', parseDecimalNumber(e.target.value))}
                       placeholder="8.00"
                       className="mt-1"
                       required
@@ -597,7 +626,7 @@ export default function AdminSettings() {
                   min="0"
                   step="0.01"
                   value={settings.business_trip_rate_with_meal || ''}
-                  onChange={(e) => updateSetting('business_trip_rate_with_meal', parseFloat(e.target.value) || null)}
+                  onChange={(e) => updateSetting('business_trip_rate_with_meal', parseDecimalNumber(e.target.value))}
                   placeholder="30.98"
                 />
               </div>
@@ -609,7 +638,7 @@ export default function AdminSettings() {
                   min="0"
                   step="0.01"
                   value={settings.business_trip_rate_without_meal || ''}
-                  onChange={(e) => updateSetting('business_trip_rate_without_meal', parseFloat(e.target.value) || null)}
+                  onChange={(e) => updateSetting('business_trip_rate_without_meal', parseDecimalNumber(e.target.value))}
                   placeholder="46.48"
                 />
               </div>
@@ -654,7 +683,7 @@ export default function AdminSettings() {
                       min="0"
                       step="0.01"
                       value={settings.default_overtime_conversion_rate || ''}
-                      onChange={(e) => updateSetting('default_overtime_conversion_rate', parseFloat(e.target.value) || null)}
+                      onChange={(e) => updateSetting('default_overtime_conversion_rate', parseDecimalNumber(e.target.value))}
                       placeholder="12.00"
                       className="mt-1"
                       required

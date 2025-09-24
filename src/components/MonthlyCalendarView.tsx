@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, parseISO, isSameDay, addMonths, subMonths } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { toZonedTime } from 'date-fns-tz';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -68,50 +69,55 @@ export function MonthlyCalendarView({
   const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
   const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
-  const employeeData = useMemo(() => {
-    console.log('🔍 MonthlyCalendarView - Processing data:', {
-      timesheets_count: timesheets.length,
-      absences_count: absences.length,
-      dateFilter,
-      currentMonth: format(currentMonth, 'yyyy-MM-dd'),
-      monthStart: format(monthStart, 'yyyy-MM-dd'),
-      monthEnd: format(monthEnd, 'yyyy-MM-dd'),
-      sample_absence: absences[0]
-    });
-    
-    console.log('🔍 MonthlyCalendarView - All absences:', absences);
+  const [employeeData, setEmployeeData] = useState<EmployeeMonthData[]>([]);
+  const [isProcessing, setIsProcessing] = useState(true);
 
-    const employeesMap = new Map<string, EmployeeMonthData>();
+  // Process data asynchronously when inputs change
+  useEffect(() => {
+    const processData = async () => {
+      console.log('🔍 MonthlyCalendarView - Processing data:', {
+        timesheets_count: timesheets.length,
+        absences_count: absences.length,
+        dateFilter,
+        currentMonth: format(currentMonth, 'yyyy-MM-dd'),
+        monthStart: format(monthStart, 'yyyy-MM-dd'),
+        monthEnd: format(monthEnd, 'yyyy-MM-dd'),
+        sample_absence: absences[0]
+      });
+      
+      console.log('🔍 MonthlyCalendarView - All absences:', absences);
 
-    // Utility per distribuire ore turni notturni
-    const distributeNightShiftHours = (timesheet: TimesheetWithProfile, employee: EmployeeMonthData) => {
-      if (!timesheet.start_time) return;
+      const employeesMap = new Map<string, EmployeeMonthData>();
 
-      const startTime = new Date(timesheet.start_time);
-      let endTime: Date;
-      let totalHours = 0;
+      // Utility per distribuire ore turni notturni
+      const distributeNightShiftHours = async (timesheet: TimesheetWithProfile, employee: EmployeeMonthData) => {
+        if (!timesheet.start_time) return;
 
-      if (timesheet.end_time) {
-        endTime = new Date(timesheet.end_time);
-        totalHours = timesheet.total_hours || 0;
-      } else {
-        endTime = new Date();
-        const diffMs = endTime.getTime() - startTime.getTime();
-        totalHours = Math.max(0, diffMs / (1000 * 60 * 60));
-      }
+        const startTime = new Date(timesheet.start_time);
+        let endTime: Date;
+        let totalHours = 0;
 
-      const startDate = format(startTime, 'yyyy-MM-dd');
-      const endDate = format(endTime, 'yyyy-MM-dd');
-      const isNightShift = startDate !== endDate || timesheet.night_hours > 0;
+        if (timesheet.end_time) {
+          endTime = new Date(timesheet.end_time);
+          totalHours = timesheet.total_hours || 0;
+        } else {
+          endTime = new Date();
+          const diffMs = endTime.getTime() - startTime.getTime();
+          totalHours = Math.max(0, diffMs / (1000 * 60 * 60));
+        }
 
-      // Calcola buoni pasto una sola volta
-      const employeeSettingsForUser = employeeSettings[timesheet.user_id];
-      BenefitsService.validateTemporalUsage('MonthlyCalendarView.getMealBenefits');
-      const mealBenefits = BenefitsService.calculateMealBenefitsSync(
-        timesheet, 
-        employeeSettingsForUser, 
-        companySettings
-      );
+        const startDate = format(startTime, 'yyyy-MM-dd');
+        const endDate = format(endTime, 'yyyy-MM-dd');
+        const isNightShift = startDate !== endDate || timesheet.night_hours > 0;
+
+        // Calculate meal benefits using centralized service
+        const employeeSettingsForUser = employeeSettings[timesheet.user_id];
+        const mealBenefits = await BenefitsService.calculateMealBenefits(
+          timesheet, 
+          employeeSettingsForUser, 
+          companySettings,
+          timesheet.date
+        );
 
       if (!isNightShift) {
         // Turno normale
@@ -142,11 +148,11 @@ export function MonthlyCalendarView({
           employee.days[date].meal_vouchers += 1;
         }
       } else {
-        // Turno notturno - distribuisci ore tra due giorni - usando UTC+1 (Europa/Roma)
-        const startHourUTC = startTime.getUTCHours() + startTime.getUTCMinutes() / 60 + 1; // Convert to Europe/Rome
-        const endHourUTC = endTime.getUTCHours() + endTime.getUTCMinutes() / 60 + 1; // Convert to Europe/Rome
-        const startHour = startHourUTC >= 24 ? startHourUTC - 24 : (startHourUTC < 0 ? startHourUTC + 24 : startHourUTC);
-        const endHour = endHourUTC >= 24 ? endHourUTC - 24 : (endHourUTC < 0 ? endHourUTC + 24 : endHourUTC);
+        // Turno notturno - distribuisci ore tra due giorni usando il fuso orario corretto
+        const startTimeLocal = toZonedTime(startTime, 'Europe/Rome');
+        const endTimeLocal = toZonedTime(endTime, 'Europe/Rome');
+        const startHour = startTimeLocal.getHours() + startTimeLocal.getMinutes() / 60;
+        const endHour = endTimeLocal.getHours() + endTimeLocal.getMinutes() / 60;
         
         // Calcola ore per il primo giorno (fino a mezzanotte)
         const firstDayHours = Math.max(0, 24 - startHour);
@@ -225,7 +231,7 @@ export function MonthlyCalendarView({
     };
 
     // Inizializza i dipendenti dai timesheet
-    timesheets.forEach(timesheet => {
+    await Promise.all(timesheets.map(async (timesheet) => {
       console.log('📋 Processing timesheet:', {
         date: timesheet.date,
         end_date: timesheet.end_date,
@@ -249,8 +255,8 @@ export function MonthlyCalendarView({
       }
 
       const employee = employeesMap.get(key)!;
-      distributeNightShiftHours(timesheet, employee);
-    });
+      await distributeNightShiftHours(timesheet, employee);
+    }));
 
     // Aggiungi assenze
     console.log('🔍 MonthlyCalendarView - Adding absences, count:', absences.length);
@@ -297,8 +303,12 @@ export function MonthlyCalendarView({
     });
 
     console.log('📊 Final employee data:', Array.from(employeesMap.values()));
-    return Array.from(employeesMap.values());
-  }, [timesheets, absences, employeeSettings, companySettings, currentMonth]);
+    setEmployeeData(Array.from(employeesMap.values()));
+    setIsProcessing(false);
+  };
+
+  processData();
+}, [timesheets, absences, employeeSettings, companySettings, currentMonth]);
 
   const getWeeks = () => {
     const weeks = [];

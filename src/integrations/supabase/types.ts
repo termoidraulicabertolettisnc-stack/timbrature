@@ -179,6 +179,7 @@ export type Database = {
           enable_overtime_conversion: boolean | null
           entry_tolerance_minutes: number | null
           id: string
+          lunch_break_min_hours: number | null
           lunch_break_type: Database["public"]["Enums"]["lunch_break_type"]
           meal_allowance_policy:
             | Database["public"]["Enums"]["meal_allowance_policy"]
@@ -211,6 +212,7 @@ export type Database = {
           enable_overtime_conversion?: boolean | null
           entry_tolerance_minutes?: number | null
           id?: string
+          lunch_break_min_hours?: number | null
           lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
           meal_allowance_policy?:
             | Database["public"]["Enums"]["meal_allowance_policy"]
@@ -243,6 +245,7 @@ export type Database = {
           enable_overtime_conversion?: boolean | null
           entry_tolerance_minutes?: number | null
           id?: string
+          lunch_break_min_hours?: number | null
           lunch_break_type?: Database["public"]["Enums"]["lunch_break_type"]
           meal_allowance_policy?:
             | Database["public"]["Enums"]["meal_allowance_policy"]
@@ -411,6 +414,7 @@ export type Database = {
           enable_overtime_conversion: boolean | null
           entry_tolerance_minutes: number | null
           id: string
+          lunch_break_min_hours: number | null
           lunch_break_type:
             | Database["public"]["Enums"]["lunch_break_type"]
             | null
@@ -450,6 +454,7 @@ export type Database = {
           enable_overtime_conversion?: boolean | null
           entry_tolerance_minutes?: number | null
           id?: string
+          lunch_break_min_hours?: number | null
           lunch_break_type?:
             | Database["public"]["Enums"]["lunch_break_type"]
             | null
@@ -491,6 +496,7 @@ export type Database = {
           enable_overtime_conversion?: boolean | null
           entry_tolerance_minutes?: number | null
           id?: string
+          lunch_break_min_hours?: number | null
           lunch_break_type?:
             | Database["public"]["Enums"]["lunch_break_type"]
             | null
@@ -655,6 +661,54 @@ export type Database = {
           },
         ]
       }
+      timesheet_sessions: {
+        Row: {
+          created_at: string
+          end_location_lat: number | null
+          end_location_lng: number | null
+          end_time: string | null
+          id: string
+          notes: string | null
+          session_order: number
+          session_type: string
+          start_location_lat: number | null
+          start_location_lng: number | null
+          start_time: string
+          timesheet_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          end_location_lat?: number | null
+          end_location_lng?: number | null
+          end_time?: string | null
+          id?: string
+          notes?: string | null
+          session_order?: number
+          session_type?: string
+          start_location_lat?: number | null
+          start_location_lng?: number | null
+          start_time: string
+          timesheet_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          end_location_lat?: number | null
+          end_location_lng?: number | null
+          end_time?: string | null
+          id?: string
+          notes?: string | null
+          session_order?: number
+          session_type?: string
+          start_location_lat?: number | null
+          start_location_lng?: number | null
+          start_time?: string
+          timesheet_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       timesheets: {
         Row: {
           absence_type: Database["public"]["Enums"]["absence_type"] | null
@@ -789,22 +843,61 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      debug_night_hours_calculation: {
-        Args: {
-          p_end_time: string
-          p_night_end?: string
-          p_night_start?: string
-          p_start_time: string
-        }
+      cleanup_lorenzo_test_data: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      debug_timesheet_lunch_calculation: {
+        Args: { p_timesheet_id: string }
         Returns: {
-          calculated_hours: number
-          local_end: string
-          local_start: string
-          night_end_today: string
-          night_overlap_minutes: number
-          night_start_today: string
-          utc_end: string
-          utc_start: string
+          calculated_lunch_minutes: number
+          company_lunch_type: string
+          debug_branch: string
+          employee_lunch_type: string
+          employee_settings_found: boolean
+          employee_valid_from: string
+          employee_valid_to: string
+          end_time_utc: string
+          final_total_hours: number
+          hours_worked_without_lunch: number
+          lunch_duration_minutes: number
+          lunch_end_time: string
+          lunch_overlap_seconds: number
+          lunch_start_time: string
+          start_time_utc: string
+          timesheet_date: string
+          total_duration_minutes: number
+          user_name: string
+        }[]
+      }
+      debug_timesheet_lunch_calculation_v2: {
+        Args: { p_timesheet_id: string }
+        Returns: {
+          calculated_lunch_minutes: number
+          company_lunch_type: string
+          debug_branch: string
+          employee_lunch_type: string
+          employee_settings_found: boolean
+          employee_valid_from: string
+          employee_valid_to: string
+          exact_employee_query_result: string
+          final_total_hours: number
+          hours_worked_without_lunch: number
+          lunch_overlap_seconds: number
+          timesheet_date: string
+          user_id_check: string
+          user_name: string
+        }[]
+      }
+      delete_user_timesheet_sessions: {
+        Args: { target_user_id: string }
+        Returns: undefined
+      }
+      get_current_user_context: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          company_id: string
+          user_role: Database["public"]["Enums"]["user_role"]
         }[]
       }
       get_current_user_role_and_company: {
@@ -821,6 +914,20 @@ export type Database = {
       is_user_admin: {
         Args: Record<PropertyKey, never>
         Returns: boolean
+      }
+      is_user_admin_in_company: {
+        Args: { target_company_id?: string }
+        Returns: boolean
+      }
+      test_employee_settings_lookup: {
+        Args: { p_date: string; p_user_id: string }
+        Returns: {
+          found_count: number
+          lunch_type: string
+          query_used: string
+          valid_from: string
+          valid_to: string
+        }[]
       }
     }
     Enums: {

@@ -30,9 +30,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { BenefitsService } from '@/services/BenefitsService';
+import { TimesheetDebugPanel } from '@/components/debug/TimesheetDebugPanel';
 import { MonthlyCalendarView } from '@/components/MonthlyCalendarView';
 import { WeeklyTimelineView } from '@/components/WeeklyTimelineView';
 import { TimesheetImportDialog } from '@/components/TimesheetImportDialog';
+
 
 // Componente per mostrare ore con calcolo in tempo reale
 function HoursDisplay({ timesheet }: { timesheet: TimesheetWithProfile }) {
@@ -202,6 +204,8 @@ export default function AdminTimesheets() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
   const [selectedTimesheetDate, setSelectedTimesheetDate] = useState<string>('');
+  
+  // Import dialog state management
 
   // Funzioni per aggiungere timesheet e assenze da specifici giorni
   const handleAddTimesheet = (date: string, userId: string) => {
@@ -234,8 +238,16 @@ export default function AdminTimesheets() {
 
   // Setup realtime subscription for timesheets
   useEffect(() => {
+    let isPageVisible = !document.hidden;
+    
+    const handleVisibilityChange = () => {
+      isPageVisible = !document.hidden;
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
     const channel = supabase
-      .channel('admin-timesheets-realtime')
+      .channel('timesheets-realtime')
       .on(
         'postgres_changes',
         {
@@ -244,13 +256,17 @@ export default function AdminTimesheets() {
           table: 'timesheets'
         },
         () => {
-          console.log('🔄 Ricaricamento timesheets per cambio real-time');
-          loadTimesheets();
+          // Solo ricarica se la pagina è visibile per evitare ricaricamenti continui
+          if (isPageVisible) {
+            console.log('🔄 Ricaricamento timesheets per cambio real-time (pagina visibile)');
+            loadTimesheets();
+          }
         }
       )
       .subscribe();
 
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       supabase.removeChannel(channel);
     };
   }, []);
@@ -337,14 +353,14 @@ export default function AdminTimesheets() {
     }
   };
 
-  // Get meal benefits for a timesheet using centralized temporal calculation
-  const getMealBenefits = (timesheet: TimesheetWithProfile) => {
+  // Get meal benefits for a timesheet
+  const getMealBenefits = async (timesheet: TimesheetWithProfile) => {
     const employeeSettingsForUser = employeeSettings[timesheet.user_id];
-    BenefitsService.validateTemporalUsage('AdminTimesheets.getMealBenefits');
-    return BenefitsService.calculateMealBenefitsSync(
+    return await BenefitsService.calculateMealBenefits(
       timesheet, 
       employeeSettingsForUser, 
-      companySettings
+      companySettings,
+      timesheet.date
     );
   };
 
@@ -354,20 +370,24 @@ export default function AdminTimesheets() {
     }
 
     try {
+      // Aggiornamento ottimistico - rimuovi subito dall'UI
+      setTimesheets(prev => prev.filter(ts => ts.id !== id));
+
       const { error } = await supabase
         .from('timesheets')
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        // Se l'eliminazione fallisce, ricarica i dati per ripristinare lo stato corretto
+        loadTimesheets();
+        throw error;
+      }
 
       toast({
         title: "Successo",
         description: "Timesheet eliminato con successo",
       });
-
-      // Ricarica i dati
-      loadTimesheets();
     } catch (error) {
       console.error('Error deleting timesheet:', error);
       toast({
@@ -534,10 +554,11 @@ export default function AdminTimesheets() {
   });
 
   // Aggrega i dati per dipendente per la vista giornaliera
-  const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
+  const aggregateTimesheetsByEmployee = async (): Promise<EmployeeSummary[]> => {
+    console.log('🔍 aggregateTimesheetsByEmployee - starting...');
     const employeesMap = new Map<string, EmployeeSummary>();
 
-    filteredTimesheets.forEach(timesheet => {
+    await Promise.all(filteredTimesheets.map(async (timesheet) => {
       if (!timesheet.profiles) return;
 
       const key = timesheet.user_id;
@@ -603,7 +624,7 @@ export default function AdminTimesheets() {
       employee.night_hours += calculatedNightHours;
 
       // Calcola buoni pasto
-      const mealBenefits = getMealBenefits(timesheet);
+      const mealBenefits = await getMealBenefits(timesheet);
       if (mealBenefits.mealVoucher) {
         employee.meal_vouchers += 1;
       }
@@ -611,11 +632,16 @@ export default function AdminTimesheets() {
       // Calcola ore sabato/festivi
       if (timesheet.is_saturday) employee.saturday_hours += calculatedHours;
       if (timesheet.is_holiday) employee.holiday_hours += calculatedHours;
-    });
+    }));
 
-    return Array.from(employeesMap.values()).sort((a, b) => 
+    const result = Array.from(employeesMap.values()).sort((a, b) => 
       `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
     );
+
+    console.log('🔍 aggregateTimesheetsByEmployee - result:', result);
+    console.log('🔍 aggregateTimesheetsByEmployee - result is array?', Array.isArray(result));
+    
+    return result;
   };
 
   if (loading) {
@@ -656,11 +682,14 @@ export default function AdminTimesheets() {
             <UserPlus className="h-4 w-4" />
             Aggiungi Assenza
           </Button>
-          <Button 
-            variant="outline"
-            onClick={() => setImportDialogOpen(true)}
-            className="gap-2"
-          >
+           <Button 
+             variant="outline"
+             onClick={() => {
+               console.log('🔍 BUTTON CLICK - Importa Excel clicked');
+               setImportDialogOpen(true);
+             }}
+             className="gap-2"
+           >
             <FileSpreadsheet className="h-4 w-4" />
             Importa Excel
           </Button>
@@ -828,7 +857,6 @@ export default function AdminTimesheets() {
         onOpenChange={setEditDialogOpen}
         timesheet={editingTimesheet}
         onSuccess={() => {
-          loadTimesheets();
           setEditDialogOpen(false);
           setEditingTimesheet(null);
         }}
@@ -840,7 +868,6 @@ export default function AdminTimesheets() {
         onOpenChange={setInsertDialogOpen}
         selectedDate={selectedTimesheetDate ? parseISO(selectedTimesheetDate) : new Date()}
         onSuccess={() => {
-          loadTimesheets();
           setInsertDialogOpen(false);
         }}
       />
@@ -850,19 +877,18 @@ export default function AdminTimesheets() {
         open={absenceDialogOpen}
         onOpenChange={setAbsenceDialogOpen}
         onSuccess={() => {
-          loadTimesheets(); // Ricarica anche le assenze
           setAbsenceDialogOpen(false);
         }}
       />
 
-      {/* Dialog per importazione Excel */}
-      <TimesheetImportDialog
-        open={importDialogOpen}
-        onOpenChange={setImportDialogOpen}
-        onImportComplete={() => {
-          loadTimesheets();
-        }}
-      />
+       {/* Dialog per importazione Excel */}
+       <TimesheetImportDialog
+         open={importDialogOpen}
+         onOpenChange={setImportDialogOpen}
+         onImportComplete={() => {
+           // Real-time updates handled automatically
+         }}
+       />
     </div>
   );
 }
@@ -879,12 +905,66 @@ function DailySummaryView({
 }: {
   timesheets: TimesheetWithProfile[];
   absences: any[];
-  aggregateTimesheetsByEmployee: () => EmployeeSummary[];
+  aggregateTimesheetsByEmployee: () => Promise<EmployeeSummary[]>;
   employeeSettings: any;
   companySettings: any;
   onEditTimesheet: (timesheet: TimesheetWithProfile) => void;
   onDeleteTimesheet: (id: string) => void;
 }) {
+  const [employees, setEmployees] = useState<EmployeeSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [mealBenefitsCache, setMealBenefitsCache] = useState<{[key: string]: any}>({});
+
+  useEffect(() => {
+    console.log('🔍 DailySummaryView - useEffect triggered');
+    
+    const loadEmployeeData = async () => {
+      setLoading(true);
+      console.log('🔍 DailySummaryView - calling aggregateTimesheetsByEmployee...');
+      
+      try {
+        const employeeData = await aggregateTimesheetsByEmployee();
+        console.log('🔍 DailySummaryView - got employee data:', employeeData);
+        console.log('🔍 DailySummaryView - employee data is array?', Array.isArray(employeeData));
+        
+        setEmployees(employeeData);
+        
+        // Pre-calculate meal benefits for all timesheets to use in rendering
+        const benefitsCache: {[key: string]: any} = {};
+        
+        for (const employee of employeeData) {
+          for (const timesheet of employee.timesheets) {
+            const benefits = await BenefitsService.calculateMealBenefits(
+              timesheet, 
+              employeeSettings[timesheet.user_id], 
+              companySettings,
+              timesheet.date
+            );
+            benefitsCache[timesheet.id] = benefits;
+          }
+        }
+        
+        setMealBenefitsCache(benefitsCache);
+        console.log('🔍 DailySummaryView - finished loading employee data');
+      } catch (error) {
+        console.error('❌ DailySummaryView - Error loading employee data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadEmployeeData();
+  }, [timesheets, employeeSettings, companySettings]);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center py-8">Caricamento...</div>
+        </CardContent>
+      </Card>
+    );
+  }
   return (
     <Card>
       <CardHeader>
@@ -898,13 +978,13 @@ function DailySummaryView({
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {aggregateTimesheetsByEmployee().length === 0 ? (
+          {employees.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               Nessun timesheet trovato per i criteri selezionati
             </div>
           ) : (
             <div className="space-y-4">
-              {aggregateTimesheetsByEmployee().map((employee) => (
+              {employees.map((employee) => (
                 <Card key={employee.user_id} className="border-l-4 border-l-primary">
                   <CardContent className="pt-6">
                     <div className="flex items-start justify-between mb-4">
@@ -961,11 +1041,7 @@ function DailySummaryView({
                             </TableHeader>
                             <TableBody>
                               {employee.timesheets.map((timesheet) => {
-                                const mealBenefits = BenefitsService.calculateMealBenefitsSync(
-                                  timesheet, 
-                                  employeeSettings[timesheet.user_id], 
-                                  companySettings
-                                );
+                                const mealBenefits = mealBenefitsCache[timesheet.id] || { mealVoucher: false, dailyAllowance: false };
                                 
                                 return (
                                   <TableRow key={timesheet.id}>

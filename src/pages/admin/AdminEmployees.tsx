@@ -188,24 +188,51 @@ export default function AdminEmployees() {
     }
 
     try {
-      const { error } = await supabase.functions.invoke('delete-employee', {
+      const { data, error } = await supabase.functions.invoke('delete-employee', {
         body: { email: employee.email }
       });
 
       if (error) {
         console.error('Error deleting employee:', error);
+        
+        // Try to parse the error response for more details
+        let errorMessage = "Errore nell'eliminazione del dipendente";
+        if (error.message) {
+          errorMessage = error.message;
+        }
+        
         toast({
           title: "Errore",
-          description: "Errore nell'eliminazione del dipendente",
+          description: errorMessage,
           variant: "destructive",
         });
         return;
       }
 
-      toast({
-        title: "Successo",
-        description: "Dipendente eliminato con successo",
-      });
+      // Check if the response indicates success
+      if (data && data.success) {
+        toast({
+          title: "Successo",
+          description: data.message || "Dipendente eliminato con successo",
+        });
+        
+        // Log deletion summary for debugging
+        if (data.deletion_summary) {
+          console.log('Deletion summary:', data.deletion_summary);
+          if (data.deletion_summary.failed > 0) {
+            console.warn('Some deletion operations failed:', data.deletion_summary.failed_operations);
+          }
+        }
+      } else {
+        // Handle case where function succeeded but returned an error
+        const errorMsg = data?.error || "Errore nell'eliminazione del dipendente";
+        toast({
+          title: "Errore",
+          description: errorMsg,
+          variant: "destructive",
+        });
+        return;
+      }
 
       loadEmployees();
 
@@ -213,7 +240,7 @@ export default function AdminEmployees() {
       console.error('Error deleting employee:', error);
       toast({
         title: "Errore",
-        description: "Errore nell'eliminazione del dipendente",
+        description: "Errore di connessione durante l'eliminazione del dipendente",
         variant: "destructive",
       });
     }

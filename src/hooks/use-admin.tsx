@@ -1,51 +1,67 @@
 import { useAuth } from '@/contexts/AuthContext';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-export const useAdmin = () => {
+interface AdminStatus {
+  isAdmin: boolean | null;
+  loading: boolean;
+  error: string | null;
+}
+
+export const useAdmin = (): AdminStatus => {
   const { user, loading: authLoading } = useAuth();
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [adminStatus, setAdminStatus] = useState<AdminStatus>({
+    isAdmin: null,
+    loading: true,
+    error: null
+  });
 
-  useEffect(() => {
-    const checkAdminRole = async () => {
-      console.log('🔍 CheckAdminRole - authLoading:', authLoading, 'user:', user?.email || 'NO USER');
+  const checkAdminRole = useCallback(async () => {
+    if (authLoading) {
+      return;
+    }
+    
+    if (!user) {
+      setAdminStatus({
+        isAdmin: false,
+        loading: false,
+        error: null
+      });
+      return;
+    }
+
+    try {
+      setAdminStatus(prev => ({ ...prev, loading: true, error: null }));
       
-      if (authLoading) {
-        console.log('🕐 Still loading auth...');
-        return;
+      const { data, error } = await supabase.rpc('is_user_admin');
+
+      if (error) {
+        console.error('❌ Error checking admin role:', error);
+        setAdminStatus({
+          isAdmin: false,
+          loading: false,
+          error: error.message
+        });
+      } else {
+        setAdminStatus({
+          isAdmin: data === true,
+          loading: false,
+          error: null
+        });
       }
-      
-      if (!user) {
-        console.log('❌ No user authenticated - setting isAdmin to false');
-        setIsAdmin(false);
-        setLoading(false);
-        return;
-      }
-
-      try {
-        console.log('🔍 Calling is_admin function');
-        const { data, error } = await supabase.rpc('is_admin');
-
-        console.log('🔍 Admin function result:', { data, error });
-
-        if (error) {
-          console.error('❌ Error checking admin role:', error);
-          setIsAdmin(false);
-        } else {
-          console.log('✅ Admin check result:', { isAdmin: data });
-          setIsAdmin(data === true);
-        }
-      } catch (error) {
-        console.error('❌ Exception checking admin role:', error);
-        setIsAdmin(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkAdminRole();
+    } catch (error) {
+      console.error('❌ Exception checking admin role:', error);
+      setAdminStatus({
+        isAdmin: false,
+        loading: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   }, [user, authLoading]);
 
-  return { isAdmin, loading: loading || authLoading };
+  useEffect(() => {
+    checkAdminRole();
+  }, [checkAdminRole]);
+
+  return adminStatus;
 };

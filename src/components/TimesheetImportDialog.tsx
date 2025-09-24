@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { Upload, FileSpreadsheet, Users, Clock, AlertTriangle, CheckCircle } from 'lucide-react';
 import { ExcelImportService, ParsedTimesheet, ImportResult } from '@/services/ExcelImportService';
+import { TimesheetImportService } from '@/services/TimesheetImportService';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -19,6 +20,7 @@ interface TimesheetImportDialogProps {
 }
 
 export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: TimesheetImportDialogProps) {
+  console.log('🔍 DIALOG - TimesheetImportDialog rendered, open:', open);
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -28,35 +30,54 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
   const { toast } = useToast();
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('🔍 FILE SELECT - handleFileSelect called');
     const selectedFile = event.target.files?.[0];
+    console.log('🔍 FILE SELECT - Selected file:', selectedFile?.name, selectedFile?.type);
+    
     if (selectedFile) {
-      if (selectedFile.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
-          selectedFile.name.endsWith('.xlsx')) {
-        setFile(selectedFile);
-        setParseResult(null);
-        setStep('upload');
-      } else {
-        toast({
-          title: "Errore",
-          description: "Seleziona un file Excel (.xlsx)",
-          variant: "destructive"
+      const isXlsx = selectedFile.name.toLowerCase().endsWith('.xlsx');
+      if (!isXlsx) {
+        console.log('❌ FILE SELECT - Invalid file type');
+        toast({ 
+          title: "Formato non supportato", 
+          description: "Sono supportati solo file .xlsx", 
+          variant: "destructive" 
         });
+        return;
       }
+      console.log('✅ FILE SELECT - File accepted');
+      setFile(selectedFile);
+      setParseResult(null);
+      setStep('upload');
+    } else {
+      console.log('❌ FILE SELECT - No file selected');
     }
   };
 
   const handleParse = async () => {
-    if (!file) return;
+console.log('🔍 IMPORT DIALOG - Services check:', { 
+  ExcelImportService: typeof ExcelImportService,
+  TimesheetImportService: typeof TimesheetImportService,
+  parseExcelFile: typeof ExcelImportService.parseExcelFile
+});
+console.log('🔍 IMPORT DIALOG - handleParse called with file:', file?.name);
+    if (!file) {
+      console.log('❌ IMPORT DIALOG - No file selected');
+      return;
+    }
 
+    console.log('🔍 IMPORT DIALOG - Starting parse...');
     setParsing(true);
     try {
       const result = await ExcelImportService.parseExcelFile(file);
+      console.log('🔍 IMPORT DIALOG - Parse result:', result);
       setParseResult(result);
       setStep('preview');
     } catch (error) {
+      console.error('❌ IMPORT DIALOG - Parse error:', error);
       toast({
         title: "Errore",
-        description: "Errore durante l'analisi del file",
+        description: `Errore durante l'analisi del file: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`,
         variant: "destructive"
       });
     } finally {
@@ -65,10 +86,11 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
   };
 
   const getMyCompany = async () => {
+    const { data: auth } = await supabase.auth.getUser();
     const { data } = await supabase
       .from('profiles')
       .select('company_id')
-      .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
+      .eq('user_id', auth.user?.id)
       .single();
     return data?.company_id;
   };
@@ -136,45 +158,93 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
         const timesheet = parseResult.success[i];
         
         try {
-          // Find employee by fiscal code or name
-          const employee = await findEmployeeByFiscalCode(timesheet.codice_fiscale, timesheet.employee_name);
-          
-          if (!employee) {
-            console.warn(`Dipendente non trovato per codice fiscale: ${timesheet.codice_fiscale}`);
-            importResults.errors++;
-            continue;
-          }
+           console.log(`🔍 Processing row ${i + 1}/${total}:`, {
+             employee_name: timesheet.employee_name,
+             codice_fiscale: timesheet.codice_fiscale,
+             date: timesheet.date,
+             total_hours: timesheet.total_hours,
+             clockInTimes: timesheet.clockInTimes?.length || 0,
+             clockOutTimes: timesheet.clockOutTimes?.length || 0,
+             actual_clockInTimes: timesheet.clockInTimes,
+             actual_clockOutTimes: timesheet.clockOutTimes
+           });
 
-          // Use upsert for idempotent insert (will ignore if already exists due to unique index)
-          const { error } = await supabase.from('timesheets').upsert({
+           // Find employee by fiscal code or name
+           const employee = await findEmployeeByFiscalCode(timesheet.codice_fiscale, timesheet.employee_name);
+           
+           console.log(`🔍 EMPLOYEE SEARCH RESULT for "${timesheet.employee_name}" (CF: ${timesheet.codice_fiscale}):`, {
+             found: !!employee,
+             employee_data: employee || 'NOT FOUND'
+           });
+           
+           if (!employee) {
+             console.error(`❌ EMPLOYEE NOT FOUND - ROW ${i + 1}:`, {
+               searched_codice_fiscale: timesheet.codice_fiscale,
+               searched_employee_name: timesheet.employee_name,
+               companyId: (await supabase
+                 .from('profiles')
+                 .select('company_id')
+                 .eq('user_id', currentUserId)
+                 .single()
+               ).data?.company_id
+             });
+             importResults.errors++;
+             continue;
+           }
+
+          console.log(`👤 Employee found:`, {
             user_id: employee.user_id,
-            date: timesheet.date,
-            start_time: timesheet.start_time,
-            end_time: timesheet.end_time,
-            start_location_lat: timesheet.start_location_lat,
-            start_location_lng: timesheet.start_location_lng,
-            end_location_lat: timesheet.end_location_lat,
-            end_location_lng: timesheet.end_location_lng,
-            lunch_start_time: timesheet.lunch_start_time,
-            lunch_end_time: timesheet.lunch_end_time,
-            created_by: currentUserId,
-            notes: `Importato da Excel - ${file?.name}`
-          }, { 
-            onConflict: 'user_id,date', 
-            ignoreDuplicates: true 
+            name: `${employee.first_name} ${employee.last_name}`,
+            company_id: employee.company_id
           });
 
-          if (error) {
-            console.error('Errore inserimento timbratura:', error);
-            importResults.errors++;
-          } else {
-            importResults.imported++;
-          }
+            try {
+              console.log(`🔍 CALLING TimesheetImportService.importTimesheet:`, {
+                timesheet_data: {
+                  employee_name: timesheet.employee_name,
+                  date: timesheet.date,
+                  total_hours: timesheet.total_hours,
+                  clockInTimes: timesheet.clockInTimes,
+                  clockOutTimes: timesheet.clockOutTimes
+                },
+                employee_data: {
+                  user_id: employee.user_id,
+                  name: `${employee.first_name} ${employee.last_name}`
+                }
+              });
+              
+              const result = await TimesheetImportService.importTimesheet(timesheet, employee);
+              importResults.imported++;
+              console.log(`✅ Successfully imported timesheet:`, {
+                employee: `${employee.first_name} ${employee.last_name}`,
+                date: timesheet.date,
+                timesheetId: result.timesheetId,
+                sessionsInserted: result.sessionsInserted,
+                totalHours: result.totalHours
+              });
+            } catch (importError) {
+              console.error(`❌ IMPORT ERROR for ${timesheet.employee_name} on ${timesheet.date}:`, importError);
+              importResults.errors++;
+              
+              // Mostra subito toast con errore specifico
+              toast({
+                title: "Errore importazione riga",
+                description: `${timesheet.employee_name} (${timesheet.date}): ${importError instanceof Error ? importError.message : 'Errore sconosciuto'}`,
+                variant: "destructive",
+              });
+            }
 
-        } catch (error) {
-          console.error('Errore durante importazione riga:', error);
-          importResults.errors++;
-        } finally {
+         } catch (outerError) {
+           console.error(`❌ GENERAL ERROR processing row ${i + 1}:`, {
+             error_name: outerError?.constructor?.name,
+             error_message: outerError instanceof Error ? outerError.message : 'Unknown error',
+             error_stack: outerError instanceof Error ? outerError.stack : undefined,
+             error_full: outerError,
+             timesheet_data: timesheet,
+             row_number: i + 1
+           });
+           importResults.errors++;
+         } finally {
           setProgress(((i + 1) / total) * 100);
         }
       }
@@ -182,9 +252,12 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
       setProgress(100);
       setStep('complete');
 
+      // Mostra risultato accurato basato su successi/errori
+      const hasErrors = importResults.errors > 0;
       toast({
-        title: "Importazione completata",
-        description: `Importate: ${importResults.imported}, Saltate: ${importResults.skipped}, Errori: ${importResults.errors}`,
+        title: hasErrors ? "Importazione completata con errori" : "Importazione completata",
+        description: `Importate: ${importResults.imported}, Errori: ${importResults.errors}`,
+        variant: hasErrors ? "destructive" : "default"
       });
 
       // Call onImportComplete to refresh the parent component
@@ -225,7 +298,7 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
         <Input
           id="file"
           type="file"
-          accept=".xlsx,.xls"
+          accept=".xlsx"
           onChange={handleFileSelect}
         />
       </div>
@@ -356,21 +429,45 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
     </div>
   );
 
-  const renderCompleteStep = () => (
-    <div className="space-y-4 text-center">
-      <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
-      <h3 className="text-lg font-medium">Importazione completata!</h3>
-      <p className="text-sm text-muted-foreground">
-        Le timbrature sono state importate con successo
-      </p>
-      <Button onClick={handleClose} className="w-full">
-        Chiudi
-      </Button>
-    </div>
-  );
+  const renderCompleteStep = () => {
+    // Calcola i risultati dall'ultima importazione
+    const hasErrors = parseResult ? parseResult.errors.length > 0 : false;
+    const isSuccess = !hasErrors;
+    
+    return (
+      <div className="space-y-4 text-center">
+        {isSuccess ? (
+          <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
+        ) : (
+          <AlertTriangle className="mx-auto h-12 w-12 text-yellow-500" />
+        )}
+        <h3 className="text-lg font-medium">
+          {isSuccess ? "Importazione completata!" : "Importazione completata con errori"}
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          {isSuccess 
+            ? "Le timbrature sono state importate con successo"
+            : "Alcune timbrature hanno avuto problemi durante l'importazione"
+          }
+        </p>
+        <Button onClick={handleClose} className="w-full">
+          Chiudi
+        </Button>
+      </div>
+    );
+  };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog 
+      open={open} 
+      onOpenChange={(next) => {
+        if (!next) { 
+          handleClose(); 
+        } else { 
+          onOpenChange(true); 
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Importa Timbrature Excel</DialogTitle>
