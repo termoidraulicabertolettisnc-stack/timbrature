@@ -353,10 +353,9 @@ export default function AdminTimesheets() {
     }
   };
 
-  // Get meal benefits for a timesheet using centralized temporal calculation
+  // Get meal benefits for a timesheet
   const getMealBenefits = async (timesheet: TimesheetWithProfile) => {
     const employeeSettingsForUser = employeeSettings[timesheet.user_id];
-    BenefitsService.validateTemporalUsage('AdminTimesheets.getMealBenefits');
     return await BenefitsService.calculateMealBenefits(
       timesheet, 
       employeeSettingsForUser, 

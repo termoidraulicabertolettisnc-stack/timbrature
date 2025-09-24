@@ -110,9 +110,8 @@ export function MonthlyCalendarView({
         const endDate = format(endTime, 'yyyy-MM-dd');
         const isNightShift = startDate !== endDate || timesheet.night_hours > 0;
 
-        // Calcola buoni pasto usando il nuovo metodo async
+        // Calculate meal benefits using centralized service
         const employeeSettingsForUser = employeeSettings[timesheet.user_id];
-        BenefitsService.validateTemporalUsage('MonthlyCalendarView.getMealBenefits');
         const mealBenefits = await BenefitsService.calculateMealBenefits(
           timesheet, 
           employeeSettingsForUser, 

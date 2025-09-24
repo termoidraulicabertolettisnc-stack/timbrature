@@ -847,35 +847,6 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
-      debug_lunch_break_calculation: {
-        Args: { p_date: string; p_user_id: string }
-        Returns: {
-          company_lunch_break_type: string
-          employee_lunch_break_type: string
-          employee_settings_found: boolean
-          employee_settings_valid_from: string
-          employee_settings_valid_to: string
-          final_lunch_minutes: number
-        }[]
-      }
-      debug_night_hours_calculation: {
-        Args: {
-          p_end_time: string
-          p_night_end?: string
-          p_night_start?: string
-          p_start_time: string
-        }
-        Returns: {
-          calculated_hours: number
-          local_end: string
-          local_start: string
-          night_end_today: string
-          night_overlap_minutes: number
-          night_start_today: string
-          utc_end: string
-          utc_start: string
-        }[]
-      }
       debug_timesheet_lunch_calculation: {
         Args: { p_timesheet_id: string }
         Returns: {
@@ -940,24 +911,16 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
+      is_user_admin_in_company: {
+        Args: { target_company_id?: string }
+        Returns: boolean
+      }
       test_employee_settings_lookup: {
         Args: { p_date: string; p_user_id: string }
         Returns: {
           found_count: number
           lunch_type: string
           query_used: string
-          valid_from: string
-          valid_to: string
-        }[]
-      }
-      test_employee_settings_lookup_detailed: {
-        Args: { p_date: string; p_user_id: string }
-        Returns: {
-          found_id: string
-          lunch_break_min_hours: number
-          lunch_break_type: string
-          result_text: string
-          step: string
           valid_from: string
           valid_to: string
         }[]

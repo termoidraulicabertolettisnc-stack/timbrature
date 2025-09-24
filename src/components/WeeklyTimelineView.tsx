@@ -185,9 +185,8 @@ export function WeeklyTimelineView({
         const totalDuration = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
         if (isNaN(totalDuration) || totalDuration < 0) return;
 
-        // Calculate meal voucher
+        // Calculate meal benefits
         const employeeSetting = employeeSettings[timesheet.user_id];
-        BenefitsService.validateTemporalUsage('WeeklyTimelineView');
         const mealBenefits = await BenefitsService.calculateMealBenefits(
           timesheet,
           employeeSetting,
@@ -293,9 +292,8 @@ export function WeeklyTimelineView({
         return;
       }
 
-      // Process multiple sessions
+      // Process multiple sessions  
       const employeeSetting = employeeSettings[timesheet.user_id];
-      BenefitsService.validateTemporalUsage('WeeklyTimelineView');
       const mealBenefits = await BenefitsService.calculateMealBenefits(
         timesheet,
         employeeSetting,

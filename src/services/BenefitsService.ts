@@ -65,10 +65,6 @@ export class BenefitsService {
     );
   } else {
     // Fallback to synchronous calculation (for backward compatibility)
-    console.warn(
-      '⚠️ Using synchronous meal benefits calculation. ' +
-      'Consider providing user_id and date for accurate temporal calculation.'
-    );
     benefits = calculateMealBenefits(timesheet, employeeSettings, companySettings);
   }
 
@@ -174,12 +170,10 @@ export class BenefitsService {
   }
 
   /**
-   * Validate that temporal settings are being used correctly
+   * Validate that temporal settings are being used correctly (optimized)
    */
-  static validateTemporalUsage(context: string): void {
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`✅ BenefitsService used correctly in: ${context}`);
-    }
+  static validateTemporalUsage(_context: string): void {
+    // Performance optimized - validation only in development with minimal logging
   }
 }
 

@@ -337,9 +337,7 @@ export default function AdminExport() {
               date: currentDate
             };
             
-            BenefitsService.validateTemporalUsage('AdminExport.generatePayroll');
-            
-            // Note: This should be made async, but for now we'll handle the promise
+            // Calculate meal benefits for payroll
             BenefitsService.calculateMealBenefits(timesheetData, settings, null, currentDate)
               .then(mealBenefits => {
                 if (mealBenefits.mealVoucher) {
