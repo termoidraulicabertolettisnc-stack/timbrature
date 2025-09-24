@@ -79,63 +79,84 @@ const TimesheetEntry = () => {
   };
 
   const loadTodayTimesheet = async () => {
-    const today = new Date().toISOString().split('T')[0];
-    
-    // Carica le timbrature di oggi
-    const { data: todayData, error: todayError } = await supabase
-      .from('timesheets')
-      .select('*')
-      .eq('user_id', user?.id)
-      .eq('date', today)
-      .order('created_at', { ascending: false });
+    if (!user) return;
 
-    // Controlla anche se c'è una sessione aperta nei giorni precedenti
-    const { data: openSessionData, error: openSessionError } = await supabase
-      .from('timesheets')
-      .select('*')
-      .eq('user_id', user?.id)
-      .is('end_time', null)
-      .not('date', 'eq', today)
-      .order('created_at', { ascending: false })
-      .limit(1);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Carica i timesheets di oggi (approccio semplice)
+      const { data: timesheets, error } = await supabase
+        .from('timesheets')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('date', today)
+        .order('date', { ascending: false });
 
-    if (todayError) {
+      if (error) throw error;
+      setTodayTimesheets(timesheets || []);
+
+      // Cerca sessioni aperte per questo utente (senza relazioni)
+      const { data: openSessions, error: openError } = await supabase
+        .from('timesheet_sessions')
+        .select('*')
+        .is('end_time', null)
+        .eq('session_type', 'work')
+        .order('start_time', { ascending: false })
+        .limit(10);
+
+      if (openError) {
+        console.error('Error loading open sessions:', openError);
+        setCurrentSession(null);
+        return;
+      }
+
+      // Se ci sono sessioni aperte, trova quella dell'utente corrente
+      if (openSessions && openSessions.length > 0) {
+        // Per ogni sessione aperta, carica il timesheet associato
+        for (const session of openSessions) {
+          const { data: timesheetData, error: timesheetError } = await supabase
+            .from('timesheets')
+            .select('*')
+            .eq('id', session.timesheet_id)
+            .eq('user_id', user.id)
+            .single();
+
+          if (!timesheetError && timesheetData) {
+            // Trovata una sessione dell'utente corrente
+            setCurrentSession({
+              id: timesheetData.id,
+              start_time: session.start_time,
+              end_time: null,
+              lunch_start_time: null,
+              lunch_end_time: null,
+              project_id: timesheetData.project_id,
+              notes: session.notes || timesheetData.notes
+            });
+            
+            if (timesheetData.date !== today) {
+              const oldDate = new Date(timesheetData.date).toLocaleDateString('it-IT');
+              toast({
+                title: "Sessione precedente aperta",
+                description: `Sessione del ${oldDate} ancora aperta. Puoi timbrare l'uscita.`,
+                variant: "destructive",
+              });
+            }
+            return; // Esci dal loop
+          }
+        }
+      }
+
+      // Nessuna sessione aperta trovata
+      setCurrentSession(null);
+
+    } catch (error: any) {
+      console.error('Error loading today timesheet:', error);
       toast({
         title: "Errore",
-        description: "Impossibile caricare il timesheet di oggi",
+        description: "Errore nel caricamento delle timbrature di oggi",
         variant: "destructive",
       });
-    } else {
-      setTodayTimesheets(todayData || []);
-      
-      // Prima controlla se c'è una sessione attiva oggi
-      const todayActiveSession = todayData?.find(t => t.start_time && !t.end_time) || null;
-      
-      // Se c'è una sessione attiva oggi, usala
-      if (todayActiveSession) {
-        setCurrentSession(todayActiveSession);
-        setSelectedProject(todayActiveSession.project_id || '');
-        setNotes(todayActiveSession.notes || '');
-      }
-      // Altrimenti, se c'è una sessione aperta nei giorni precedenti, usala per permettere l'uscita
-      else if (openSessionData && openSessionData.length > 0) {
-        const oldOpenSession = openSessionData[0];
-        const oldDate = new Date(oldOpenSession.date).toLocaleDateString('it-IT');
-        
-        setCurrentSession(oldOpenSession);
-        setSelectedProject(oldOpenSession.project_id || '');
-        setNotes(oldOpenSession.notes || '');
-        
-        toast({
-          title: "Sessione precedente aperta",
-          description: `Sessione del ${oldDate} ancora aperta. Puoi timbrare l'uscita.`,
-          variant: "destructive",
-        });
-      }
-      // Nessuna sessione aperta
-      else {
-        setCurrentSession(null);
-      }
+      setCurrentSession(null);
     }
   };
 
@@ -169,25 +190,70 @@ const TimesheetEntry = () => {
       const now = new Date().toISOString();
       const today = new Date().toISOString().split('T')[0];
 
-      // Crea sempre una nuova sessione
-      const { error } = await supabase
+      // 1. Trova o crea il timesheet per oggi
+      let timesheetId;
+      
+      // Controlla se esiste già un timesheet per oggi
+      const { data: existingTimesheet, error: fetchError } = await supabase
         .from('timesheets')
+        .select('id')
+        .eq('user_id', user?.id)
+        .eq('date', today)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      if (existingTimesheet) {
+        timesheetId = existingTimesheet.id;
+      } else {
+        // Crea un nuovo timesheet per oggi
+        const { data: newTimesheet, error: insertError } = await supabase
+          .from('timesheets')
+          .insert({
+            user_id: user?.id,
+            date: today,
+            start_time: now, // Il primo start_time del giorno
+            project_id: selectedProject || null,
+            notes: notes || null,
+            created_by: user?.id,
+            is_absence: false
+          })
+          .select('id')
+          .single();
+
+        if (insertError) throw insertError;
+        timesheetId = newTimesheet.id;
+      }
+
+      // 2. Crea una nuova sessione di lavoro
+      const { data: sessions, error: sessionCountError } = await supabase
+        .from('timesheet_sessions')
+        .select('session_order')
+        .eq('timesheet_id', timesheetId)
+        .order('session_order', { ascending: false })
+        .limit(1);
+
+      if (sessionCountError) throw sessionCountError;
+
+      const nextSessionOrder = sessions && sessions.length > 0 ? sessions[0].session_order + 1 : 1;
+
+      const { error: sessionError } = await supabase
+        .from('timesheet_sessions')
         .insert({
-          user_id: user?.id,
-          date: today,
+          timesheet_id: timesheetId,
+          session_order: nextSessionOrder,
+          session_type: 'work',
           start_time: now,
           start_location_lat: location.lat,
           start_location_lng: location.lng,
-          project_id: selectedProject || null,
-          notes: notes || null,
-          created_by: user?.id,
+          notes: notes || null
         });
 
-      if (error) throw error;
+      if (sessionError) throw sessionError;
 
       toast({
         title: "Entrata registrata!",
-        description: `Ore ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`,
+        description: `Ore ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} - Sessione ${nextSessionOrder}`,
       });
 
       loadTodayTimesheet();
@@ -211,21 +277,39 @@ const TimesheetEntry = () => {
       const location = await getCurrentLocation();
       const now = new Date().toISOString();
 
-      const { error } = await supabase
-        .from('timesheets')
+      // Trova la sessione aperta più recente
+      const { data: openSession, error: fetchError } = await supabase
+        .from('timesheet_sessions')
+        .select('*')
+        .eq('timesheet_id', currentSession.id)
+        .is('end_time', null)
+        .eq('session_type', 'work')
+        .order('session_order', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      if (!openSession) {
+        throw new Error('Nessuna sessione di lavoro aperta trovata');
+      }
+
+      // Chiudi la sessione più recente
+      const { error: sessionError } = await supabase
+        .from('timesheet_sessions')
         .update({
           end_time: now,
           end_location_lat: location.lat,
           end_location_lng: location.lng,
           notes: notes || null,
         })
-        .eq('id', currentSession.id);
+        .eq('id', openSession.id);
 
-      if (error) throw error;
+      if (sessionError) throw sessionError;
 
       toast({
         title: "Uscita registrata!",
-        description: `Ore ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`,
+        description: `Ore ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} - Sessione ${openSession.session_order}`,
       });
 
       loadTodayTimesheet();
