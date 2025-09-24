@@ -889,6 +889,10 @@ export type Database = {
           user_name: string
         }[]
       }
+      delete_user_timesheet_sessions: {
+        Args: { target_user_id: string }
+        Returns: undefined
+      }
       get_current_user_context: {
         Args: Record<PropertyKey, never>
         Returns: {

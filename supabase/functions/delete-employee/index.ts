@@ -168,7 +168,7 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // CASCADE DELETE ALL RELATED DATA
+    // CASCADE DELETE ALL RELATED DATA in correct order to avoid foreign key violations
     console.log('🧹 Starting cascade deletion for user:', userToDelete.id);
 
     const deletionResults: Array<{ table: string; success: boolean; error?: string }> = [];
@@ -196,37 +196,37 @@ const handler = async (req: Request): Promise<Response> => {
       supabaseAdmin.from('location_pings').delete().eq('user_id', userToDelete.id)
     );
 
-    // 2. Delete employee absences
-    await safeDelete('employee_absences', 
-      supabaseAdmin.from('employee_absences').delete().eq('user_id', userToDelete.id)
-    );
-
-    // 3. Delete employee overtime conversions
-    await safeDelete('employee_overtime_conversions', 
-      supabaseAdmin.from('employee_overtime_conversions').delete().eq('user_id', userToDelete.id)
-    );
-
-    // 4. Delete meal voucher conversions
-    await safeDelete('employee_meal_voucher_conversions', 
-      supabaseAdmin.from('employee_meal_voucher_conversions').delete().eq('user_id', userToDelete.id)
-    );
-
-    // 5. Delete employee settings
-    await safeDelete('employee_settings', 
-      supabaseAdmin.from('employee_settings').delete().eq('user_id', userToDelete.id)
-    );
-
-    // 6. Delete timesheet sessions first (child records) - using JOIN since timesheet_sessions doesn't have user_id
+    // 2. Delete timesheet sessions FIRST (child records) - using helper function
     await safeDelete('timesheet_sessions', 
       supabaseAdmin.rpc('delete_user_timesheet_sessions', { target_user_id: userToDelete.id })
     );
 
-    // 7. Delete timesheets (parent records)
+    // 3. Delete timesheets (parent records)
     await safeDelete('timesheets', 
       supabaseAdmin.from('timesheets').delete().eq('user_id', userToDelete.id)
     );
 
-    // 8. Delete audit logs (where user was the one making changes)
+    // 4. Delete employee absences
+    await safeDelete('employee_absences', 
+      supabaseAdmin.from('employee_absences').delete().eq('user_id', userToDelete.id)
+    );
+
+    // 5. Delete employee overtime conversions
+    await safeDelete('employee_overtime_conversions', 
+      supabaseAdmin.from('employee_overtime_conversions').delete().eq('user_id', userToDelete.id)
+    );
+
+    // 6. Delete meal voucher conversions
+    await safeDelete('employee_meal_voucher_conversions', 
+      supabaseAdmin.from('employee_meal_voucher_conversions').delete().eq('user_id', userToDelete.id)
+    );
+
+    // 7. Delete employee settings
+    await safeDelete('employee_settings', 
+      supabaseAdmin.from('employee_settings').delete().eq('user_id', userToDelete.id)
+    );
+
+    // 8. Delete audit logs (where user was the one making changes) - BEFORE deleting profile
     await safeDelete('audit_logs', 
       supabaseAdmin.from('audit_logs').delete().eq('changed_by', userToDelete.id)
     );
