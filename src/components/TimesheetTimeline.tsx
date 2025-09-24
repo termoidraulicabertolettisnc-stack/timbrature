@@ -364,7 +364,6 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
 
   // Calcola i blocchi temporali per ogni giorno
   const calculateTimeBlocks = (dayTimesheets: TimesheetWithProfile[], dayDate: Date): TimeBlock[] => {
-    // DEBUG: Log dei timesheet ricevuti per questo giorno
     const currentDayStr = format(dayDate, 'yyyy-MM-dd');
     console.log(`🔍 [${currentDayStr}] Timesheet ricevuti:`, dayTimesheets.map(ts => ({
       id: ts.id,
@@ -372,78 +371,140 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
       end_date: ts.end_date,
       start_time: ts.start_time,
       end_time: ts.end_time,
+      sessions_count: ts.timesheet_sessions?.length || 0,
       profileName: ts.profiles ? `${ts.profiles.first_name} ${ts.profiles.last_name}` : 'N/A'
     })));
 
-    // Rimuovi duplicati basati su ID e mantieni quelli con start_time valido
-    // Per timesheet in corso (end_time null), calcola end_time in tempo reale
-    const validTimesheets = dayTimesheets.filter((ts, index, arr) => {
-      const isUnique = index === arr.findIndex(t => t.id === ts.id);
-      const hasValidStartTime = !!ts.start_time;
-      return isUnique && hasValidStartTime;
-    }).map(ts => {
-      // Se il timesheet è in corso (end_time null), calcola l'orario corrente
-      if (!ts.end_time && ts.start_time) {
-        const now = new Date();
-        const currentTime = format(now, "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
-        const startTime = new Date(ts.start_time);
-        const diffHours = (now.getTime() - startTime.getTime()) / (1000 * 60 * 60);
-        
-        console.log(`🔍 TIMESHEET IN CORSO DEBUG:`, {
-          id: ts.id,
-          start_time: ts.start_time,
-          calculated_end_time: currentTime,
-          hours_worked: diffHours.toFixed(2)
-        });
-        
-        return {
-          ...ts,
-          end_time: currentTime,
-          total_hours: diffHours, // Aggiungi le ore calcolate
-          isOngoing: true // Flag per indicare che è in corso
-        };
-      }
-      return ts;
-    });
+    if (dayTimesheets.length === 0) return [];
 
-    console.log(`🔍 [${currentDayStr}] Timesheet validi dopo deduplicazione:`, validTimesheets.length);
-
-    if (validTimesheets.length === 0) return [];
-
-    // RIMOSSA LA LOGICA extendedTimesheets - ora gestita da aggregateWeeklyData()
-    const allRelevantTimesheets = validTimesheets;
     const blocks: TimeBlock[] = [];
 
-    allRelevantTimesheets.forEach(timesheet => {
-      if (!timesheet.start_time || !timesheet.end_time) return;
+    // Processa ogni timesheet e le sue sessioni
+    dayTimesheets.forEach(timesheet => {
+      console.log(`🔍 Processing timesheet ${timesheet.id} for ${currentDayStr}:`, {
+        sessions: timesheet.timesheet_sessions?.length || 0,
+        main_start: timesheet.start_time,
+        main_end: timesheet.end_time
+      });
 
-      const startMinutes = timeToMinutes(timesheet.start_time);
-      const rawEndMinutes = timeToMinutes(timesheet.end_time);
-      
-      const currentDayStr = format(dayDate, 'yyyy-MM-dd');
-      const timesheetStartDate = timesheet.date;
-      const timesheetEndDate = timesheet.end_date || timesheet.date;
-      
-      // Determina se è una sessione multi-giorno
-      const isMultiDaySession = timesheetEndDate !== timesheetStartDate;
-      const isFromPreviousDay = timesheetStartDate !== currentDayStr && timesheetEndDate === currentDayStr;
-      const isToNextDay = timesheetStartDate === currentDayStr && timesheetEndDate !== currentDayStr;
-      
-      let actualStartMinutes: number;
-      let actualEndMinutes: number;
+      // Se ci sono sessioni multiple, usa quelle
+      if (timesheet.timesheet_sessions && timesheet.timesheet_sessions.length > 0) {
+        const workSessions = timesheet.timesheet_sessions
+          .filter(session => session.session_type === 'work')
+          .sort((a, b) => a.session_order - b.session_order);
 
-      if (isFromPreviousDay) {
-        // Questo timesheet inizia il giorno prima, mostra solo la parte di oggi
-        actualStartMinutes = 0; // Inizia a mezzanotte
-        actualEndMinutes = rawEndMinutes; // Finisce all'orario originale del giorno successivo
-      } else if (isToNextDay) {
-        // Questo timesheet inizia oggi ma si estende domani, mostra solo la parte di oggi
-        actualStartMinutes = startMinutes;
-        actualEndMinutes = 24 * 60; // Finisce a mezzanotte (1440 minuti)
-      } else if (!isMultiDaySession && timesheetStartDate === currentDayStr) {
-        // Timesheet normale dello stesso giorno
-        actualStartMinutes = startMinutes;
-        actualEndMinutes = rawEndMinutes;
+        console.log(`🔍 Processing ${workSessions.length} work sessions for timesheet ${timesheet.id}`);
+
+        workSessions.forEach((session, sessionIndex) => {
+          if (!session.start_time) return;
+
+          // Per sessioni aperte, calcola end_time in tempo reale
+          let sessionEndTime = session.end_time;
+          if (!sessionEndTime) {
+            const now = new Date();
+            sessionEndTime = format(now, "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
+            console.log(`🔍 Session ${session.id} is ongoing, using current time: ${sessionEndTime}`);
+          }
+
+          const sessionStart = new Date(session.start_time);
+          const sessionEnd = new Date(sessionEndTime);
+          const sessionStartDate = format(sessionStart, 'yyyy-MM-dd');
+          const sessionEndDate = format(sessionEnd, 'yyyy-MM-dd');
+
+          console.log(`🔍 Session ${sessionIndex + 1}:`, {
+            start: session.start_time,
+            end: sessionEndTime,
+            startDate: sessionStartDate,
+            endDate: sessionEndDate,
+            isMultiDay: sessionStartDate !== sessionEndDate
+          });
+
+          // Determina se la sessione appartiene a questo giorno
+          const sessionBelongsToDay = sessionStartDate === currentDayStr || sessionEndDate === currentDayStr;
+          
+          if (!sessionBelongsToDay) {
+            console.log(`🔍 Session ${sessionIndex + 1} doesn't belong to ${currentDayStr}, skipping`);
+            return;
+          }
+
+          const startMinutes = timeToMinutes(session.start_time);
+          const endMinutes = timeToMinutes(sessionEndTime);
+          
+          let actualStartMinutes: number;
+          let actualEndMinutes: number;
+
+          if (sessionStartDate !== currentDayStr && sessionEndDate === currentDayStr) {
+            // Sessione iniziata il giorno prima, finisce oggi
+            actualStartMinutes = 0; // Inizia a mezzanotte
+            actualEndMinutes = endMinutes;
+            console.log(`🔍 Session spans from previous day: 00:00 -> ${Math.floor(endMinutes/60)}:${(endMinutes%60).toString().padStart(2,'0')}`);
+          } else if (sessionStartDate === currentDayStr && sessionEndDate !== currentDayStr) {
+            // Sessione inizia oggi, continua domani
+            actualStartMinutes = startMinutes;
+            actualEndMinutes = 24 * 60; // Finisce a mezzanotte
+            console.log(`🔍 Session spans to next day: ${Math.floor(startMinutes/60)}:${(startMinutes%60).toString().padStart(2,'0')} -> 24:00`);
+          } else {
+            // Sessione normale dello stesso giorno
+            actualStartMinutes = startMinutes;
+            actualEndMinutes = endMinutes;
+            console.log(`🔍 Normal session: ${Math.floor(startMinutes/60)}:${(startMinutes%60).toString().padStart(2,'0')} -> ${Math.floor(endMinutes/60)}:${(endMinutes%60).toString().padStart(2,'0')}`);
+          }
+
+          // Crea blocco unico per questa sessione
+          const blockId = `${timesheet.id}_s${sessionIndex + 1}`;
+          console.log(`🔍 Creating block ${blockId} from ${actualStartMinutes} to ${actualEndMinutes} minutes`);
+          
+          blocks.push({
+            timesheet: {
+              ...timesheet,
+              id: blockId, // ID univoco per questa sessione
+              start_time: session.start_time,
+              end_time: sessionEndTime
+            },
+            startMinutes: actualStartMinutes,
+            endMinutes: actualEndMinutes,
+            isLunchBreak: false,
+            type: 'work',
+            startDate: sessionStartDate,
+            endDate: sessionEndDate
+          });
+        });
+      } else {
+        // Fallback per timesheet senza sessioni multiple (legacy)
+        if (!timesheet.start_time || !timesheet.end_time) return;
+
+        // Per timesheet in corso, calcola end_time in tempo reale
+        let endTime = timesheet.end_time;
+        if (!endTime && timesheet.start_time) {
+          const now = new Date();
+          endTime = format(now, "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
+          console.log(`🔍 Legacy timesheet ${timesheet.id} is ongoing, using current time: ${endTime}`);
+        }
+
+        const startMinutes = timeToMinutes(timesheet.start_time);
+        const endMinutes = timeToMinutes(endTime);
+        
+        const timesheetStartDate = timesheet.date;
+        const timesheetEndDate = timesheet.end_date || timesheet.date;
+        
+        // Determina se è una sessione multi-giorno
+        const isMultiDaySession = timesheetEndDate !== timesheetStartDate;
+        const isFromPreviousDay = timesheetStartDate !== currentDayStr && timesheetEndDate === currentDayStr;
+        const isToNextDay = timesheetStartDate === currentDayStr && timesheetEndDate !== currentDayStr;
+        
+        let actualStartMinutes: number;
+        let actualEndMinutes: number;
+
+        if (isFromPreviousDay) {
+          actualStartMinutes = 0;
+          actualEndMinutes = endMinutes;
+        } else if (isToNextDay) {
+          actualStartMinutes = startMinutes;
+          actualEndMinutes = 24 * 60;
+        } else if (!isMultiDaySession && timesheetStartDate === currentDayStr) {
+          // Timesheet normale dello stesso giorno
+          actualStartMinutes = startMinutes;
+          actualEndMinutes = endMinutes;
       } else {
         // FIX: Verifica più flessibile per timesheet del giorno corrente
         // Controlla se il timesheet appartiene a questo giorno considerando anche la data di inizio

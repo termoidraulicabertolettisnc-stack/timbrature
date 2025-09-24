@@ -83,43 +83,113 @@ export function MonthlyCalendarView({
 
     const employeesMap = new Map<string, EmployeeMonthData>();
 
-    // Utility per distribuire ore turni notturni
+    // Utility per distribuire ore turni notturni considerando le sessioni multiple
     const distributeNightShiftHours = (timesheet: TimesheetWithProfile, employee: EmployeeMonthData) => {
-      if (!timesheet.start_time) return;
+      console.log(`🔍 MonthlyCalendarView - Processing timesheet ${timesheet.id}:`, {
+        sessions: timesheet.timesheet_sessions?.length || 0,
+        main_start: timesheet.start_time,
+        main_end: timesheet.end_time
+      });
 
-      const startTime = new Date(timesheet.start_time);
-      let endTime: Date;
-      let totalHours = 0;
+      // Se ci sono sessioni multiple, processa ognuna separatamente
+      if (timesheet.timesheet_sessions && timesheet.timesheet_sessions.length > 0) {
+        const workSessions = timesheet.timesheet_sessions
+          .filter(session => session.session_type === 'work')
+          .sort((a, b) => a.session_order - b.session_order);
 
-      if (timesheet.end_time) {
-        endTime = new Date(timesheet.end_time);
-        totalHours = timesheet.total_hours || 0;
+        console.log(`🔍 MonthlyCalendarView - Processing ${workSessions.length} work sessions`);
+
+        workSessions.forEach((session, sessionIndex) => {
+          if (!session.start_time) return;
+
+          // Per sessioni aperte, calcola end_time in tempo reale
+          let sessionEndTime = session.end_time;
+          if (!sessionEndTime) {
+            const now = new Date();
+            sessionEndTime = format(now, "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
+          }
+
+          const sessionStart = new Date(session.start_time);
+          const sessionEnd = new Date(sessionEndTime);
+          const sessionDiffMs = sessionEnd.getTime() - sessionStart.getTime();
+          const sessionHours = Math.max(0, sessionDiffMs / (1000 * 60 * 60));
+
+          const sessionStartDate = format(sessionStart, 'yyyy-MM-dd');
+          const sessionEndDate = format(sessionEnd, 'yyyy-MM-dd');
+          const isSessionNightShift = sessionStartDate !== sessionEndDate;
+
+          console.log(`🔍 Session ${sessionIndex + 1}:`, {
+            startDate: sessionStartDate,
+            endDate: sessionEndDate,
+            hours: sessionHours.toFixed(2),
+            isNightShift: isSessionNightShift
+          });
+
+          // Calcola buoni pasto solo per la prima sessione del giorno
+          let mealBenefits = { mealVoucher: false, dailyAllowance: false };
+          if (sessionIndex === 0) {
+            const employeeSettingsForUser = employeeSettings[timesheet.user_id];
+            BenefitsService.validateTemporalUsage('MonthlyCalendarView.getMealBenefits');
+            mealBenefits = BenefitsService.calculateMealBenefitsSync(
+              timesheet, 
+              employeeSettingsForUser, 
+              companySettings
+            );
+          }
+
+          distributeSessionHours(session, sessionHours, sessionStartDate, sessionEndDate, isSessionNightShift, employee, mealBenefits, sessionIndex);
+        });
       } else {
-        endTime = new Date();
-        const diffMs = endTime.getTime() - startTime.getTime();
-        totalHours = Math.max(0, diffMs / (1000 * 60 * 60));
+        // Fallback per timesheet legacy senza sessioni
+        if (!timesheet.start_time) return;
+
+        const startTime = new Date(timesheet.start_time);
+        let endTime: Date;
+        let totalHours = 0;
+
+        if (timesheet.end_time) {
+          endTime = new Date(timesheet.end_time);
+          totalHours = timesheet.total_hours || 0;
+        } else {
+          endTime = new Date();
+          const diffMs = endTime.getTime() - startTime.getTime();
+          totalHours = Math.max(0, diffMs / (1000 * 60 * 60));
+        }
+
+        const startDate = format(startTime, 'yyyy-MM-dd');
+        const endDate = format(endTime, 'yyyy-MM-dd');
+        const isNightShift = startDate !== endDate || timesheet.night_hours > 0;
+
+        // Calcola buoni pasto
+        const employeeSettingsForUser = employeeSettings[timesheet.user_id];
+        BenefitsService.validateTemporalUsage('MonthlyCalendarView.getMealBenefits');
+        const mealBenefits = BenefitsService.calculateMealBenefitsSync(
+          timesheet, 
+          employeeSettingsForUser, 
+          companySettings
+        );
+
+        distributeSessionHours(timesheet, totalHours, startDate, endDate, isNightShift, employee, mealBenefits, 0);
       }
+    };
 
-      const startDate = format(startTime, 'yyyy-MM-dd');
-      const endDate = format(endTime, 'yyyy-MM-dd');
-      const isNightShift = startDate !== endDate || timesheet.night_hours > 0;
-
-      // Calcola buoni pasto una sola volta
-      const employeeSettingsForUser = employeeSettings[timesheet.user_id];
-      BenefitsService.validateTemporalUsage('MonthlyCalendarView.getMealBenefits');
-      const mealBenefits = BenefitsService.calculateMealBenefitsSync(
-        timesheet, 
-        employeeSettingsForUser, 
-        companySettings
-      );
+    // Funzione helper per distribuire le ore di una singola sessione
+    const distributeSessionHours = (
+      session: any, 
+      sessionHours: number, 
+      startDate: string, 
+      endDate: string, 
+      isNightShift: boolean, 
+      employee: EmployeeMonthData, 
+      mealBenefits: any,
+      sessionIndex: number
+    ) => {
 
       if (!isNightShift) {
-        // Turno normale
-        const date = timesheet.date;
-        
-        if (!employee.days[date]) {
-          employee.days[date] = {
-            date,
+        // Sessione normale nello stesso giorno
+        if (!employee.days[startDate]) {
+          employee.days[startDate] = {
+            date: startDate,
             timesheets: [],
             absences: [],
             regular_hours: 0,
@@ -129,33 +199,59 @@ export function MonthlyCalendarView({
           };
         }
 
-        employee.days[date].timesheets.push(timesheet);
-        
-        const regularHours = Math.min(totalHours, 8);
-        const overtimeHours = Math.max(0, totalHours - 8);
+        // Crea un identificativo unico per questa sessione
+        const sessionTimesheet = {
+          ...session,
+          id: `${session.id || 'session'}_${sessionIndex + 1}`,
+          total_hours: sessionHours
+        };
 
-        employee.days[date].regular_hours += regularHours;
-        employee.days[date].overtime_hours += overtimeHours;
-        employee.days[date].night_hours += timesheet.night_hours || 0;
+        employee.days[startDate].timesheets.push(sessionTimesheet);
+        
+        const regularHours = Math.min(sessionHours, 8);
+        const overtimeHours = Math.max(0, sessionHours - 8);
+
+        employee.days[startDate].regular_hours += regularHours;
+        employee.days[startDate].overtime_hours += overtimeHours;
+        employee.days[startDate].night_hours += (session.night_hours || 0);
 
         if (mealBenefits.mealVoucher) {
-          employee.days[date].meal_vouchers += 1;
+          employee.days[startDate].meal_vouchers += 1;
         }
+
+        console.log(`🔍 Added session to ${startDate}:`, {
+          sessionHours: sessionHours.toFixed(2),
+          regularHours: regularHours.toFixed(2),
+          overtimeHours: overtimeHours.toFixed(2)
+        });
       } else {
-        // Turno notturno - distribuisci ore tra due giorni - usando UTC+1 (Europa/Roma)
-        const startHourUTC = startTime.getUTCHours() + startTime.getUTCMinutes() / 60 + 1; // Convert to Europe/Rome
-        const endHourUTC = endTime.getUTCHours() + endTime.getUTCMinutes() / 60 + 1; // Convert to Europe/Rome
-        const startHour = startHourUTC >= 24 ? startHourUTC - 24 : (startHourUTC < 0 ? startHourUTC + 24 : startHourUTC);
-        const endHour = endHourUTC >= 24 ? endHourUTC - 24 : (endHourUTC < 0 ? endHourUTC + 24 : endHourUTC);
+        // Sessione notturna - distribuisci ore tra due giorni
+        const sessionStart = new Date(session.start_time || session.date);
+        const sessionEnd = new Date(session.end_time || endDate);
+        
+        // Calcola ore per ogni giorno considerando il fuso orario locale
+        const startHour = sessionStart.getHours() + sessionStart.getMinutes() / 60;
+        const endHour = sessionEnd.getHours() + sessionEnd.getMinutes() / 60;
         
         // Calcola ore per il primo giorno (fino a mezzanotte)
         const firstDayHours = Math.max(0, 24 - startHour);
         const secondDayHours = Math.max(0, endHour);
         
-        // È possibile che il calcolo automatico non sia perfetto, quindi usiamo una proporzione
-        const firstDayProportion = firstDayHours / (firstDayHours + secondDayHours);
-        const adjustedFirstDayHours = totalHours * firstDayProportion;
-        const adjustedSecondDayHours = totalHours * (1 - firstDayProportion);
+        // Usa proporzione basata sulle ore effettive se disponibili, altrimenti usa il calcolo temporale
+        let firstDayProportion = 0.5; // Default fallback
+        if (firstDayHours > 0 && secondDayHours > 0) {
+          firstDayProportion = firstDayHours / (firstDayHours + secondDayHours);
+        }
+        
+        const adjustedFirstDayHours = sessionHours * firstDayProportion;
+        const adjustedSecondDayHours = sessionHours * (1 - firstDayProportion);
+
+        console.log(`🔍 Night shift distribution:`, {
+          totalHours: sessionHours.toFixed(2),
+          firstDay: adjustedFirstDayHours.toFixed(2),
+          secondDay: adjustedSecondDayHours.toFixed(2),
+          proportion: firstDayProportion.toFixed(2)
+        });
 
         // Primo giorno
         if (!employee.days[startDate]) {
@@ -171,8 +267,8 @@ export function MonthlyCalendarView({
         }
 
         employee.days[startDate].timesheets.push({
-          ...timesheet,
-          id: `${timesheet.id}_day1`,
+          ...session,
+          id: `${session.id || 'session'}_${sessionIndex + 1}_day1`,
           total_hours: adjustedFirstDayHours
         });
 
@@ -181,7 +277,7 @@ export function MonthlyCalendarView({
 
         employee.days[startDate].regular_hours += firstDayRegular;
         employee.days[startDate].overtime_hours += firstDayOvertime;
-        employee.days[startDate].night_hours += (timesheet.night_hours || 0) * firstDayProportion;
+        employee.days[startDate].night_hours += (session.night_hours || 0) * firstDayProportion;
 
         if (mealBenefits.mealVoucher) {
           employee.days[startDate].meal_vouchers += 1;
@@ -201,8 +297,8 @@ export function MonthlyCalendarView({
         }
 
         employee.days[endDate].timesheets.push({
-          ...timesheet,
-          id: `${timesheet.id}_day2`,
+          ...session,
+          id: `${session.id || 'session'}_${sessionIndex + 1}_day2`,
           total_hours: adjustedSecondDayHours
         });
 
@@ -213,15 +309,17 @@ export function MonthlyCalendarView({
 
         employee.days[endDate].regular_hours += secondDayRegular;
         employee.days[endDate].overtime_hours += secondDayOvertime;
-        employee.days[endDate].night_hours += (timesheet.night_hours || 0) * (1 - firstDayProportion);
+        employee.days[endDate].night_hours += (session.night_hours || 0) * (1 - firstDayProportion);
       }
 
-      // Aggiorna i totali una sola volta
-      const regularHours = Math.min(totalHours, 8);
-      const overtimeHours = Math.max(0, totalHours - 8);
-      employee.totals.regular_hours += regularHours;
-      employee.totals.overtime_hours += overtimeHours;
-      employee.totals.total_hours += totalHours;
+      // Aggiorna i totali per ogni sessione (non duplicare per turni notturni)
+      if (sessionIndex === 0 || !isNightShift) {
+        const regularHours = Math.min(sessionHours, 8);
+        const overtimeHours = Math.max(0, sessionHours - 8);
+        employee.totals.regular_hours += regularHours;
+        employee.totals.overtime_hours += overtimeHours;
+        employee.totals.total_hours += sessionHours;
+      }
     };
 
     // Inizializza i dipendenti dai timesheet
