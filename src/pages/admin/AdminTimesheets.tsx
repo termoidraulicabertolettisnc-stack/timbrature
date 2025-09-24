@@ -205,8 +205,7 @@ export default function AdminTimesheets() {
   const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
   const [selectedTimesheetDate, setSelectedTimesheetDate] = useState<string>('');
   
-  // Debug log per importDialogOpen
-  console.log('🔍 ADMIN PAGE - importDialogOpen state:', importDialogOpen);
+  // Import dialog state management
 
   // Funzioni per aggiungere timesheet e assenze da specifici giorni
   const handleAddTimesheet = (date: string, userId: string) => {
@@ -248,7 +247,7 @@ export default function AdminTimesheets() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     
     const channel = supabase
-      .channel('admin-timesheets-realtime')
+      .channel('timesheets-realtime')
       .on(
         'postgres_changes',
         {
@@ -886,13 +885,9 @@ export default function AdminTimesheets() {
        {/* Dialog per importazione Excel */}
        <TimesheetImportDialog
          open={importDialogOpen}
-         onOpenChange={(open) => {
-           console.log('🔍 ADMIN PAGE - TimesheetImportDialog onOpenChange called with:', open);
-           setImportDialogOpen(open);
-         }}
+         onOpenChange={setImportDialogOpen}
          onImportComplete={() => {
-           console.log('🔍 ADMIN PAGE - TimesheetImportDialog onImportComplete called');
-           // Il real-time listener si occuperà dell'aggiornamento
+           // Real-time updates handled automatically
          }}
        />
     </div>
