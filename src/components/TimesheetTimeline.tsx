@@ -704,7 +704,7 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
               type: 'overtime',
               startDate: timesheetStartDate,
               endDate: timesheetEndDate
-            });
+          });
         }
         } else {
           // Nessuna pausa pranzo specifica
@@ -779,7 +779,7 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
             startDate: timesheetStartDate,
             endDate: timesheetEndDate
           });
-        }
+        });
       }
     });
 
