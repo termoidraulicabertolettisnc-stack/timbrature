@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clo
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { BenefitsService } from '@/services/BenefitsService';
 import { AbsenceIndicator } from '@/components/AbsenceIndicator';
+import { sessionsForDay, utcToLocal } from '@/utils/timeSegments';
 
 interface MonthlyCalendarViewProps {
   timesheets: TimesheetWithProfile[];
@@ -83,51 +84,25 @@ export function MonthlyCalendarView({
 
     const employeesMap = new Map<string, EmployeeMonthData>();
 
-    // Utility per distribuire ore turni notturni considerando le sessioni multiple
-    const distributeNightShiftHours = (timesheet: TimesheetWithProfile, employee: EmployeeMonthData) => {
-      console.log(`🔍 MonthlyCalendarView - Processing timesheet ${timesheet.id}:`, {
-        sessions: timesheet.timesheet_sessions?.length || 0,
-        main_start: timesheet.start_time,
-        main_end: timesheet.end_time
-      });
+    // Process timesheets using the new session utility
+    const distributeTimesheetHours = (timesheet: TimesheetWithProfile, employee: EmployeeMonthData) => {
+      console.log(`🔍 MonthlyCalendarView - Processing timesheet ${timesheet.id}`);
 
-      // Se ci sono sessioni multiple, processa ognuna separatamente
-      if (timesheet.timesheet_sessions && timesheet.timesheet_sessions.length > 0) {
-        const workSessions = timesheet.timesheet_sessions
-          .filter(session => session.session_type === 'work')
-          .sort((a, b) => a.session_order - b.session_order);
+      // Get all calendar days for this month and process sessions for each day
+      calendarDays.forEach(day => {
+        const dayISO = format(day, 'yyyy-MM-dd');
+        const segments = sessionsForDay(timesheet, dayISO);
+        
+        if (segments.length === 0) return;
 
-        console.log(`🔍 MonthlyCalendarView - Processing ${workSessions.length} work sessions`);
+        segments.forEach((segment, segmentIndex) => {
+          const localStart = utcToLocal(segment.startUtc);
+          const localEnd = utcToLocal(segment.endUtc);
+          const sessionHours = (localEnd.getTime() - localStart.getTime()) / (1000 * 60 * 60);
 
-        workSessions.forEach((session, sessionIndex) => {
-          if (!session.start_time) return;
-
-          // Per sessioni aperte, calcola end_time in tempo reale
-          let sessionEndTime = session.end_time;
-          if (!sessionEndTime) {
-            const now = new Date();
-            sessionEndTime = format(now, "yyyy-MM-dd'T'HH:mm:ss.SSSxxx");
-          }
-
-          const sessionStart = new Date(session.start_time);
-          const sessionEnd = new Date(sessionEndTime);
-          const sessionDiffMs = sessionEnd.getTime() - sessionStart.getTime();
-          const sessionHours = Math.max(0, sessionDiffMs / (1000 * 60 * 60));
-
-          const sessionStartDate = format(sessionStart, 'yyyy-MM-dd');
-          const sessionEndDate = format(sessionEnd, 'yyyy-MM-dd');
-          const isSessionNightShift = sessionStartDate !== sessionEndDate;
-
-          console.log(`🔍 Session ${sessionIndex + 1}:`, {
-            startDate: sessionStartDate,
-            endDate: sessionEndDate,
-            hours: sessionHours.toFixed(2),
-            isNightShift: isSessionNightShift
-          });
-
-          // Calcola buoni pasto solo per la prima sessione del giorno
+          // Calculate meal benefits only for the first segment of each day
           let mealBenefits = { mealVoucher: false, dailyAllowance: false };
-          if (sessionIndex === 0) {
+          if (segmentIndex === 0) {
             const employeeSettingsForUser = employeeSettings[timesheet.user_id];
             BenefitsService.validateTemporalUsage('MonthlyCalendarView.getMealBenefits');
             mealBenefits = BenefitsService.calculateMealBenefitsSync(
@@ -137,40 +112,47 @@ export function MonthlyCalendarView({
             );
           }
 
-          distributeSessionHours(session, sessionHours, sessionStartDate, sessionEndDate, isSessionNightShift, employee, mealBenefits, sessionIndex);
+          // Initialize day data if needed
+          if (!employee.days[dayISO]) {
+            employee.days[dayISO] = {
+              date: dayISO,
+              timesheets: [],
+              absences: [],
+              regular_hours: 0,
+              overtime_hours: 0,
+              night_hours: 0,
+              meal_vouchers: 0
+            };
+          }
+
+          // Add timesheet entry for this segment
+          const segmentTimesheet = {
+            ...timesheet,
+            id: `${timesheet.id}-${segment.sessionId || 'legacy'}-${segmentIndex}`,
+            total_hours: sessionHours
+          };
+
+          employee.days[dayISO].timesheets.push(segmentTimesheet);
+          
+          const regularHours = Math.min(sessionHours, 8);
+          const overtimeHours = Math.max(0, sessionHours - 8);
+
+          employee.days[dayISO].regular_hours += regularHours;
+          employee.days[dayISO].overtime_hours += overtimeHours;
+          employee.days[dayISO].night_hours += (timesheet.night_hours || 0) * (sessionHours / (timesheet.total_hours || sessionHours));
+
+          if (mealBenefits.mealVoucher) {
+            employee.days[dayISO].meal_vouchers += 1;
+          }
+
+          // Update totals (avoid double counting for multiple segments of same timesheet)
+          if (segmentIndex === 0) {
+            employee.totals.regular_hours += regularHours;
+            employee.totals.overtime_hours += overtimeHours;
+            employee.totals.total_hours += sessionHours;
+          }
         });
-      } else {
-        // Fallback per timesheet legacy senza sessioni
-        if (!timesheet.start_time) return;
-
-        const startTime = new Date(timesheet.start_time);
-        let endTime: Date;
-        let totalHours = 0;
-
-        if (timesheet.end_time) {
-          endTime = new Date(timesheet.end_time);
-          totalHours = timesheet.total_hours || 0;
-        } else {
-          endTime = new Date();
-          const diffMs = endTime.getTime() - startTime.getTime();
-          totalHours = Math.max(0, diffMs / (1000 * 60 * 60));
-        }
-
-        const startDate = format(startTime, 'yyyy-MM-dd');
-        const endDate = format(endTime, 'yyyy-MM-dd');
-        const isNightShift = startDate !== endDate || timesheet.night_hours > 0;
-
-        // Calcola buoni pasto
-        const employeeSettingsForUser = employeeSettings[timesheet.user_id];
-        BenefitsService.validateTemporalUsage('MonthlyCalendarView.getMealBenefits');
-        const mealBenefits = BenefitsService.calculateMealBenefitsSync(
-          timesheet, 
-          employeeSettingsForUser, 
-          companySettings
-        );
-
-        distributeSessionHours(timesheet, totalHours, startDate, endDate, isNightShift, employee, mealBenefits, 0);
-      }
+      });
     };
 
     // Funzione helper per distribuire le ore di una singola sessione
@@ -347,7 +329,7 @@ export function MonthlyCalendarView({
       }
 
       const employee = employeesMap.get(key)!;
-      distributeNightShiftHours(timesheet, employee);
+      distributeTimesheetHours(timesheet, employee);
     });
 
     // Aggiungi assenze

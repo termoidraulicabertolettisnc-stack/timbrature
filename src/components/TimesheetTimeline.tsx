@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateMealBenefits } from '@/utils/mealBenefitsCalculator';
+import { sessionsForDay, calculateDynamicBounds, utcToLocal, type Seg } from '@/utils/timeSegments';
 
 interface TimeBlock {
   timesheet: TimesheetWithProfile;
@@ -302,36 +303,20 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
     }
   };
 
-  // Calcola l'ora di inizio e fine dinamicamente basandosi sui timesheet
+  // Calculate dynamic hours using the new utility
   const calculateDynamicHours = (): {startHour: number, endHour: number} => {
-    let minHour = 6; // Default start hour
-    let maxHour = 22; // Default end hour
+    const allSegments: Seg[] = [];
     
-    timesheets.forEach(ts => {
-      if (!ts.start_time || !ts.end_time) return;
-      
-      const startMinutes = timeToMinutes(ts.start_time);
-      const endMinutes = timeToMinutes(ts.end_time);
-      
-      // Per sessioni multi-giorno usando end_date
-      if (ts.end_date && ts.end_date !== ts.date) {
-        // La sessione continua fino al giorno dopo
-        const actualEndHour = Math.floor(endMinutes / 60);
-        if (actualEndHour > 0) { // Se finisce dopo mezzanotte
-          maxHour = Math.max(maxHour, 24 + actualEndHour + 1);
-        }
-        // Per sessioni multi-giorno, iniziamo dalla mezzanotte
-        minHour = 0;
-      } else {
-        // Sessione normale dello stesso giorno
-        const startHour = Math.floor(startMinutes / 60);
-        const endHour = Math.floor(endMinutes / 60);
-        minHour = Math.min(minHour, startHour);
-        maxHour = Math.max(maxHour, endHour + 1);
-      }
+    timesheets.forEach(timesheet => {
+      weekDays.forEach(day => {
+        const dayISO = format(day, 'yyyy-MM-dd');
+        const segments = sessionsForDay(timesheet, dayISO);
+        allSegments.push(...segments);
+      });
     });
     
-    return {startHour: minHour, endHour: maxHour};
+    const { startHour, endHour } = calculateDynamicBounds(allSegments);
+    return { startHour: Math.max(6, startHour), endHour: Math.min(22, endHour) };
   };
   
   const {startHour: DYNAMIC_START_HOUR, endHour: DYNAMIC_END_HOUR} = calculateDynamicHours();
@@ -362,18 +347,10 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
     return ((adjustedHour - DYNAMIC_START_HOUR) * 60 + minute) * (HOUR_HEIGHT / 60);
   };
 
-  // Calcola i blocchi temporali per ogni giorno
+  // Calculate time blocks using the new utility functions
   const calculateTimeBlocks = (dayTimesheets: TimesheetWithProfile[], dayDate: Date): TimeBlock[] => {
     const currentDayStr = format(dayDate, 'yyyy-MM-dd');
-    console.log(`🔍 [${currentDayStr}] Timesheet ricevuti:`, dayTimesheets.map(ts => ({
-      id: ts.id,
-      date: ts.date,
-      end_date: ts.end_date,
-      start_time: ts.start_time,
-      end_time: ts.end_time,
-      sessions_count: ts.timesheet_sessions?.length || 0,
-      profileName: ts.profiles ? `${ts.profiles.first_name} ${ts.profiles.last_name}` : 'N/A'
-    })));
+    console.debug('sessionsForDay', { dayISO: currentDayStr, timesheets: dayTimesheets.length });
 
     if (dayTimesheets.length === 0) return [];
 

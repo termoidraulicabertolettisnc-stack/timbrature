@@ -157,263 +157,72 @@ export function WeeklyTimelineView({
       }
     });
 
-    // Utility per dividere turni notturni
-    const splitNightShift = (timesheet: TimesheetWithProfile, employee: EmployeeWeekData) => {
-      // Se abbiamo sessioni multiple, calcoliamo da quelle
-      if (timesheet.timesheet_sessions && timesheet.timesheet_sessions.length > 0) {
-        const workSessions = timesheet.timesheet_sessions
-          .filter(session => session.session_type === 'work')
-          .sort((a, b) => a.session_order - b.session_order);
+    // Process timesheets using the new utility functions
+    const processTimesheet = (timesheet: TimesheetWithProfile, employee: EmployeeWeekData) => {
+      weekDays.forEach((day, dayIndex) => {
+        const dayISO = format(day, 'yyyy-MM-dd');
+        const segments = sessionsForDay(timesheet, dayISO);
         
-        // Itera ogni sessione individualmente per gestire splits e ID univoci
-        workSessions.forEach((session, sessionIndex) => {
-          if (!session.start_time) return;
-          
-          const sessionStart = new Date(session.start_time);
-          const sessionEnd = session.end_time ? new Date(session.end_time) : new Date();
-          const sessionDuration = (sessionEnd.getTime() - sessionStart.getTime()) / (1000 * 60 * 60);
+        if (segments.length === 0) return;
+
+        segments.forEach((segment, segmentIndex) => {
+          const localStart = utcToLocal(segment.startUtc);
+          const localEnd = utcToLocal(segment.endUtc);
+          const sessionDuration = (localEnd.getTime() - localStart.getTime()) / (1000 * 60 * 60);
           
           if (sessionDuration <= 0) return;
-          
-          // Controlla se la sessione attraversa la mezzanotte
-          const startDate = format(sessionStart, 'yyyy-MM-dd');
-          const endDate = format(sessionEnd, 'yyyy-MM-dd');
-          const isNightShift = startDate !== endDate;
-          
-          // Calcola meal voucher solo per la prima sessione del giorno
-          const employeeSetting = employeeSettings[timesheet.user_id];
-          BenefitsService.validateTemporalUsage('WeeklyTimelineView');
-          const mealBenefits = sessionIndex === 0 ? BenefitsService.calculateMealBenefitsSync(
-            timesheet,
-            employeeSetting,
-            companySettings
-          ) : { mealVoucher: false };
-          
-          // Calcola ore regolari e straordinari per questa sessione
+
+          // Calculate meal benefits only for the first segment of each day
+          let mealBenefits = { mealVoucher: false };
+          if (segmentIndex === 0) {
+            const employeeSetting = employeeSettings[timesheet.user_id];
+            BenefitsService.validateTemporalUsage('WeeklyTimelineView');
+            mealBenefits = BenefitsService.calculateMealBenefitsSync(
+              timesheet,
+              employeeSetting,
+              companySettings
+            );
+          }
+
           const sessionRegularHours = Math.min(sessionDuration, 8);
           const sessionOvertimeHours = Math.max(0, sessionDuration - 8);
           
-          if (!isNightShift) {
-            // Sessione normale - stesso giorno
-            const dayIndex = employee.days.findIndex(day => day.date === startDate);
-            if (dayIndex === -1) return;
+          const startHour = localStart.getHours() + localStart.getMinutes() / 60;
+          const endHour = localEnd.getHours() + localEnd.getMinutes() / 60;
+          const position = (startHour / 24) * 100;
+          const width = ((endHour - startHour) / 24) * 100;
 
-            const day = employee.days[dayIndex];
-            const startHourUTC = sessionStart.getUTCHours() + sessionStart.getUTCMinutes() / 60 + 1;
-            const startHour = startHourUTC >= 24 ? startHourUTC - 24 : (startHourUTC < 0 ? startHourUTC + 24 : startHourUTC);
-            const endHour = Math.min(24, startHour + sessionDuration);
-            const position = (startHour / 24) * 100;
-            const width = ((endHour - startHour) / 24) * 100;
-
-            const entry: TimelineEntry = {
-              timesheet: { ...timesheet, id: `${timesheet.id}_s${sessionIndex}` },
-              start_time: format(sessionStart, 'HH:mm:ss'),
-              end_time: session.end_time ? format(sessionEnd, 'HH:mm:ss') : null,
-              duration: sessionDuration,
-              regular_duration: sessionRegularHours,
-              overtime_duration: sessionOvertimeHours,
-              position,
-              width,
-              mealVoucher: mealBenefits.mealVoucher,
-              isActive: !session.end_time
-            };
-
-            day.entries.push(entry);
-          } else {
-            // Sessione notturna - split across days
-            const startHourUTC = sessionStart.getUTCHours() + sessionStart.getUTCMinutes() / 60 + 1;
-            const endHourUTC = sessionEnd.getUTCHours() + sessionEnd.getUTCMinutes() / 60 + 1;
-            const startHour = startHourUTC >= 24 ? startHourUTC - 24 : (startHourUTC < 0 ? startHourUTC + 24 : startHourUTC);
-            const endHour = endHourUTC >= 24 ? endHourUTC - 24 : (endHourUTC < 0 ? endHourUTC + 24 : endHourUTC);
-            
-            // Prima parte: dal tempo di inizio fino a mezzanotte
-            const firstDayIndex = employee.days.findIndex(day => day.date === startDate);
-            if (firstDayIndex !== -1) {
-              const firstDayDuration = 24 - startHour;
-              const firstDayRegular = Math.min(firstDayDuration, 8);
-              const firstDayOvertime = Math.max(0, firstDayDuration - 8);
-              
-              const firstEntry: TimelineEntry = {
-                timesheet: { ...timesheet, id: `${timesheet.id}_s${sessionIndex}_p1` },
-                start_time: format(sessionStart, 'HH:mm:ss'),
-                end_time: '24:00:00',
-                duration: firstDayDuration,
-                regular_duration: firstDayRegular,
-                overtime_duration: firstDayOvertime,
-                position: (startHour / 24) * 100,
-                width: ((24 - startHour) / 24) * 100,
-                mealVoucher: mealBenefits.mealVoucher,
-                isActive: !session.end_time
-              };
-
-              employee.days[firstDayIndex].entries.push(firstEntry);
-            }
-
-            // Seconda parte: da mezzanotte al tempo di fine
-            const secondDayIndex = employee.days.findIndex(day => day.date === endDate);
-            if (secondDayIndex !== -1) {
-              const secondDayDuration = endHour;
-              const remainingRegular = Math.max(0, Math.min(8 - (24 - startHour), secondDayDuration));
-              const secondDayRegular = Math.max(0, remainingRegular);
-              const secondDayOvertime = Math.max(0, secondDayDuration - secondDayRegular);
-              
-              const secondEntry: TimelineEntry = {
-                timesheet: { ...timesheet, id: `${timesheet.id}_s${sessionIndex}_p2` },
-                start_time: '00:00:00',
-                end_time: session.end_time ? format(sessionEnd, 'HH:mm:ss') : null,
-                duration: secondDayDuration,
-                regular_duration: secondDayRegular,
-                overtime_duration: secondDayOvertime,
-                position: 0,
-                width: (endHour / 24) * 100,
-                mealVoucher: false, // Solo la prima parte ha il buono pasto
-                isActive: !session.end_time
-              };
-
-              employee.days[secondDayIndex].entries.push(secondEntry);
-            }
-          }
-          
-          // Aggiorna i totali dell'employee (una volta per sessione)
-          employee.totals.total_hours += sessionDuration;
-          employee.totals.overtime_hours += sessionOvertimeHours;
-          employee.totals.night_hours += (timesheet.night_hours || 0) / workSessions.length; // Distribuisci uniformemente
-        });
-        
-        return;
-      }
-
-      // Logica originale per timesheet senza sessioni
-      if (!timesheet.start_time) return;
-
-      const startTime = new Date(timesheet.start_time);
-      let endTime: Date;
-      let isActive = false;
-
-      if (timesheet.end_time) {
-        endTime = new Date(timesheet.end_time);
-      } else {
-        endTime = new Date();
-        isActive = true;
-      }
-
-      const totalDuration = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
-      if (isNaN(totalDuration) || totalDuration < 0) return;
-
-      // Controlla se il turno attraversa la mezzanotte
-      const startDate = format(startTime, 'yyyy-MM-dd');
-      const endDate = format(endTime, 'yyyy-MM-dd');
-      const isNightShift = startDate !== endDate || timesheet.night_hours > 0;
-
-      // Calcola meal voucher una sola volta
-      const employeeSetting = employeeSettings[timesheet.user_id];
-      BenefitsService.validateTemporalUsage('WeeklyTimelineView');
-      const mealBenefits = BenefitsService.calculateMealBenefitsSync(
-        timesheet,
-        employeeSetting,
-        companySettings
-      );
-
-      if (!isNightShift) {
-        // Turno normale - processa come prima
-        const dayIndex = employee.days.findIndex(day => day.date === timesheet.date);
-        if (dayIndex === -1) return;
-
-        const day = employee.days[dayIndex];
-        const startHourUTC = startTime.getUTCHours() + startTime.getUTCMinutes() / 60 + 1; // Convert to Europe/Rome
-        const startHour = startHourUTC >= 24 ? startHourUTC - 24 : (startHourUTC < 0 ? startHourUTC + 24 : startHourUTC);
-        const endHour = Math.min(24, startHour + totalDuration);
-        const position = (startHour / 24) * 100;
-        const width = ((endHour - startHour) / 24) * 100;
-
-        const regularHours = Math.min(totalDuration, 8);
-        const overtimeHours = Math.max(0, totalDuration - 8);
-
-        const entry: TimelineEntry = {
-          timesheet,
-          start_time: format(startTime, 'HH:mm:ss'),
-          end_time: timesheet.end_time ? format(endTime, 'HH:mm:ss') : null,
-          duration: totalDuration,
-          regular_duration: regularHours,
-          overtime_duration: overtimeHours,
-          position,
-          width,
-          mealVoucher: mealBenefits.mealVoucher,
-          isActive
-        };
-
-        day.entries.push(entry);
-      } else {
-        // Turno notturno - dividi in due parti - usando UTC+1 (Europa/Roma)
-        const startHourUTC = startTime.getUTCHours() + startTime.getUTCMinutes() / 60 + 1; // Convert to Europe/Rome
-        const endHourUTC = endTime.getUTCHours() + endTime.getUTCMinutes() / 60 + 1; // Convert to Europe/Rome
-        const startHour = startHourUTC >= 24 ? startHourUTC - 24 : (startHourUTC < 0 ? startHourUTC + 24 : startHourUTC);
-        const endHour = endHourUTC >= 24 ? endHourUTC - 24 : (endHourUTC < 0 ? endHourUTC + 24 : endHourUTC);
-        
-        // Prima parte: dal tempo di inizio fino a mezzanotte
-        const firstDayIndex = employee.days.findIndex(day => day.date === startDate);
-        if (firstDayIndex !== -1) {
-          const firstDayDuration = 24 - startHour;
-          const firstDayRegular = Math.min(firstDayDuration, 8);
-          const firstDayOvertime = Math.max(0, firstDayDuration - 8);
-          
-          const firstEntry: TimelineEntry = {
-            timesheet: { ...timesheet, id: `${timesheet.id}_part1` },
-            start_time: format(startTime, 'HH:mm:ss'),
-            end_time: '24:00:00',
-            duration: firstDayDuration,
-            regular_duration: firstDayRegular,
-            overtime_duration: firstDayOvertime,
-            position: (startHour / 24) * 100,
-            width: ((24 - startHour) / 24) * 100,
+          const entry: TimelineEntry = {
+            timesheet: { ...timesheet, id: `${timesheet.id}_${segment.sessionId || 'legacy'}_${segmentIndex}` },
+            start_time: format(localStart, 'HH:mm:ss'),
+            end_time: format(localEnd, 'HH:mm:ss'),
+            duration: sessionDuration,
+            regular_duration: sessionRegularHours,
+            overtime_duration: sessionOvertimeHours,
+            position,
+            width,
             mealVoucher: mealBenefits.mealVoucher,
-            isActive: isActive && !timesheet.end_time
+            isActive: !segment.sessionId || segment.sessionId.includes('ongoing')
           };
 
-          employee.days[firstDayIndex].entries.push(firstEntry);
-        }
-
-        // Seconda parte: da mezzanotte al tempo di fine
-        const secondDayIndex = employee.days.findIndex(day => day.date === endDate);
-        if (secondDayIndex !== -1) {
-          const secondDayDuration = endHour;
-          const remainingRegular = Math.max(0, Math.min(8 - (24 - startHour), secondDayDuration));
-          const secondDayRegular = Math.max(0, remainingRegular);
-          const secondDayOvertime = Math.max(0, secondDayDuration - secondDayRegular);
+          employee.days[dayIndex].entries.push(entry);
           
-          const secondEntry: TimelineEntry = {
-            timesheet: { ...timesheet, id: `${timesheet.id}_part2` },
-            start_time: '00:00:00',
-            end_time: timesheet.end_time ? format(endTime, 'HH:mm:ss') : null,
-            duration: secondDayDuration,
-            regular_duration: secondDayRegular,
-            overtime_duration: secondDayOvertime,
-            position: 0,
-            width: (endHour / 24) * 100,
-            mealVoucher: false, // Solo la prima parte ha il buono pasto
-            isActive: isActive && !timesheet.end_time
-          };
-
-          employee.days[secondDayIndex].entries.push(secondEntry);
-        }
-      }
-
-      // Aggiorna i totali una sola volta
-      if (!isNaN(totalDuration)) {
-        const regularHours = Math.min(totalDuration, 8);
-        const overtimeHours = Math.max(0, totalDuration - 8);
-        employee.totals.total_hours += totalDuration;
-        employee.totals.overtime_hours += overtimeHours;
-        employee.totals.night_hours += timesheet.night_hours || 0;
-      }
+          // Update totals only once per segment
+          if (segmentIndex === 0) {
+            employee.totals.total_hours += sessionDuration;
+            employee.totals.overtime_hours += sessionOvertimeHours;
+            employee.totals.night_hours += (timesheet.night_hours || 0) * (sessionDuration / (timesheet.total_hours || sessionDuration));
+          }
+        });
+      });
     };
 
-    // Processa i timesheet per ogni dipendente
+    // Process timesheets for each employee
     timesheets.forEach(timesheet => {
       const employee = employeesMap.get(timesheet.user_id);
       if (!employee) return;
 
-      splitNightShift(timesheet, employee);
+      processTimesheet(timesheet, employee);
     });
 
     const result = Array.from(employeesMap.values());
