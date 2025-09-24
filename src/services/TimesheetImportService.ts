@@ -9,6 +9,13 @@ type ImportOutcome = {
 };
 
 function pairSessions(inTimes: string[], outTimes: string[]) {
+  console.log(`🔍 PAIRING SESSIONS - Input:`, {
+    inTimes_count: inTimes?.length || 0,
+    outTimes_count: outTimes?.length || 0,
+    inTimes: inTimes,
+    outTimes: outTimes
+  });
+  
   // Usa la coppia minima per evitare end_time null
   const n = Math.min(inTimes.length, outTimes.length);
   const pairs: { start: string; end: string }[] = [];
@@ -16,15 +23,43 @@ function pairSessions(inTimes: string[], outTimes: string[]) {
   for (let i = 0; i < n; i++) {
     const start = inTimes[i];
     const end = outTimes[i];
-    if (!start || !end) continue;
+    
+    console.log(`🔍 PAIRING SESSION ${i + 1}:`, { start, end });
+    
+    if (!start || !end) {
+      console.log(`❌ SKIPPING SESSION ${i + 1}: Missing start or end time`);
+      continue;
+    }
     
     // Scarta intervalli invertiti o troppo brevi
     const startTime = new Date(start).getTime();
     const endTime = new Date(end).getTime();
-    if (startTime >= endTime || endTime - startTime < 60000) continue; // Almeno 1 minuto
     
+    console.log(`🔍 TIME VALIDATION SESSION ${i + 1}:`, {
+      start_parsed: new Date(start).toISOString(),
+      end_parsed: new Date(end).toISOString(),
+      startTime,
+      endTime,
+      duration_minutes: (endTime - startTime) / (1000 * 60),
+      is_valid_order: startTime < endTime,
+      is_long_enough: (endTime - startTime) >= 60000
+    });
+    
+    if (startTime >= endTime) {
+      console.log(`❌ SKIPPING SESSION ${i + 1}: Invalid time order (start >= end)`);
+      continue;
+    }
+    
+    if (endTime - startTime < 60000) { // Almeno 1 minuto
+      console.log(`❌ SKIPPING SESSION ${i + 1}: Duration too short (< 1 minute)`);
+      continue;
+    }
+    
+    console.log(`✅ ACCEPTING SESSION ${i + 1}`);
     pairs.push({ start, end });
   }
+  
+  console.log(`🔍 PAIRING RESULT: ${pairs.length} valid sessions out of ${n} possible`);
   return pairs;
 }
 

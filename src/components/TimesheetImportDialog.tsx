@@ -164,11 +164,18 @@ console.log('🔍 IMPORT DIALOG - handleParse called with file:', file?.name);
              date: timesheet.date,
              total_hours: timesheet.total_hours,
              clockInTimes: timesheet.clockInTimes?.length || 0,
-             clockOutTimes: timesheet.clockOutTimes?.length || 0
+             clockOutTimes: timesheet.clockOutTimes?.length || 0,
+             actual_clockInTimes: timesheet.clockInTimes,
+             actual_clockOutTimes: timesheet.clockOutTimes
            });
 
            // Find employee by fiscal code or name
            const employee = await findEmployeeByFiscalCode(timesheet.codice_fiscale, timesheet.employee_name);
+           
+           console.log(`🔍 EMPLOYEE SEARCH RESULT for "${timesheet.employee_name}" (CF: ${timesheet.codice_fiscale}):`, {
+             found: !!employee,
+             employee_data: employee || 'NOT FOUND'
+           });
            
            if (!employee) {
              console.error(`❌ EMPLOYEE NOT FOUND - ROW ${i + 1}:`, {
