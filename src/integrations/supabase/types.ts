@@ -918,6 +918,13 @@ export type Database = {
           user_name: string
         }[]
       }
+      get_current_user_context: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          company_id: string
+          user_role: Database["public"]["Enums"]["user_role"]
+        }[]
+      }
       get_current_user_role_and_company: {
         Args: Record<PropertyKey, never>
         Returns: {
