@@ -191,36 +191,41 @@ console.log('🔍 IMPORT DIALOG - handleParse called with file:', file?.name);
             company_id: employee.company_id
           });
 
-           try {
-             console.log(`🔍 CALLING TimesheetImportService.importTimesheet:`, {
-               timesheet_data: {
-                 employee_name: timesheet.employee_name,
-                 date: timesheet.date,
-                 total_hours: timesheet.total_hours,
-                 clockInTimes: timesheet.clockInTimes,
-                 clockOutTimes: timesheet.clockOutTimes
-               },
-               employee_data: {
-                 user_id: employee.user_id,
-                 name: `${employee.first_name} ${employee.last_name}`
-               }
-             });
-             
-             const result = await TimesheetImportService.importTimesheet(timesheet, employee);
-             importResults.imported++;
-             console.log(`✅ Successfully imported timesheet for ${employee.user_id} on ${timesheet.date}:`, result.id);
-           } catch (importError) {
-             console.error(`❌ DETAILED TimesheetImportService ERROR for ${timesheet.employee_name} on ${timesheet.date}:`, {
-               error_name: importError?.constructor?.name,
-               error_message: importError instanceof Error ? importError.message : 'Unknown error',
-               error_stack: importError instanceof Error ? importError.stack : undefined,
-               error_full: importError,
-               timesheet_data: timesheet,
-               employee_data: employee,
-               current_user_id: currentUserId
-             });
-             importResults.errors++;
-           }
+            try {
+              console.log(`🔍 CALLING TimesheetImportService.importTimesheet:`, {
+                timesheet_data: {
+                  employee_name: timesheet.employee_name,
+                  date: timesheet.date,
+                  total_hours: timesheet.total_hours,
+                  clockInTimes: timesheet.clockInTimes,
+                  clockOutTimes: timesheet.clockOutTimes
+                },
+                employee_data: {
+                  user_id: employee.user_id,
+                  name: `${employee.first_name} ${employee.last_name}`
+                }
+              });
+              
+              const result = await TimesheetImportService.importTimesheet(timesheet, employee);
+              importResults.imported++;
+              console.log(`✅ Successfully imported timesheet:`, {
+                employee: `${employee.first_name} ${employee.last_name}`,
+                date: timesheet.date,
+                timesheetId: result.timesheetId,
+                sessionsInserted: result.sessionsInserted,
+                totalHours: result.totalHours
+              });
+            } catch (importError) {
+              console.error(`❌ IMPORT ERROR for ${timesheet.employee_name} on ${timesheet.date}:`, importError);
+              importResults.errors++;
+              
+              // Mostra subito toast con errore specifico
+              toast({
+                title: "Errore importazione riga",
+                description: `${timesheet.employee_name} (${timesheet.date}): ${importError instanceof Error ? importError.message : 'Errore sconosciuto'}`,
+                variant: "destructive",
+              });
+            }
 
          } catch (outerError) {
            console.error(`❌ GENERAL ERROR processing row ${i + 1}:`, {
@@ -240,9 +245,12 @@ console.log('🔍 IMPORT DIALOG - handleParse called with file:', file?.name);
       setProgress(100);
       setStep('complete');
 
+      // Mostra risultato accurato basato su successi/errori
+      const hasErrors = importResults.errors > 0;
       toast({
-        title: "Importazione completata",
-        description: `Importate: ${importResults.imported}, Saltate: ${importResults.skipped}, Errori: ${importResults.errors}`,
+        title: hasErrors ? "Importazione completata con errori" : "Importazione completata",
+        description: `Importate: ${importResults.imported}, Errori: ${importResults.errors}`,
+        variant: hasErrors ? "destructive" : "default"
       });
 
       // Call onImportComplete to refresh the parent component
@@ -414,18 +422,33 @@ console.log('🔍 IMPORT DIALOG - handleParse called with file:', file?.name);
     </div>
   );
 
-  const renderCompleteStep = () => (
-    <div className="space-y-4 text-center">
-      <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
-      <h3 className="text-lg font-medium">Importazione completata!</h3>
-      <p className="text-sm text-muted-foreground">
-        Le timbrature sono state importate con successo
-      </p>
-      <Button onClick={handleClose} className="w-full">
-        Chiudi
-      </Button>
-    </div>
-  );
+  const renderCompleteStep = () => {
+    // Calcola i risultati dall'ultima importazione
+    const hasErrors = parseResult ? parseResult.errors.length > 0 : false;
+    const isSuccess = !hasErrors;
+    
+    return (
+      <div className="space-y-4 text-center">
+        {isSuccess ? (
+          <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
+        ) : (
+          <AlertTriangle className="mx-auto h-12 w-12 text-yellow-500" />
+        )}
+        <h3 className="text-lg font-medium">
+          {isSuccess ? "Importazione completata!" : "Importazione completata con errori"}
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          {isSuccess 
+            ? "Le timbrature sono state importate con successo"
+            : "Alcune timbrature hanno avuto problemi durante l'importazione"
+          }
+        </p>
+        <Button onClick={handleClose} className="w-full">
+          Chiudi
+        </Button>
+      </div>
+    );
+  };
 
   return (
     <Dialog 

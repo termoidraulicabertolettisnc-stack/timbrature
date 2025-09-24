@@ -2,8 +2,34 @@ import { supabase } from '@/integrations/supabase/client';
 import { TimesheetSession } from '@/types/timesheet-session';
 import { ParsedTimesheet } from './ExcelImportService';
 
+type ImportOutcome = {
+  timesheetId: string;
+  sessionsInserted: number;
+  totalHours: number;
+};
+
+function pairSessions(inTimes: string[], outTimes: string[]) {
+  // Usa la coppia minima per evitare end_time null
+  const n = Math.min(inTimes.length, outTimes.length);
+  const pairs: { start: string; end: string }[] = [];
+  
+  for (let i = 0; i < n; i++) {
+    const start = inTimes[i];
+    const end = outTimes[i];
+    if (!start || !end) continue;
+    
+    // Scarta intervalli invertiti o troppo brevi
+    const startTime = new Date(start).getTime();
+    const endTime = new Date(end).getTime();
+    if (startTime >= endTime || endTime - startTime < 60000) continue; // Almeno 1 minuto
+    
+    pairs.push({ start, end });
+  }
+  return pairs;
+}
+
 export class TimesheetImportService {
-  static async importTimesheet(timesheet: ParsedTimesheet, employee: { user_id: string }) {
+  static async importTimesheet(timesheet: ParsedTimesheet, employee: { user_id: string }): Promise<ImportOutcome> {
     console.log(`🔍 IMPORT START - TimesheetImportService.importTimesheet called:`, {
       timesheet: {
         employee_name: timesheet.employee_name,
@@ -15,37 +41,25 @@ export class TimesheetImportService {
       employee: employee
     });
 
-    // Check if this is an absence (no clock times)
-    const hasClockTimes = timesheet.clockInTimes.length > 0 && timesheet.clockOutTimes.length > 0;
-    
-    console.log(`🔍 hasClockTimes: ${hasClockTimes}`);
-    
     // Get current user for created_by field
     const currentUserResult = await supabase.auth.getUser();
     const currentUserId = currentUserResult.data.user?.id;
     
-    console.log(`🔍 Current user ID: ${currentUserId}`);
+    if (!currentUserId) {
+      throw new Error('Utente non autenticato');
+    }
     
-    // Prepare the timesheet data for insertion
+    // 1) UPSERT del timesheet (idempotente sul giorno/utente)
     const timesheetData = {
       user_id: employee.user_id,
       date: timesheet.date,
-      // If no clock times, mark as absence and set total_hours to 0
-      is_absence: !hasClockTimes,
-      absence_type: !hasClockTimes ? 'F' as const : null,
-      total_hours: !hasClockTimes ? 0 : null,
-      // Clear individual time fields - sessions will handle timing
-      start_time: null,
-      end_time: null,
-      lunch_start_time: null,
-      lunch_end_time: null,
-      lunch_duration_minutes: null,
-      notes: timesheet.notes || (!hasClockTimes ? 'Assenza importata da Excel' : null),
+      is_absence: false, // Le sessioni determineranno se ci sono ore lavorate
+      notes: timesheet.notes || `Importato da Excel - ${timesheet.employee_name}`,
       created_by: currentUserId,
-      project_id: null // Default to no project
+      project_id: null
     };
 
-    console.log(`🔍 TIMESHEET DATA TO INSERT:`, timesheetData);
+    console.log(`🔍 TIMESHEET DATA TO UPSERT:`, timesheetData);
 
     const { data: timesheetRecord, error: timesheetError } = await supabase
       .from('timesheets')
@@ -53,65 +67,71 @@ export class TimesheetImportService {
         onConflict: 'user_id,date',
         ignoreDuplicates: false 
       })
-      .select()
+      .select('id')
       .single();
 
-    if (timesheetError) {
-      console.error('❌ ERROR INSERTING TIMESHEET:', {
-        error: timesheetError,
-        data: timesheetData
-      });
-      throw timesheetError;
+    if (timesheetError || !timesheetRecord?.id) {
+      throw new Error(`Impossibile creare/aggiornare timesheet (${timesheet.employee_name} - ${timesheet.date}): ${timesheetError?.message || 'no id returned'}`);
     }
 
-    console.log(`✅ TIMESHEET UPSERTED SUCCESSFULLY:`, timesheetRecord);
+    const timesheetId = timesheetRecord.id;
+    console.log(`✅ TIMESHEET UPSERTED SUCCESSFULLY:`, timesheetId);
 
-    // Create sessions for each clock-in/out pair
-    const sessions: Omit<TimesheetSession, 'id' | 'created_at' | 'updated_at'>[] = [];
-    
-    console.log(`🔍 Creating sessions for timesheet ${timesheetRecord.id}:`, {
-      date: timesheet.date,
-      clockInTimes: timesheet.clockInTimes,
-      clockOutTimes: timesheet.clockOutTimes,
-      expectedSessions: Math.min(timesheet.clockInTimes.length, timesheet.clockOutTimes.length)
-    });
-    
-    // Add work sessions for each clock-in/out pair
-    const maxSessions = Math.min(timesheet.clockInTimes.length, timesheet.clockOutTimes.length);
-    for (let i = 0; i < maxSessions; i++) {
-      const clockIn = timesheet.clockInTimes[i];
-      const clockOut = timesheet.clockOutTimes[i];
-      
-      if (clockIn && clockOut) {
-        console.log(`🔍 Creating session ${i + 1}:`, { clockIn, clockOut });
-        
-        sessions.push({
-          timesheet_id: timesheetRecord.id,
-          session_order: i + 1,
-          start_time: clockIn,
-          end_time: clockOut,
-          session_type: 'work',
-          start_location_lat: i === 0 ? (timesheet.start_location_lat || null) : null,
-          start_location_lng: i === 0 ? (timesheet.start_location_lng || null) : null,
-          end_location_lat: i === maxSessions - 1 ? (timesheet.end_location_lat || null) : null,
-          end_location_lng: i === maxSessions - 1 ? (timesheet.end_location_lng || null) : null,
-          notes: `Sessione lavoro ${i + 1}`
-        });
-      }
+    // 2) PULIZIA sessioni precedenti (reimport idempotente)
+    const { error: delError } = await supabase
+      .from('timesheet_sessions')
+      .delete()
+      .eq('timesheet_id', timesheetId);
+
+    if (delError) {
+      throw new Error(`Pulizia sessioni fallita (${timesheet.employee_name} - ${timesheet.date}): ${delError.message}`);
     }
-    
-    console.log(`🔍 Total sessions created: ${sessions.length}`);
 
-    // If we have more than one work session, try to detect lunch breaks
-    if (sessions.length > 1) {
-      console.log(`🔍 Detecting lunch breaks between ${sessions.length} sessions`);
+    console.log(`🔍 Cleaned existing sessions for timesheet ${timesheetId}`);
+
+    // 3) CREA le sessioni di lavoro (pairing robusto)
+    const pairs = pairSessions(timesheet.clockInTimes || [], timesheet.clockOutTimes || []);
+    if (pairs.length === 0) {
+      console.log(`⚠️ No valid session pairs found for ${timesheet.employee_name} on ${timesheet.date}`);
+      // Niente sessioni: lasciamo il timesheet senza ore (ma almeno non esplode)
+      return { timesheetId, sessionsInserted: 0, totalHours: 0 };
+    }
+
+    console.log(`🔍 Creating ${pairs.length} work sessions for timesheet ${timesheetId}:`, pairs);
+
+    const workSessions = pairs.map((p, idx) => ({
+      timesheet_id: timesheetId,
+      session_type: 'work' as const,
+      session_order: idx + 1,
+      start_time: p.start,
+      end_time: p.end,
+      start_location_lat: idx === 0 ? (timesheet.start_location_lat || null) : null,
+      start_location_lng: idx === 0 ? (timesheet.start_location_lng || null) : null,
+      end_location_lat: idx === pairs.length - 1 ? (timesheet.end_location_lat || null) : null,
+      end_location_lng: idx === pairs.length - 1 ? (timesheet.end_location_lng || null) : null,
+      notes: `Sessione lavoro ${idx + 1} (importata)`
+    }));
+
+    // 4) DETECT lunch breaks per sessioni multiple
+    const allSessions: Array<{
+      timesheet_id: string;
+      session_type: 'work' | 'lunch_break';
+      session_order: number;
+      start_time: string;
+      end_time: string;
+      start_location_lat: number | null;
+      start_location_lng: number | null;
+      end_location_lat: number | null;
+      end_location_lng: number | null;
+      notes: string;
+    }> = [...workSessions];
+    
+    if (workSessions.length > 1) {
+      console.log(`🔍 Detecting lunch breaks between ${workSessions.length} work sessions`);
       
-      // Look for gaps between sessions that could be lunch breaks
-      const lunchBreakSessions: Omit<TimesheetSession, 'id' | 'created_at' | 'updated_at'>[] = [];
-      
-      for (let i = 0; i < sessions.length - 1; i++) {
-        const currentSession = sessions[i];
-        const nextSession = sessions[i + 1];
+      for (let i = 0; i < workSessions.length - 1; i++) {
+        const currentSession = workSessions[i];
+        const nextSession = workSessions[i + 1];
         
         const gapStart = new Date(currentSession.end_time);
         const gapEnd = new Date(nextSession.start_time);
@@ -119,75 +139,59 @@ export class TimesheetImportService {
         
         console.log(`🔍 Gap between session ${i + 1} and ${i + 2}: ${gapMinutes} minutes`);
         
-        // If gap is between 15 minutes and 2 hours, consider it a lunch break
+        // Se gap è tra 15 minuti e 2 ore, consideralo pausa pranzo
         if (gapMinutes >= 15 && gapMinutes <= 120) {
           console.log(`🔍 Creating lunch break session for ${gapMinutes} minute gap`);
           
-          // Insert lunch break session
-          const lunchBreakSession: Omit<TimesheetSession, 'id' | 'created_at' | 'updated_at'> = {
-            timesheet_id: timesheetRecord.id,
-            session_order: 0, // Will be set correctly after sorting
+          const lunchSession = {
+            timesheet_id: timesheetId,
+            session_type: 'lunch_break' as const,
+            session_order: 0, // Verrà corretto dopo sorting
             start_time: currentSession.end_time,
             end_time: nextSession.start_time,
-            session_type: 'lunch_break',
             start_location_lat: null,
             start_location_lng: null,
             end_location_lat: null,
             end_location_lng: null,
             notes: `Pausa pranzo automatica (${Math.round(gapMinutes)} min)`
           };
-          lunchBreakSessions.push(lunchBreakSession);
+          allSessions.push(lunchSession);
         }
       }
       
-      // Add lunch break sessions to the main array
-      sessions.push(...lunchBreakSessions);
-      
-      // Reorder ALL sessions (work + lunch) chronologically and fix session_order
-      sessions.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
-      sessions.forEach((session, index) => {
+      // Riordina tutte le sessioni cronologicamente e sistema session_order
+      allSessions.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+      allSessions.forEach((session, index) => {
         session.session_order = index + 1;
       });
       
-      console.log(`🔍 Final sessions after lunch break detection: ${sessions.length} (${sessions.filter(s => s.session_type === 'work').length} work + ${sessions.filter(s => s.session_type === 'lunch_break').length} lunch)`);
-    } else {
-      console.log(`🔍 Single session detected, no lunch break detection needed`);
+      console.log(`🔍 Final sessions: ${allSessions.length} total (${allSessions.filter(s => s.session_type === 'work').length} work + ${allSessions.filter(s => s.session_type === 'lunch_break').length} lunch)`);
     }
 
-    // Delete existing sessions for this timesheet first
-    const { error: deleteError } = await supabase
+    // 5) INSERT sessioni nel database
+    const { error: insErr } = await supabase
       .from('timesheet_sessions')
-      .delete()
-      .eq('timesheet_id', timesheetRecord.id);
+      .insert(allSessions);
 
-    if (deleteError) {
-      console.error('Error deleting existing sessions:', deleteError);
-      throw deleteError;
+    if (insErr) {
+      throw new Error(`Inserimento sessioni fallito (${timesheet.employee_name} - ${timesheet.date}): ${insErr.message}`);
     }
 
-    // Insert new sessions if any exist
-    if (sessions.length > 0) {
-      console.log(`🔍 Inserting ${sessions.length} sessions into database:`, sessions.map(s => ({
-        order: s.session_order,
-        type: s.session_type,
-        start: s.start_time,
-        end: s.end_time
-      })));
-      
-      const { error: sessionsError } = await supabase
-        .from('timesheet_sessions')
-        .insert(sessions);
+    // Calcola ore totali per il ritorno
+    let totalMinutes = 0;
+    workSessions.forEach(session => {
+      const start = new Date(session.start_time).getTime();
+      const end = new Date(session.end_time).getTime();
+      totalMinutes += (end - start) / (1000 * 60);
+    });
+    const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
 
-      if (sessionsError) {
-        console.error('Error inserting sessions:', sessionsError);
-        throw sessionsError;
-      }
-      
-      console.log(`✅ Successfully inserted ${sessions.length} sessions`);
-    } else {
-      console.log(`⚠️ No sessions to insert for timesheet ${timesheetRecord.id}`);
-    }
+    console.log(`✅ Successfully imported timesheet with ${allSessions.length} sessions, ${totalHours}h total`);
 
-    return timesheetRecord;
+    return { 
+      timesheetId, 
+      sessionsInserted: allSessions.length, 
+      totalHours 
+    };
   }
 }
