@@ -1,5 +1,3 @@
-import { TimesheetSession } from './timesheet-session';
-
 export interface TimesheetWithProfile {
   id: string;
   date: string;
@@ -35,5 +33,4 @@ export interface TimesheetWithProfile {
   projects: {
     name: string;
   } | null;
-  sessions?: TimesheetSession[];
 }

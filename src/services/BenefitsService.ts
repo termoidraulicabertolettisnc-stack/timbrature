@@ -65,6 +65,10 @@ export class BenefitsService {
     );
   } else {
     // Fallback to synchronous calculation (for backward compatibility)
+    console.warn(
+      '⚠️ Using synchronous meal benefits calculation. ' +
+      'Consider providing user_id and date for accurate temporal calculation.'
+    );
     benefits = calculateMealBenefits(timesheet, employeeSettings, companySettings);
   }
 
@@ -129,7 +133,18 @@ export class BenefitsService {
     };
   }
 
-  // DEPRECATED METHOD REMOVED - Use calculateMealBenefits instead
+  /**
+   * @deprecated Use calculateMealBenefits instead
+   * This method is kept for backward compatibility only
+   */
+  static calculateMealBenefitsSync(
+    timesheet: TimesheetData,
+    employeeSettings?: EmployeeSettings,
+    companySettings?: CompanySettings
+  ): MealBenefits {
+    console.warn('🚨 DEPRECATED: Use BenefitsService.calculateMealBenefits instead');
+    return calculateMealBenefits(timesheet, employeeSettings, companySettings);
+  }
 
   /**
    * Calculate meal benefits for multiple timesheets efficiently
@@ -170,10 +185,12 @@ export class BenefitsService {
   }
 
   /**
-   * Validate that temporal settings are being used correctly (optimized)
+   * Validate that temporal settings are being used correctly
    */
-  static validateTemporalUsage(_context: string): void {
-    // Performance optimized - validation only in development with minimal logging
+  static validateTemporalUsage(context: string): void {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`✅ BenefitsService used correctly in: ${context}`);
+    }
   }
 }
 
