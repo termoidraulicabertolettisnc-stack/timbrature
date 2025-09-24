@@ -17,7 +17,28 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Only accept POST requests
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   try {
+    // Validate environment variables
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+
+    if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
+      console.error('❌ Missing required environment variables');
+      return new Response(
+        JSON.stringify({ error: 'Server configuration error' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Get auth header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -28,15 +49,12 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Create admin client with service role
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     // Create regular client to verify current user
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      supabaseUrl,
+      supabaseAnonKey,
       {
         global: {
           headers: { Authorization: authHeader },
@@ -44,9 +62,10 @@ const handler = async (req: Request): Promise<Response> => {
       }
     );
 
-    // Verify current user is admin
+    // Verify current user is authenticated
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
+      console.warn('⚠️ Authentication failed:', userError?.message);
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -60,19 +79,53 @@ const handler = async (req: Request): Promise<Response> => {
       .eq('user_id', user.id)
       .single();
 
-    if (profileError || !currentProfile || currentProfile.role !== 'amministratore') {
+    if (profileError) {
+      console.error('❌ Profile fetch error:', profileError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to fetch user profile' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!currentProfile || currentProfile.role !== 'amministratore') {
       return new Response(
         JSON.stringify({ error: 'Insufficient permissions' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Parse request body
-    const { email }: DeleteEmployeeRequest = await req.json();
+    // Parse and validate request body
+    let requestBody: DeleteEmployeeRequest;
+    try {
+      requestBody = await req.json();
+    } catch (parseError) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON in request body' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { email } = requestBody;
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      return new Response(
+        JSON.stringify({ error: 'Valid email is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     console.log('🗑️ Deleting employee with email:', email);
 
-    // Find user by email
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+    // Find user by email using admin client
+    const { data: existingUsers, error: listUsersError } = await supabaseAdmin.auth.admin.listUsers();
+    
+    if (listUsersError) {
+      console.error('❌ Failed to list users:', listUsersError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to find user' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const userToDelete = existingUsers.users?.find(u => u.email === email);
 
     if (!userToDelete) {
@@ -85,11 +138,19 @@ const handler = async (req: Request): Promise<Response> => {
     console.log('👤 Found user to delete:', userToDelete.id);
 
     // Get employee profile to verify company access
-    const { data: employeeProfile } = await supabaseAdmin
+    const { data: employeeProfile, error: employeeProfileError } = await supabaseAdmin
       .from('profiles')
       .select('company_id')
       .eq('user_id', userToDelete.id)
       .single();
+
+    if (employeeProfileError) {
+      console.error('❌ Employee profile fetch error:', employeeProfileError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to fetch employee profile' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Verify admin can delete this employee (same company)
     if (!employeeProfile || employeeProfile.company_id !== currentProfile.company_id) {
@@ -99,98 +160,107 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
+    // Prevent self-deletion
+    if (userToDelete.id === user.id) {
+      return new Response(
+        JSON.stringify({ error: 'Cannot delete your own account' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // CASCADE DELETE ALL RELATED DATA
     console.log('🧹 Starting cascade deletion for user:', userToDelete.id);
 
+    const deletionResults: Array<{ table: string; success: boolean; error?: string }> = [];
+
+    // Helper function for deletion with error handling
+    const safeDelete = async (tableName: string, deleteOperation: Promise<any>) => {
+      try {
+        const { error } = await deleteOperation;
+        if (error) {
+          console.warn(`⚠️ ${tableName} delete error:`, error.message);
+          deletionResults.push({ table: tableName, success: false, error: error.message });
+        } else {
+          console.log(`✅ ${tableName} deleted successfully`);
+          deletionResults.push({ table: tableName, success: true });
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        console.warn(`⚠️ ${tableName} delete exception:`, errorMessage);
+        deletionResults.push({ table: tableName, success: false, error: errorMessage });
+      }
+    };
+
     // 1. Delete location pings
-    const { error: pingsError } = await supabaseAdmin
-      .from('location_pings')
-      .delete()
-      .eq('user_id', userToDelete.id);
-    
-    if (pingsError) console.warn('⚠️ Location pings delete:', pingsError.message);
-    else console.log('✅ Location pings deleted');
+    await safeDelete('location_pings', 
+      supabaseAdmin.from('location_pings').delete().eq('user_id', userToDelete.id)
+    );
 
-    // 2. Delete timesheet sessions (via timesheets cascade)
-    console.log('🔄 Deleting timesheet sessions...');
-    
-    // 3. Delete timesheets (this will cascade to timesheet_sessions)
-    const { error: timesheetsError } = await supabaseAdmin
-      .from('timesheets')
-      .delete()
-      .eq('user_id', userToDelete.id);
-    
-    if (timesheetsError) console.warn('⚠️ Timesheets delete:', timesheetsError.message);
-    else console.log('✅ Timesheets deleted');
+    // 2. Delete employee absences
+    await safeDelete('employee_absences', 
+      supabaseAdmin.from('employee_absences').delete().eq('user_id', userToDelete.id)
+    );
 
-    // 4. Delete employee absences
-    const { error: absencesError } = await supabaseAdmin
-      .from('employee_absences')
-      .delete()
-      .eq('user_id', userToDelete.id);
-    
-    if (absencesError) console.warn('⚠️ Employee absences delete:', absencesError.message);
-    else console.log('✅ Employee absences deleted');
+    // 3. Delete employee overtime conversions
+    await safeDelete('employee_overtime_conversions', 
+      supabaseAdmin.from('employee_overtime_conversions').delete().eq('user_id', userToDelete.id)
+    );
 
-    // 5. Delete employee overtime conversions
-    const { error: overtimeError } = await supabaseAdmin
-      .from('employee_overtime_conversions')
-      .delete()
-      .eq('user_id', userToDelete.id);
-    
-    if (overtimeError) console.warn('⚠️ Overtime conversions delete:', overtimeError.message);
-    else console.log('✅ Overtime conversions deleted');
+    // 4. Delete meal voucher conversions
+    await safeDelete('employee_meal_voucher_conversions', 
+      supabaseAdmin.from('employee_meal_voucher_conversions').delete().eq('user_id', userToDelete.id)
+    );
 
-    // 6. Delete meal voucher conversions
-    const { error: vouchersError } = await supabaseAdmin
-      .from('employee_meal_voucher_conversions')
-      .delete()
-      .eq('user_id', userToDelete.id);
-    
-    if (vouchersError) console.warn('⚠️ Meal voucher conversions delete:', vouchersError.message);
-    else console.log('✅ Meal voucher conversions deleted');
+    // 5. Delete employee settings
+    await safeDelete('employee_settings', 
+      supabaseAdmin.from('employee_settings').delete().eq('user_id', userToDelete.id)
+    );
 
-    // 7. Delete employee settings
-    const { error: settingsError } = await supabaseAdmin
-      .from('employee_settings')
-      .delete()
-      .eq('user_id', userToDelete.id);
-    
-    if (settingsError) console.warn('⚠️ Employee settings delete:', settingsError.message);
-    else console.log('✅ Employee settings deleted');
+    // 6. Delete timesheet sessions first (child records)
+    await safeDelete('timesheet_sessions', 
+      supabaseAdmin.from('timesheet_sessions').delete().eq('user_id', userToDelete.id)
+    );
+
+    // 7. Delete timesheets (parent records)
+    await safeDelete('timesheets', 
+      supabaseAdmin.from('timesheets').delete().eq('user_id', userToDelete.id)
+    );
 
     // 8. Delete audit logs (where user was the one making changes)
-    const { error: auditError } = await supabaseAdmin
-      .from('audit_logs')
-      .delete()
-      .eq('changed_by', userToDelete.id);
-    
-    if (auditError) console.warn('⚠️ Audit logs delete:', auditError.message);
-    else console.log('✅ Audit logs deleted');
+    await safeDelete('audit_logs', 
+      supabaseAdmin.from('audit_logs').delete().eq('changed_by', userToDelete.id)
+    );
 
-    // 9. Finally, delete the profile
+    // 9. Delete the profile
     const { error: profileDeleteError } = await supabaseAdmin
       .from('profiles')
       .delete()
       .eq('user_id', userToDelete.id);
 
     if (profileDeleteError) {
-      console.error('❌ Profile delete error:', profileDeleteError);
+      console.error('❌ Critical: Profile delete error:', profileDeleteError);
       return new Response(
-        JSON.stringify({ error: `Failed to delete profile: ${profileDeleteError.message}` }),
+        JSON.stringify({ 
+          error: `Failed to delete profile: ${profileDeleteError.message}`,
+          deletionResults
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     console.log('✅ Profile deleted successfully');
+    deletionResults.push({ table: 'profiles', success: true });
 
     // 10. Delete the auth user (final step)
     const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userToDelete.id);
 
     if (authDeleteError) {
-      console.error('❌ Auth user delete error:', authDeleteError);
+      console.error('❌ Critical: Auth user delete error:', authDeleteError);
       return new Response(
-        JSON.stringify({ error: `Failed to delete auth user: ${authDeleteError.message}` }),
+        JSON.stringify({ 
+          error: `Failed to delete auth user: ${authDeleteError.message}`,
+          deletionResults
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -198,11 +268,20 @@ const handler = async (req: Request): Promise<Response> => {
     console.log('✅ Auth user deleted successfully');
     console.log('🎉 Employee deletion completed successfully');
 
+    // Check if all deletions were successful
+    const failedDeletions = deletionResults.filter(r => !r.success);
+    
     return new Response(
       JSON.stringify({ 
         success: true, 
         message: 'Dipendente e tutti i dati correlati eliminati con successo',
-        deleted_user_id: userToDelete.id
+        deleted_user_id: userToDelete.id,
+        deletion_summary: {
+          total_operations: deletionResults.length + 2, // +2 for profile and auth
+          successful: deletionResults.filter(r => r.success).length + 2,
+          failed: failedDeletions.length,
+          failed_operations: failedDeletions
+        }
       }),
       {
         status: 200,
@@ -211,10 +290,11 @@ const handler = async (req: Request): Promise<Response> => {
     );
 
   } catch (error) {
-    console.error('💥 Error in delete-employee function:', error);
+    console.error('💥 Unexpected error in delete-employee function:', error);
     return new Response(
       JSON.stringify({ 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error'
       }),
       {
         status: 500,
