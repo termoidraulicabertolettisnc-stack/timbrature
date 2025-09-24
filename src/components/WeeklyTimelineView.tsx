@@ -9,6 +9,7 @@ import { TimesheetWithProfile } from '@/types/timesheet';
 import { BenefitsService } from '@/services/BenefitsService';
 import { useWeeklyRealtimeHours } from '@/hooks/use-weekly-realtime-hours';
 import { AbsenceIndicator } from '@/components/AbsenceIndicator';
+import { sessionsForDay, utcToLocal } from '@/utils/timeSegments';
 
 interface WeeklyTimelineViewProps {
   timesheets: TimesheetWithProfile[];
