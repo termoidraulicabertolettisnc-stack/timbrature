@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { format, parseISO } from 'date-fns';
+import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog,
@@ -33,6 +34,32 @@ interface TimesheetEditDialogProps {
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
+
+// Costante per il timezone italiano
+const TZ = 'Europe/Rome';
+
+// Funzione per convertire da UTC a timezone locale per la visualizzazione
+const utcToLocalTime = (utcString: string): string => {
+  try {
+    const localTime = toZonedTime(new Date(utcString), TZ);
+    return format(localTime, 'HH:mm');
+  } catch (error) {
+    console.error('Error converting UTC to local time:', error);
+    return '';
+  }
+};
+
+// Funzione per convertire da timezone locale a UTC per il salvataggio
+const localTimeToUtc = (dateString: string, timeString: string): string => {
+  try {
+    const localDateTime = `${dateString}T${timeString}:00`;
+    const utcTime = fromZonedTime(new Date(localDateTime), TZ);
+    return utcTime.toISOString();
+  } catch (error) {
+    console.error('Error converting local time to UTC:', error);
+    return new Date().toISOString();
+  }
+};
 
 export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }: TimesheetEditDialogProps) {
   const { toast } = useToast();
@@ -124,17 +151,27 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
   // Populate form when timesheet changes
   useEffect(() => {
     if (timesheet) {
+      console.log('🔧 TIMEZONE FIX - Populating form with timesheet:', timesheet);
+      
       setFormData({
         date: timesheet.date,
         end_date: timesheet.end_date || timesheet.date,
-        start_time: timesheet.start_time ? format(parseISO(timesheet.start_time), 'HH:mm') : '',
-        end_time: timesheet.end_time ? format(parseISO(timesheet.end_time), 'HH:mm') : '',
-        lunch_start_time: timesheet.lunch_start_time ? format(parseISO(timesheet.lunch_start_time), 'HH:mm') : '',
-        lunch_end_time: timesheet.lunch_end_time ? format(parseISO(timesheet.lunch_end_time), 'HH:mm') : '',
+        // CORREZIONE: Usa la nuova funzione di conversione timezone
+        start_time: timesheet.start_time ? utcToLocalTime(timesheet.start_time) : '',
+        end_time: timesheet.end_time ? utcToLocalTime(timesheet.end_time) : '',
+        lunch_start_time: timesheet.lunch_start_time ? utcToLocalTime(timesheet.lunch_start_time) : '',
+        lunch_end_time: timesheet.lunch_end_time ? utcToLocalTime(timesheet.lunch_end_time) : '',
         project_id: timesheet.project_id || 'none',
         notes: timesheet.notes || '',
         is_saturday: timesheet.is_saturday,
         is_holiday: timesheet.is_holiday,
+      });
+
+      console.log('🔧 TIMEZONE FIX - Converted times:', {
+        original_start_time: timesheet.start_time,
+        converted_start_time: timesheet.start_time ? utcToLocalTime(timesheet.start_time) : '',
+        original_end_time: timesheet.end_time,
+        converted_end_time: timesheet.end_time ? utcToLocalTime(timesheet.end_time) : '',
       });
 
       // Determine lunch break mode and duration based on existing data
@@ -179,18 +216,22 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
 
     setLoading(true);
     try {
-      // Validazioni prima dell'update
-      const startD = new Date(`${formData.date}T${formData.start_time || '00:00'}:00`);
-      const endD = new Date(`${formData.end_date || formData.date}T${formData.end_time || '00:00'}:00`);
+      console.log('🔧 TIMEZONE FIX - Submitting form data:', formData);
 
-      if (formData.start_time && formData.end_time && endD < startD) {
-        toast({ 
-          title: 'Errore', 
-          description: 'L\'orario di fine è precedente all\'inizio', 
-          variant: 'destructive' 
-        });
-        setLoading(false);
-        return;
+      // Validazioni prima dell'update
+      if (formData.start_time && formData.end_time) {
+        const startDateTime = new Date(`${formData.date}T${formData.start_time}:00`);
+        const endDateTime = new Date(`${formData.end_date || formData.date}T${formData.end_time}:00`);
+        
+        if (endDateTime < startDateTime) {
+          toast({ 
+            title: 'Errore', 
+            description: 'L\'orario di fine è precedente all\'inizio', 
+            variant: 'destructive' 
+          });
+          setLoading(false);
+          return;
+        }
       }
 
       // Validazione pausa pranzo quando si usa la modalità orari
@@ -204,13 +245,12 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         return;
       }
 
-      // Ottieni l'utente corrente per updated_by
       const currentUser = (await supabase.auth.getUser()).data.user;
 
       // Prepare the update data
       const updateData: any = {
         date: formData.date,
-        end_date: formData.end_date, // Always pass the end_date as specified by user, let trigger handle logic
+        end_date: formData.end_date,
         project_id: formData.project_id === 'none' ? null : formData.project_id,
         notes: formData.notes || null,
         is_saturday: formData.is_saturday,
@@ -218,63 +258,70 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         updated_by: currentUser?.id ?? timesheet.user_id,
       };
 
-      // Handle start_time - convert local time input to UTC
+      // CORREZIONE PRINCIPALE: Usa la nuova funzione di conversione timezone
       if (formData.start_time) {
-        const localDate = new Date(`${formData.date}T${formData.start_time}:00`);
-        updateData.start_time = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
+        updateData.start_time = localTimeToUtc(formData.date, formData.start_time);
+        console.log('🔧 TIMEZONE FIX - Start time conversion:', {
+          input_date: formData.date,
+          input_time: formData.start_time,
+          output_utc: updateData.start_time
+        });
       } else {
         updateData.start_time = null;
       }
 
-      // Handle end_time - convert local time input to UTC
       if (formData.end_time) {
         const endDate = formData.end_date || formData.date;
-        const localDate = new Date(`${endDate}T${formData.end_time}:00`);
-        updateData.end_time = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
+        updateData.end_time = localTimeToUtc(endDate, formData.end_time);
+        console.log('🔧 TIMEZONE FIX - End time conversion:', {
+          input_date: endDate,
+          input_time: formData.end_time,
+          output_utc: updateData.end_time
+        });
       } else {
         updateData.end_time = null;
       }
 
       // Handle lunch times based on mode
       if (lunchBreakMode === 'times') {
-        // Use specific start/end times - convert local time input to UTC
         if (formData.lunch_start_time) {
-          // Scegli il giorno giusto per la pausa - se attraversa la mezzanotte, usa end_date
           const lunchDate = formData.lunch_start_time < formData.start_time && formData.end_date !== formData.date 
             ? formData.end_date 
             : formData.date;
-          const localDate = new Date(`${lunchDate}T${formData.lunch_start_time}:00`);
-          updateData.lunch_start_time = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
+          updateData.lunch_start_time = localTimeToUtc(lunchDate, formData.lunch_start_time);
         } else {
           updateData.lunch_start_time = null;
         }
 
         if (formData.lunch_end_time) {
-          // Scegli il giorno giusto per la pausa - se attraversa la mezzanotte, usa end_date  
           const lunchDate = formData.lunch_end_time < formData.start_time && formData.end_date !== formData.date 
             ? formData.end_date 
             : formData.date;
-          const localDate = new Date(`${lunchDate}T${formData.lunch_end_time}:00`);
-          updateData.lunch_end_time = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
+          updateData.lunch_end_time = localTimeToUtc(lunchDate, formData.lunch_end_time);
         } else {
           updateData.lunch_end_time = null;
         }
         
-        // Clear custom duration when using times
         updateData.lunch_duration_minutes = null;
       } else {
-        // Use duration mode - clear specific times and set custom duration
         updateData.lunch_start_time = null;
         updateData.lunch_end_time = null;
         updateData.lunch_duration_minutes = lunchDuration;
       }
+
+      console.log('🔧 TIMEZONE FIX - Final update data:', updateData);
 
       const { error } = await supabase
         .from('timesheets')
         .update(updateData)
         .eq('id', timesheet.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('🔧 TIMEZONE FIX - Database error:', error);
+        throw error;
+      }
+
+      console.log('🔧 TIMEZONE FIX - Update successful');
 
       toast({
         title: "Successo",
@@ -287,7 +334,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
       console.error('Error updating timesheet:', error);
       toast({
         title: "Errore",
-        description: "Errore nella modifica del timesheet",
+        description: `Errore nella modifica del timesheet: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`,
         variant: "destructive",
       });
     } finally {
@@ -311,6 +358,10 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
           <DialogTitle>Modifica Timesheet</DialogTitle>
           <DialogDescription>
             Modifica il timesheet di {timesheet.profiles?.first_name} {timesheet.profiles?.last_name}
+            <br />
+            <span className="text-xs text-muted-foreground">
+              Gli orari sono mostrati in timezone locale (Europe/Rome)
+            </span>
           </DialogDescription>
         </DialogHeader>
 
