@@ -151,39 +151,52 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
   // Populate form when timesheet changes
   useEffect(() => {
     if (timesheet) {
-      console.log('🔧 TIMEZONE FIX - Populating form with timesheet:', timesheet);
+      console.log('🔧 DIALOG SESSION FIX - Populating form with timesheet:', {
+        id: timesheet.id,
+        start_time: timesheet.start_time,
+        end_time: timesheet.end_time,
+        editing_session_id: (timesheet as any)._editing_session_id,
+        editing_session_order: (timesheet as any)._editing_session_order
+      });
+      
+      // CORREZIONE: Controlla se stiamo modificando una sessione specifica
+      const isEditingSpecificSession = (timesheet as any)._editing_session_id !== undefined;
+      
+      if (isEditingSpecificSession) {
+        console.log('🔧 DIALOG SESSION FIX - Editing specific session:', (timesheet as any)._editing_session_id, 'order:', (timesheet as any)._editing_session_order);
+      } else {
+        console.log('🔧 DIALOG SESSION FIX - Editing main timesheet');
+      }
       
       setFormData({
         date: timesheet.date,
         end_date: timesheet.end_date || timesheet.date,
-        // CORREZIONE: Usa la nuova funzione di conversione timezone
+        // CORREZIONE: Usa gli orari corretti (che ora sono della sessione specifica)
         start_time: timesheet.start_time ? utcToLocalTime(timesheet.start_time) : '',
         end_time: timesheet.end_time ? utcToLocalTime(timesheet.end_time) : '',
         lunch_start_time: timesheet.lunch_start_time ? utcToLocalTime(timesheet.lunch_start_time) : '',
         lunch_end_time: timesheet.lunch_end_time ? utcToLocalTime(timesheet.lunch_end_time) : '',
         project_id: timesheet.project_id || 'none',
-        notes: timesheet.notes || '',
+        notes: isEditingSpecificSession ? ((timesheet as any).session_notes || timesheet.notes || '') : (timesheet.notes || ''),
         is_saturday: timesheet.is_saturday,
         is_holiday: timesheet.is_holiday,
       });
 
-      console.log('🔧 TIMEZONE FIX - Converted times:', {
+      console.log('🔧 DIALOG SESSION FIX - Converted times:', {
         original_start_time: timesheet.start_time,
         converted_start_time: timesheet.start_time ? utcToLocalTime(timesheet.start_time) : '',
         original_end_time: timesheet.end_time,
         converted_end_time: timesheet.end_time ? utcToLocalTime(timesheet.end_time) : '',
+        is_editing_session: isEditingSpecificSession
       });
 
-      // Determine lunch break mode and duration based on existing data
+      // Gestione modalità pausa pranzo
       if (timesheet.lunch_start_time && timesheet.lunch_end_time) {
-        // Timesheet has specific times - use times mode
         setLunchBreakMode('times');
       } else if (timesheet.lunch_duration_minutes !== null && timesheet.lunch_duration_minutes !== undefined) {
-        // Timesheet has explicit duration set (including 0 for no break) - use that value
         setLunchBreakMode('duration');
         setLunchDuration(timesheet.lunch_duration_minutes);
       } else {
-        // No lunch data in timesheet - use duration mode with employee default
         setLunchBreakMode('duration');
         setLunchDuration(defaultLunchMinutes);
       }
@@ -227,18 +240,20 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
     return compositeId;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmitSessionAware = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!timesheet) return;
 
     setLoading(true);
     
-    console.log('🔧 ID FIX - Starting timesheet update');
-    console.log('🔧 ID FIX - Original timesheet ID:', timesheet.id);
+    console.log('🔧 DIALOG SESSION FIX - Starting timesheet update');
+    console.log('🔧 DIALOG SESSION FIX - Timesheet data:', {
+      id: timesheet.id,
+      editing_session_id: (timesheet as any)._editing_session_id,
+      editing_session_order: (timesheet as any)._editing_session_order
+    });
     
-    // CORREZIONE PRINCIPALE: Estrai l'ID reale
-    const realTimesheetId = extractRealTimesheetId(timesheet.id);
-    console.log('🔧 ID FIX - Using real timesheet ID for update:', realTimesheetId);
+    const isEditingSpecificSession = (timesheet as any)._editing_session_id !== undefined;
     
     try {
       // Validazioni esistenti...
@@ -272,90 +287,132 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         throw new Error(`Errore autenticazione: ${currentUserResult.error.message}`);
       }
 
-      // Prepare update data
-      const updateData: any = {
-        date: formData.date,
-        end_date: formData.end_date,
-        project_id: formData.project_id === 'none' ? null : formData.project_id,
-        notes: formData.notes || null,
-        is_saturday: formData.is_saturday,
-        is_holiday: formData.is_holiday,
-        updated_by: currentUserResult.data.user?.id ?? timesheet.user_id,
-      };
+      if (isEditingSpecificSession) {
+        console.log('🔧 DIALOG SESSION FIX - Updating specific session:', (timesheet as any)._editing_session_id);
+        
+        // CORREZIONE: Per sessioni specifiche, aggiorna solo la sessione
+        const sessionUpdateData = {
+          start_time: formData.start_time ? localTimeToUtc(formData.date, formData.start_time) : null,
+          end_time: formData.end_time ? localTimeToUtc(formData.end_date || formData.date, formData.end_time) : null,
+          notes: formData.notes || null,
+          session_type: 'work' // Mantieni il tipo
+        };
 
-      // Handle timezone conversion
-      if (formData.start_time) {
-        updateData.start_time = localTimeToUtc(formData.date, formData.start_time);
+        console.log('🔧 DIALOG SESSION FIX - Session update data:', sessionUpdateData);
+
+        const { error: sessionError } = await supabase
+          .from('timesheet_sessions')
+          .update(sessionUpdateData)
+          .eq('id', (timesheet as any)._editing_session_id);
+
+        if (sessionError) {
+          console.error('🔧 DIALOG SESSION FIX - Session update error:', sessionError);
+          throw sessionError;
+        }
+
+        console.log('🔧 DIALOG SESSION FIX - Session updated successfully');
+
+        // Aggiorna anche alcuni campi del timesheet principale se necessario
+        const realTimesheetId = extractRealTimesheetId(timesheet.id);
+        const mainTimesheetUpdate = {
+          project_id: formData.project_id === 'none' ? null : formData.project_id,
+          is_saturday: formData.is_saturday,
+          is_holiday: formData.is_holiday,
+          updated_by: currentUserResult.data.user?.id ?? timesheet.user_id,
+        };
+
+        const { error: mainError } = await supabase
+          .from('timesheets')
+          .update(mainTimesheetUpdate)
+          .eq('id', realTimesheetId);
+
+        if (mainError) {
+          console.error('🔧 DIALOG SESSION FIX - Main timesheet update error:', mainError);
+          // Non bloccare per errori sul timesheet principale se la sessione è stata aggiornata
+        }
+
       } else {
-        updateData.start_time = null;
-      }
+        console.log('🔧 DIALOG SESSION FIX - Updating main timesheet');
+        
+        // CORREZIONE: Per timesheet principali, usa la logica esistente
+        const realTimesheetId = extractRealTimesheetId(timesheet.id);
+        
+        const updateData: any = {
+          date: formData.date,
+          end_date: formData.end_date,
+          project_id: formData.project_id === 'none' ? null : formData.project_id,
+          notes: formData.notes || null,
+          is_saturday: formData.is_saturday,
+          is_holiday: formData.is_holiday,
+          updated_by: currentUserResult.data.user?.id ?? timesheet.user_id,
+        };
 
-      if (formData.end_time) {
-        const endDate = formData.end_date || formData.date;
-        updateData.end_time = localTimeToUtc(endDate, formData.end_time);
-      } else {
-        updateData.end_time = null;
-      }
+        if (formData.start_time) {
+          updateData.start_time = localTimeToUtc(formData.date, formData.start_time);
+        } else {
+          updateData.start_time = null;
+        }
 
-      // Handle lunch times
-      if (lunchBreakMode === 'times') {
-        if (formData.lunch_start_time) {
-          const lunchDate = formData.lunch_start_time < formData.start_time && formData.end_date !== formData.date 
-            ? formData.end_date 
-            : formData.date;
-          updateData.lunch_start_time = localTimeToUtc(lunchDate, formData.lunch_start_time);
+        if (formData.end_time) {
+          const endDate = formData.end_date || formData.date;
+          updateData.end_time = localTimeToUtc(endDate, formData.end_time);
+        } else {
+          updateData.end_time = null;
+        }
+
+        // Handle lunch times based on mode
+        if (lunchBreakMode === 'times') {
+          if (formData.lunch_start_time) {
+            const lunchDate = formData.lunch_start_time < formData.start_time && formData.end_date !== formData.date 
+              ? formData.end_date 
+              : formData.date;
+            updateData.lunch_start_time = localTimeToUtc(lunchDate, formData.lunch_start_time);
+          } else {
+            updateData.lunch_start_time = null;
+          }
+
+          if (formData.lunch_end_time) {
+            const lunchDate = formData.lunch_end_time < formData.start_time && formData.end_date !== formData.date 
+              ? formData.end_date 
+              : formData.date;
+            updateData.lunch_end_time = localTimeToUtc(lunchDate, formData.lunch_end_time);
+          } else {
+            updateData.lunch_end_time = null;
+          }
+          
+          updateData.lunch_duration_minutes = null;
         } else {
           updateData.lunch_start_time = null;
-        }
-
-        if (formData.lunch_end_time) {
-          const lunchDate = formData.lunch_end_time < formData.start_time && formData.end_date !== formData.date 
-            ? formData.end_date 
-            : formData.date;
-          updateData.lunch_end_time = localTimeToUtc(lunchDate, formData.lunch_end_time);
-        } else {
           updateData.lunch_end_time = null;
+          updateData.lunch_duration_minutes = lunchDuration;
         }
-        
-        updateData.lunch_duration_minutes = null;
-      } else {
-        updateData.lunch_start_time = null;
-        updateData.lunch_end_time = null;
-        updateData.lunch_duration_minutes = lunchDuration;
+
+        console.log('🔧 DIALOG SESSION FIX - Main timesheet update data:', updateData);
+
+        const { error } = await supabase
+          .from('timesheets')
+          .update(updateData)
+          .eq('id', realTimesheetId);
+
+        if (error) {
+          console.error('🔧 DIALOG SESSION FIX - Main timesheet update error:', error);
+          throw error;
+        }
+
+        console.log('🔧 DIALOG SESSION FIX - Main timesheet updated successfully');
       }
-
-      console.log('🔧 ID FIX - Final update data:', updateData);
-
-      // CORREZIONE: Usa l'ID reale nella query
-      const { data: updatedData, error } = await supabase
-        .from('timesheets')
-        .update(updateData)
-        .eq('id', realTimesheetId) // ← FIX: Usa ID reale invece di composito
-        .select();
-
-      console.log('🔧 ID FIX - Supabase response:', { data: updatedData, error });
-
-      if (error) {
-        console.error('🔧 ID FIX - Supabase error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
-        throw error;
-      }
-
-      console.log('🔧 ID FIX - Update successful:', updatedData);
 
       toast({
         title: "Successo",
-        description: "Timesheet modificato con successo",
+        description: isEditingSpecificSession 
+          ? `Sessione #${(timesheet as any)._editing_session_order} modificata con successo`
+          : "Timesheet modificato con successo",
       });
 
       onSuccess();
       onOpenChange(false);
     } catch (error: any) {
-      console.error('🔧 ID FIX - Catch block error:', error);
+      console.error('🔧 DIALOG SESSION FIX - Catch block error:', error);
       
       let errorMessage = 'Errore sconosciuto';
       if (error?.message) {
@@ -366,11 +423,11 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         errorMessage = error.details;
       }
       
-      console.error('🔧 ID FIX - Final error message:', errorMessage);
+      console.error('🔧 DIALOG SESSION FIX - Final error message:', errorMessage);
       
       toast({
         title: "Errore",
-        description: `Errore nella modifica del timesheet: ${errorMessage}`,
+        description: `Errore nella modifica: ${errorMessage}`,
         variant: "destructive",
       });
     } finally {
@@ -401,7 +458,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmitSessionAware} className="space-y-4">
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="date">Data inizio</Label>
