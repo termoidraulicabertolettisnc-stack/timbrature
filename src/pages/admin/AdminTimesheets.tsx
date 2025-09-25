@@ -46,32 +46,99 @@ import { MonthlyCalendarView } from '@/components/MonthlyCalendarView';
 import { WeeklyTimelineView } from '@/components/WeeklyTimelineView';
 import { TimesheetImportDialog } from '@/components/TimesheetImportDialog';
 
-// CORREZIONE: Funzione per estrarre l'ID reale del timesheet
+// CORREZIONE COMPLETA: Funzione per estrarre correttamente l'UUID reale
 const extractRealTimesheetId = (compositeId: string): string => {
-  console.log('🔧 ID FIX - Input composite ID:', compositeId);
+  console.log('🔧 ID FIX - Input ID:', compositeId);
   
-  // Se l'ID contiene underscore o trattino, è un ID composito generato dal frontend
-  if (compositeId.includes('_') || compositeId.includes('-legacy-') || compositeId.includes('-session-')) {
-    // Per gli ID con -legacy- o -session-, estrai solo la prima parte UUID
-    if (compositeId.includes('-legacy-') || compositeId.includes('-session-')) {
-      const parts = compositeId.split('-');
-      // Ricostruisci l'UUID dalle prime 5 parti (formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-      if (parts.length >= 5) {
-        const realId = parts.slice(0, 5).join('-');
-        console.log('🔧 ID FIX - Extracted real ID from legacy/session:', realId);
-        return realId;
-      }
-    }
-    
-    // Fallback per ID con underscore
-    const realId = compositeId.split('_')[0];
-    console.log('🔧 ID FIX - Extracted real ID from underscore:', realId);
-    return realId;
+  // Validazione UUID base
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  
+  // Se è già un UUID valido, restituiscilo
+  if (uuidPattern.test(compositeId)) {
+    console.log('🔧 ID FIX - Already valid UUID:', compositeId);
+    return compositeId;
   }
   
-  // Se non contiene separatori, è già un ID reale
-  console.log('🔧 ID FIX - Already real ID:', compositeId);
-  return compositeId;
+  // Gestisci ID compositi con diversi separatori
+  let realId = compositeId;
+  
+  if (compositeId.includes('_session_')) {
+    // Formato: uuid_session_123_0
+    realId = compositeId.split('_session_')[0];
+  } else if (compositeId.includes('_')) {
+    // Formato: uuid_qualcosa
+    realId = compositeId.split('_')[0];
+  } else if (compositeId.includes('-session-')) {
+    // Formato: uuid-session-123
+    realId = compositeId.split('-session-')[0];
+  } else if (compositeId.includes('-legacy-')) {
+    // Formato: uuid-legacy-qualcosa
+    realId = compositeId.split('-legacy-')[0];
+  }
+  
+  // Verifica che l'ID estratto sia un UUID valido
+  if (!uuidPattern.test(realId)) {
+    console.error('🔧 ID FIX - Extracted ID is not valid UUID:', realId, 'from:', compositeId);
+    throw new Error(`ID timesheet non valido: ${compositeId}`);
+  }
+  
+  console.log('🔧 ID FIX - Extracted valid UUID:', realId, 'from:', compositeId);
+  return realId;
+};
+
+// CORREZIONE: Validazione UUID helper
+const isValidUUID = (uuid: string): boolean => {
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidPattern.test(uuid);
+};
+
+// CORREZIONE: Debug helper per analizzare ID problematici
+const debugTimesheetId = (id: string) => {
+  console.log('🔍 DEBUG ID:', {
+    original: id,
+    isValidUUID: isValidUUID(id),
+    containsSession: id.includes('_session_'),
+    containsUnderscore: id.includes('_'),
+    containsSessionDash: id.includes('-session-'),
+    parts: id.split(/[_-]/),
+    extractedId: extractRealTimesheetId(id)
+  });
+};
+
+// CORREZIONE: Verifica integrità dati prima dell'eliminazione
+const verifyTimesheetIntegrity = async (timesheetId: string) => {
+  const realId = extractRealTimesheetId(timesheetId);
+  
+  // Verifica che il timesheet esista
+  const { data: timesheet, error } = await supabase
+    .from('timesheets')
+    .select('id, user_id, start_time, end_time')
+    .eq('id', realId)
+    .single();
+    
+  if (error) {
+    console.error('🔧 INTEGRITY CHECK - Timesheet not found:', error);
+    return { valid: false, error: 'Timesheet non trovato' };
+  }
+  
+  // Verifica le sessioni collegate
+  const { data: sessions } = await supabase
+    .from('timesheet_sessions')
+    .select('id, session_order')
+    .eq('timesheet_id', realId);
+  
+  console.log('🔧 INTEGRITY CHECK - Results:', {
+    timesheetId: realId,
+    exists: !!timesheet,
+    sessionsCount: sessions?.length || 0
+  });
+  
+  return {
+    valid: true,
+    timesheet,
+    sessions: sessions || [],
+    sessionCount: sessions?.length || 0
+  };
 };
 
 // CORREZIONE: Funzione per gestire correttamente le sessioni multiple
@@ -521,18 +588,20 @@ export default function AdminTimesheets() {
     );
   };
 
-  const deleteTimesheet = async (compositeId: string) => {
-    console.log('🔧 ID FIX - Starting deletion for composite ID:', compositeId);
+  // CORREZIONE: Funzione di eliminazione migliorata
+  const handleDeleteTimesheetFixed = async (timesheetId: string) => {
+    console.log('🔧 DELETE FIX - Starting deletion for ID:', timesheetId);
     
-    // CORREZIONE: Estrai l'ID reale
-    const realId = extractRealTimesheetId(compositeId);
-    console.log('🔧 ID FIX - Using real ID for deletion:', realId);
-    
+    // Conferma eliminazione
     if (!confirm('Sei sicuro di voler eliminare questo timesheet? Questa azione non può essere annullata.')) {
       return;
     }
 
     try {
+      // Estrai l'ID reale usando la funzione corretta
+      const realId = extractRealTimesheetId(timesheetId);
+      console.log('🔧 DELETE FIX - Using real ID:', realId);
+
       // Verifica autenticazione
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
@@ -540,60 +609,72 @@ export default function AdminTimesheets() {
         throw new Error('Utente non autenticato');
       }
 
-      // Controlla se il timesheet esiste
+      // 1. Prima controlla se il timesheet esiste
       const { data: existingTimesheet, error: checkError } = await supabase
         .from('timesheets')
         .select('id, user_id')
-        .eq('id', realId) // ← FIX: Usa ID reale
+        .eq('id', realId)
         .single();
       
-      console.log('🔧 ID FIX - Existing timesheet check:', { data: existingTimesheet, error: checkError });
+      console.log('🔧 DELETE FIX - Existing timesheet check:', { 
+        data: existingTimesheet, 
+        error: checkError,
+        realId: realId
+      });
       
       if (checkError) {
         if (checkError.code === 'PGRST116') {
-          throw new Error('Timesheet non trovato');
+          throw new Error('Timesheet non trovato nel database');
         } else {
           throw new Error(`Errore nella verifica del timesheet: ${checkError.message}`);
         }
       }
 
-      // Elimina le sessioni collegate
-      const { data: sessions, error: sessionsError } = await supabase
+      // 2. Elimina prima tutte le sessioni collegate
+      console.log('🔧 DELETE FIX - Checking for sessions to delete');
+      const { data: sessions, error: sessionsCheckError } = await supabase
         .from('timesheet_sessions')
         .select('id')
-        .eq('timesheet_id', realId); // ← FIX: Usa ID reale
+        .eq('timesheet_id', realId);
+      
+      console.log('🔧 DELETE FIX - Found sessions:', sessions?.length || 0);
       
       if (sessions && sessions.length > 0) {
-        console.log('🔧 ID FIX - Deleting sessions first');
+        console.log('🔧 DELETE FIX - Deleting sessions first');
         const { error: deleteSessionsError } = await supabase
           .from('timesheet_sessions')
           .delete()
-          .eq('timesheet_id', realId); // ← FIX: Usa ID reale
+          .eq('timesheet_id', realId);
         
         if (deleteSessionsError) {
+          console.error('🔧 DELETE FIX - Error deleting sessions:', deleteSessionsError);
           throw new Error(`Errore nell'eliminazione delle sessioni: ${deleteSessionsError.message}`);
         }
+        
+        console.log('🔧 DELETE FIX - Sessions deleted successfully');
       }
 
-      // Elimina il timesheet principale
-      console.log('🔧 ID FIX - Deleting main timesheet with real ID:', realId);
+      // 3. Ora elimina il timesheet principale
+      console.log('🔧 DELETE FIX - Deleting main timesheet');
       const { error: deleteError } = await supabase
         .from('timesheets')
         .delete()
-        .eq('id', realId); // ← FIX: Usa ID reale
+        .eq('id', realId);
 
       if (deleteError) {
-        console.error('🔧 ID FIX - Delete error details:', {
+        console.error('🔧 DELETE FIX - Delete error details:', {
           message: deleteError.message,
           details: deleteError.details,
           hint: deleteError.hint,
-          code: deleteError.code
+          code: deleteError.code,
+          realId: realId
         });
-        throw new Error(`Errore nell'eliminazione: ${deleteError.message}`);
+        throw new Error(`Errore nell'eliminazione del timesheet: ${deleteError.message}`);
       }
 
-      console.log('🔧 ID FIX - Deletion successful');
+      console.log('🔧 DELETE FIX - Deletion completed successfully');
 
+      // Mostra messaggio di successo
       toast({
         title: "Successo",
         description: "Timesheet eliminato con successo",
@@ -601,8 +682,9 @@ export default function AdminTimesheets() {
 
       // Ricarica i dati
       loadTimesheets();
+      
     } catch (error: any) {
-      console.error('🔧 ID FIX - Delete error:', error);
+      console.error('🔧 DELETE FIX - General error:', error);
       
       let errorMessage = 'Errore sconosciuto nell\'eliminazione';
       if (error?.message) {
@@ -611,7 +693,7 @@ export default function AdminTimesheets() {
       
       toast({
         title: "Errore",
-        description: `Errore nell'eliminazione del timesheet: ${errorMessage}`,
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -1056,7 +1138,7 @@ export default function AdminTimesheets() {
               setEditingTimesheet(timesheet);
               setEditDialogOpen(true);
             }}
-            onDeleteTimesheet={deleteTimesheet}
+            onDeleteTimesheet={handleDeleteTimesheetFixed}
           />
         </TabsContent>
 
@@ -1071,7 +1153,7 @@ export default function AdminTimesheets() {
               setEditingTimesheet(timesheet);
               setEditDialogOpen(true);
             }}
-            onDeleteTimesheet={deleteTimesheet}
+            onDeleteTimesheet={handleDeleteTimesheetFixed}
             onAddTimesheet={handleAddTimesheet}
             onAddAbsence={handleAddAbsence}
             onNavigatePrevious={navigatePrevious}
@@ -1092,7 +1174,7 @@ export default function AdminTimesheets() {
               setEditingTimesheet(timesheet);
               setEditDialogOpen(true);
             }}
-            onDeleteTimesheet={deleteTimesheet}
+            onDeleteTimesheet={handleDeleteTimesheetFixed}
             onAddTimesheet={handleAddTimesheet}
             onAddAbsence={handleAddAbsence}
             onNavigatePrevious={navigatePrevious}
