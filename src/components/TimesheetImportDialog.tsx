@@ -145,65 +145,123 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
             continue;
           }
 
-          // Usa upsert per evitare duplicati e ottenere l'ID
-          const { data: upsertedTimesheet, error } = await supabase.from('timesheets').upsert({
-            user_id: employee.user_id,
-            date: timesheet.date,
-            start_time: timesheet.start_time,
-            end_time: timesheet.end_time,
-            start_location_lat: timesheet.start_location_lat,
-            start_location_lng: timesheet.start_location_lng,
-            end_location_lat: timesheet.end_location_lat,
-            end_location_lng: timesheet.end_location_lng,
-            lunch_start_time: timesheet.lunch_start_time,
-            lunch_end_time: timesheet.lunch_end_time,
-            created_by: currentUserId,
-            notes: `Importato da Excel - ${file?.name}`,
-            total_hours: timesheet.total_hours
-          }, { 
-            onConflict: 'user_id,date', 
-            ignoreDuplicates: false 
-          }).select();
+          // CORREZIONE CRITICA: Se ha sessioni multiple, crea solo le sessioni
+          // Il timesheet principale verrà calcolato automaticamente dal trigger
+          if (timesheet.sessions && timesheet.sessions.length > 0) {
+            console.log(`🔧 EXCEL FIX - Creating timesheet with ${timesheet.sessions.length} sessions`);
+            
+            // PRIMA: Crea il timesheet principale SENZA orari specifici
+            // Il trigger lo calcolerà automaticamente dalle sessioni
+            const { data: upsertedTimesheet, error: timesheetError } = await supabase
+              .from('timesheets')
+              .upsert({
+                user_id: employee.user_id,
+                date: timesheet.date,
+                // CORREZIONE: Non impostare start_time/end_time/total_hours
+                // Saranno calcolati automaticamente dal trigger dalle sessioni
+                start_time: null,
+                end_time: null, 
+                total_hours: 0,
+                overtime_hours: 0,
+                created_by: currentUserId,
+                notes: `Importato da Excel - ${file?.name} (${timesheet.sessions.length} sessioni)`,
+              }, { 
+                onConflict: 'user_id,date', 
+                ignoreDuplicates: false 
+              })
+              .select();
 
-          if (error) {
-            console.error('Errore inserimento timbratura:', error);
-            importResults.errors++;
-          } else if (upsertedTimesheet && upsertedTimesheet.length > 0) {
+            if (timesheetError || !upsertedTimesheet?.[0]) {
+              console.error('🔧 EXCEL FIX - Error creating main timesheet:', timesheetError);
+              importResults.errors++;
+              continue;
+            }
+
             const timesheetId = upsertedTimesheet[0].id;
             
-            // Crea le sessioni se presenti
-            if (timesheet.sessions && timesheet.sessions.length > 0) {
-              console.log(`Creando ${timesheet.sessions.length} sessioni per timesheet ${timesheetId}`);
-              
-              for (const session of timesheet.sessions) {
-                const { error: sessionError } = await supabase
-                  .from('timesheet_sessions')
-                  .insert({
-                    timesheet_id: timesheetId,
-                    session_order: session.session_order,
-                    session_type: session.session_type,
-                    start_time: session.start_time,
-                    end_time: session.end_time,
-                    start_location_lat: session.start_location_lat,
-                    start_location_lng: session.start_location_lng,
-                    end_location_lat: session.end_location_lat,
-                    end_location_lng: session.end_location_lng,
-                    notes: `Sessione ${session.session_order} importata da Excel`
-                  });
-                
-                if (sessionError) {
-                  console.error(`Errore creazione sessione ${session.session_order}:`, sessionError);
-                }
-              }
-            }
+            // SECONDA: Elimina eventuali sessioni esistenti per ricrearle
+            await supabase
+              .from('timesheet_sessions')
+              .delete()
+              .eq('timesheet_id', timesheetId);
             
-            importResults.imported++;
-          } else {
-            importResults.skipped++;
-          }
+            // TERZA: Crea tutte le sessioni
+            const sessionsToInsert = timesheet.sessions.map(session => ({
+              timesheet_id: timesheetId,
+              session_order: session.session_order,
+              session_type: session.session_type,
+              start_time: session.start_time,
+              end_time: session.end_time,
+              start_location_lat: session.start_location_lat,
+              start_location_lng: session.start_location_lng,
+              end_location_lat: session.end_location_lat,
+              end_location_lng: session.end_location_lng,
+              notes: `Sessione ${session.session_order} importata da Excel`
+            }));
 
+            const { error: sessionsError } = await supabase
+              .from('timesheet_sessions')
+              .insert(sessionsToInsert);
+
+            if (sessionsError) {
+              console.error('🔧 EXCEL FIX - Error creating sessions:', sessionsError);
+              importResults.errors++;
+              continue;
+            }
+
+            // QUARTA: Aggiorna il timesheet principale con i dati corretti dalle sessioni
+            // Questo attiverà il trigger che calcola tutto correttamente
+            const firstSession = timesheet.sessions[0];
+            const lastSession = timesheet.sessions[timesheet.sessions.length - 1];
+            
+            await supabase
+              .from('timesheets')
+              .update({
+                start_time: firstSession.start_time,
+                end_time: lastSession.end_time,
+                start_location_lat: firstSession.start_location_lat,
+                start_location_lng: firstSession.start_location_lng,
+                end_location_lat: lastSession.end_location_lat,
+                end_location_lng: lastSession.end_location_lng,
+                // Il trigger calcolerà automaticamente total_hours e overtime_hours
+                // dalle sessioni quando eseguiamo questo update
+              })
+              .eq('id', timesheetId);
+
+            console.log(`🔧 EXCEL FIX - Successfully imported timesheet ${timesheetId} with ${timesheet.sessions.length} sessions`);
+            
+          } else {
+            // TIMESHEET SENZA SESSIONI MULTIPLE (caso normale)
+            const { error } = await supabase.from('timesheets').upsert({
+              user_id: employee.user_id,
+              date: timesheet.date,
+              start_time: timesheet.start_time,
+              end_time: timesheet.end_time,
+              start_location_lat: timesheet.start_location_lat,
+              start_location_lng: timesheet.start_location_lng,
+              end_location_lat: timesheet.end_location_lat,
+              end_location_lng: timesheet.end_location_lng,
+              lunch_start_time: timesheet.lunch_start_time,
+              lunch_end_time: timesheet.lunch_end_time,
+              created_by: currentUserId,
+              notes: `Importato da Excel - ${file?.name}`,
+              total_hours: timesheet.total_hours
+            }, { 
+              onConflict: 'user_id,date', 
+              ignoreDuplicates: false 
+            });
+
+            if (error) {
+              console.error('🔧 EXCEL FIX - Error importing single timesheet:', error);
+              importResults.errors++;
+              continue;
+            }
+          }
+          
+          importResults.imported++;
+          
         } catch (error) {
-          console.error('Errore durante importazione riga:', error);
+          console.error('🔧 EXCEL FIX - Error during import:', error);
           importResults.errors++;
         } finally {
           setProgress(((i + 1) / total) * 100);
@@ -222,7 +280,7 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
       onImportComplete();
 
     } catch (error) {
-      console.error('Errore generale durante importazione:', error);
+      console.error('🔧 EXCEL FIX - General error during import:', error);
       toast({
         title: "Errore",
         description: "Errore durante l'importazione",
