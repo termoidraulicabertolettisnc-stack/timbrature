@@ -151,6 +151,20 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
   // Populate form when timesheet changes
   useEffect(() => {
     if (timesheet) {
+      console.log('🔧 TIMESHEET DEBUG - Populating form:', {
+        id: timesheet.id,
+        start_time: timesheet.start_time,
+        end_time: timesheet.end_time,
+        notes: timesheet.notes,
+        is_imported: timesheet.notes?.includes('Importato da Excel')
+      });
+
+      // Verifica se è un timesheet importato senza sessioni
+      if (timesheet.notes?.includes('Importato da Excel') && !timesheet.timesheet_sessions?.length) {
+        console.log('🔧 IMPORTED FIX - Handling imported timesheet without sessions');
+        // Procedi normalmente usando i dati principali del timesheet
+      }
+
       console.log('🔧 DIALOG SESSION FIX - Populating form with timesheet:', {
         id: timesheet.id,
         start_time: timesheet.start_time,
@@ -443,6 +457,28 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
   };
 
   if (!timesheet) return null;
+
+  // Controllo per timesheet importati con problemi
+  if (timesheet?.notes?.includes('Importato da Excel') && !timesheet.start_time) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Timesheet Importato</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>Questo timesheet è stato importato da Excel ma presenta inconsistenze nei dati.</p>
+            <p>ID: {timesheet.id}</p>
+            <p>Note: {timesheet.notes}</p>
+            <p>Per modificarlo, eliminalo e ricrealo manualmente.</p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => onOpenChange(false)}>Chiudi</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
