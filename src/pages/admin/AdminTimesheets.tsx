@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CalendarIcon, Clock, Edit, Filter, Download, Users, ChevronDown, ChevronRight, Trash2, Navigation, ChevronLeft, Plus, UserPlus, Calendar, FileSpreadsheet } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, addDays, isSameDay, subDays, subWeeks, subMonths, addWeeks, addMonths } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
 import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { OvertimeTracker } from '@/components/OvertimeTracker';
@@ -25,6 +26,16 @@ import { useRealtimeHours } from '@/hooks/use-realtime-hours';
 import { calcNightMinutesLocal } from '@/utils/nightHours';
 import { getEmployeeSettingsForDate } from '@/utils/temporalEmployeeSettings';
 import { TimesheetWithProfile } from '@/types/timesheet';
+
+// Estende il tipo timesheet per supportare le proprietà delle sessioni multiple
+interface ExtendedTimesheetWithProfile extends TimesheetWithProfile {
+  session_hours?: number;
+  session_type?: string;
+  session_notes?: string;
+  session_order?: number;
+  is_session?: boolean;
+  original_timesheet_id?: string;
+}
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -34,41 +45,85 @@ import { MonthlyCalendarView } from '@/components/MonthlyCalendarView';
 import { WeeklyTimelineView } from '@/components/WeeklyTimelineView';
 import { TimesheetImportDialog } from '@/components/TimesheetImportDialog';
 
-// Componente per mostrare ore con calcolo in tempo reale
-function HoursDisplay({ timesheet }: { timesheet: TimesheetWithProfile }) {
-  const realtimeHours = useRealtimeHours(timesheet);
+// CORREZIONE: Funzione per gestire correttamente le sessioni multiple
+const processTimesheetSessions = (timesheet: TimesheetWithProfile): ExtendedTimesheetWithProfile[] => {
+  const sessions: ExtendedTimesheetWithProfile[] = [];
+  
+  console.log('🔍 SESSIONI MULTIPLE - Processing timesheet:', timesheet.id, 'with sessions:', timesheet.timesheet_sessions);
+  
+  // Se ha sessioni multiple, processale tutte
+  if (timesheet.timesheet_sessions && timesheet.timesheet_sessions.length > 0) {
+    console.log('🔍 SESSIONI MULTIPLE - Found', timesheet.timesheet_sessions.length, 'sessions');
+    
+    timesheet.timesheet_sessions.forEach((session, index) => {
+      if (session.start_time) {
+        const sessionTimesheet: ExtendedTimesheetWithProfile = {
+          ...timesheet,
+          id: `${timesheet.id}_session_${session.id}_${index}`,
+          start_time: session.start_time,
+          end_time: session.end_time,
+          // Calcola le ore per questa sessione specifica
+          session_hours: session.end_time ? 
+            ((new Date(session.end_time).getTime() - new Date(session.start_time).getTime()) / (1000 * 60 * 60)) : 0,
+          session_type: session.session_type,
+          session_notes: session.notes,
+          session_order: session.session_order,
+          is_session: true,
+          original_timesheet_id: timesheet.id
+        };
+        
+        sessions.push(sessionTimesheet);
+        console.log('🔍 SESSIONI MULTIPLE - Added session:', sessionTimesheet.id, 'from', session.start_time, 'to', session.end_time);
+      }
+    });
+  } else {
+    // Fallback: usa i dati del timesheet principale se non ci sono sessioni
+    if (timesheet.start_time) {
+      sessions.push({
+        ...timesheet,
+        is_session: false,
+        session_hours: timesheet.total_hours || 0
+      });
+      console.log('🔍 SESSIONI MULTIPLE - No sessions found, using main timesheet data');
+    }
+  }
+  
+  return sessions;
+};
+
+// CORREZIONE: Componente per visualizzare le ore con sessioni multiple
+function HoursDisplayMultiSession({ session }: { session: any }) {
+  const realtimeHours = useRealtimeHours(session);
   const [rtNightHours, setRtNightHours] = useState<number>(0);
 
   useEffect(() => {
     let active = true;
 
     const run = async () => {
-      if (!timesheet.start_time || timesheet.end_time) {
+      if (!session.start_time || session.end_time) {
         setRtNightHours(0);
         return;
       }
-      const settings = await getEmployeeSettingsForDate(timesheet.user_id, timesheet.date);
+      const settings = await getEmployeeSettingsForDate(session.user_id, session.date);
       const ns = settings?.night_shift_start || '22:00:00';
       const ne = settings?.night_shift_end || '05:00:00';
-      const start = new Date(timesheet.start_time);
+      const start = new Date(session.start_time);
       const now = new Date();
       const mins = calcNightMinutesLocal(start, now, ns, ne, 'Europe/Rome');
       if (active) setRtNightHours(mins / 60);
     };
 
     run();
-
-    // recalculate every minute while shift is open
     const id = setInterval(run, 60_000);
     return () => { active = false; clearInterval(id); };
-  }, [timesheet.start_time, timesheet.end_time, timesheet.user_id, timesheet.date]);
+  }, [session.start_time, session.end_time, session.user_id, session.date]);
   
   const formatHours = (hours: number | null) => {
     if (!hours) return '0h';
     return `${hours.toFixed(1)}h`;
   };
   
-  if (!timesheet.end_time && timesheet.start_time) {
+  if (!session.end_time && session.start_time) {
     return (
       <span className="text-blue-600">
         {formatHours(realtimeHours)} (in corso)
@@ -77,17 +132,28 @@ function HoursDisplay({ timesheet }: { timesheet: TimesheetWithProfile }) {
             • notturne {rtNightHours.toFixed(1)}h
           </span>
         )}
+        {session.is_session && (
+          <span className="text-xs text-purple-700 ml-1">
+            • sessione #{session.session_order || 1}
+          </span>
+        )}
       </span>
     );
   }
   
   return (
     <span>
-      {formatHours(timesheet.total_hours)}
-      {timesheet.night_hours && timesheet.night_hours > 0 && (
+      {formatHours(session.session_hours || session.total_hours)}
+      {session.night_hours && session.night_hours > 0 && (
         <span className="text-xs text-muted-foreground ml-1">
-          • notturne {timesheet.night_hours.toFixed(1)}h
+          • notturne {session.night_hours.toFixed(1)}h
         </span>
+      )}
+      {session.is_session && (
+        <Badge variant="outline" className="ml-2 text-xs">
+          Sessione #{session.session_order || 1}
+          {session.session_type && ` (${session.session_type})`}
+        </Badge>
       )}
     </span>
   );
@@ -104,7 +170,7 @@ interface EmployeeSummary {
   meal_vouchers: number;
   saturday_hours: number;
   holiday_hours: number;
-  timesheets: TimesheetWithProfile[];
+  timesheets: ExtendedTimesheetWithProfile[];
 }
 
 interface DailyHours {
@@ -113,7 +179,7 @@ interface DailyHours {
   overtime_hours: number;
   night_hours: number;
   meal_vouchers: number;
-  timesheets: TimesheetWithProfile[];
+  timesheets: ExtendedTimesheetWithProfile[];
   absences: any[];
 }
 
@@ -541,20 +607,32 @@ export default function AdminTimesheets() {
            projectName.includes(searchTerm.toLowerCase());
   });
 
-  // Aggrega i dati per dipendente per la vista giornaliera
+  // CORREZIONE: Funzione aggregazione che considera le sessioni multiple
   const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
     const employeesMap = new Map<string, EmployeeSummary>();
+    
+    console.log('🔍 SESSIONI MULTIPLE - Starting aggregation with', filteredTimesheets.length, 'timesheets');
 
+    // Prima, espandi tutti i timesheet in sessioni
+    const allSessions: ExtendedTimesheetWithProfile[] = [];
     filteredTimesheets.forEach(timesheet => {
-      if (!timesheet.profiles) return;
+      const sessions = processTimesheetSessions(timesheet);
+      allSessions.push(...sessions);
+    });
+    
+    console.log('🔍 SESSIONI MULTIPLE - Total sessions after expansion:', allSessions.length);
 
-      const key = timesheet.user_id;
+    // Poi raggruppa per dipendente
+    allSessions.forEach(session => {
+      if (!session.profiles) return;
+
+      const key = session.user_id;
       if (!employeesMap.has(key)) {
         employeesMap.set(key, {
-          user_id: timesheet.user_id,
-          first_name: timesheet.profiles.first_name,
-          last_name: timesheet.profiles.last_name,
-          email: timesheet.profiles.email,
+          user_id: session.user_id,
+          first_name: session.profiles.first_name,
+          last_name: session.profiles.last_name,
+          email: session.profiles.email,
           total_hours: 0,
           overtime_hours: 0,
           night_hours: 0,
@@ -566,43 +644,36 @@ export default function AdminTimesheets() {
       }
 
       const employee = employeesMap.get(key)!;
-      employee.timesheets.push(timesheet);
+      employee.timesheets.push(session);
 
-      // Calcola le ore (con tempo reale per timesheet aperti)
+      // Calcola le ore per questa sessione
       let calculatedHours = 0;
       let calculatedOvertimeHours = 0;
       let calculatedNightHours = 0;
 
-      if (timesheet.end_time) {
-        // Timesheet chiuso - usa i valori salvati
-        calculatedHours = timesheet.total_hours || 0;
-        calculatedOvertimeHours = timesheet.overtime_hours || 0;
-        calculatedNightHours = timesheet.night_hours || 0;
-      } else if (timesheet.start_time) {
-        // Timesheet aperto - calcola in tempo reale
-        const startTime = new Date(timesheet.start_time);
+      if (session.end_time) {
+        // Sessione chiusa - usa le ore calcolate
+        calculatedHours = session.session_hours || session.total_hours || 0;
+        calculatedOvertimeHours = session.overtime_hours || 0;
+        calculatedNightHours = session.night_hours || 0;
+      } else if (session.start_time) {
+        // Sessione aperta - calcola in tempo reale con timezone corretto
+        const startTime = new Date(session.start_time);
         const currentTime = new Date();
         const diffMs = currentTime.getTime() - startTime.getTime();
         calculatedHours = Math.max(0, diffMs / (1000 * 60 * 60));
         
-        // Calcolo straordinari (oltre 8 ore)
-        if (calculatedHours > 8) {
-          calculatedOvertimeHours = calculatedHours - 8;
+        // Calcolo straordinari (oltre 8 ore per l'intera giornata, non per singola sessione)
+        const dailyHours = employee.total_hours + calculatedHours;
+        if (dailyHours > 8) {
+          calculatedOvertimeHours = Math.max(0, dailyHours - 8);
         }
         
-        // Calcolo ore notturne (se inizia prima delle 6 o dopo le 22) - usando UTC+1 (Europa/Roma)
-        const startHour = startTime.getUTCHours() + 1; // Convert UTC to Europe/Rome timezone
-        const adjustedStartHour = startHour >= 24 ? startHour - 24 : (startHour < 0 ? startHour + 24 : startHour);
-        if (adjustedStartHour < 6 || adjustedStartHour >= 22) {
-          calculatedNightHours = calculatedHours;
-        }
-        
-        console.log(`🔍 REAL-TIME CALC per ${timesheet.profiles.first_name}:`, {
-          id: timesheet.id,
-          start_time: timesheet.start_time,
+        console.log(`🔍 SESSIONI MULTIPLE REAL-TIME - Session ${session.id}:`, {
+          start_time: session.start_time,
           hours_worked: calculatedHours.toFixed(2),
-          overtime: calculatedOvertimeHours.toFixed(2),
-          night: calculatedNightHours.toFixed(2)
+          daily_total: dailyHours.toFixed(2),
+          overtime: calculatedOvertimeHours.toFixed(2)
         });
       }
 
@@ -610,20 +681,30 @@ export default function AdminTimesheets() {
       employee.overtime_hours += calculatedOvertimeHours;
       employee.night_hours += calculatedNightHours;
 
-      // Calcola buoni pasto
-      const mealBenefits = getMealBenefits(timesheet);
-      if (mealBenefits.mealVoucher) {
-        employee.meal_vouchers += 1;
+      // Calcola buoni pasto (solo una volta per timesheet principale, non per ogni sessione)
+      if (!session.is_session || session.session_order === 1) {
+        const mealBenefits = getMealBenefits(session);
+        if (mealBenefits.mealVoucher) {
+          employee.meal_vouchers += 1;
+        }
       }
 
       // Calcola ore sabato/festivi
-      if (timesheet.is_saturday) employee.saturday_hours += calculatedHours;
-      if (timesheet.is_holiday) employee.holiday_hours += calculatedHours;
+      if (session.is_saturday) employee.saturday_hours += calculatedHours;
+      if (session.is_holiday) employee.holiday_hours += calculatedHours;
     });
 
-    return Array.from(employeesMap.values()).sort((a, b) => 
+    const result = Array.from(employeesMap.values()).sort((a, b) => 
       `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
     );
+    
+    console.log('🔍 SESSIONI MULTIPLE - Final aggregation:', result.map(emp => ({
+      name: `${emp.first_name} ${emp.last_name}`,
+      sessions_count: emp.timesheets.length,
+      total_hours: emp.total_hours.toFixed(2)
+    })));
+    
+    return result;
   };
 
   if (loading) {
@@ -775,7 +856,7 @@ export default function AdminTimesheets() {
         </TabsList>
 
         <TabsContent value="daily" className="mt-6">
-          <DailySummaryView 
+          <DailySummaryViewFixed 
             timesheets={filteredTimesheets}
             absences={absences}
             aggregateTimesheetsByEmployee={aggregateTimesheetsByEmployee}
@@ -875,8 +956,8 @@ export default function AdminTimesheets() {
   );
 }
 
-// Vista riassuntiva giornaliera
-function DailySummaryView({ 
+// CORREZIONE: Vista giornaliera aggiornata per gestire le sessioni multiple
+function DailySummaryViewFixed({ 
   timesheets, 
   absences,
   aggregateTimesheetsByEmployee,
@@ -898,10 +979,10 @@ function DailySummaryView({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Users className="h-5 w-5" />
-          Riepilogo Giornaliero
+          Riepilogo Giornaliero - Tutte le Sessioni
         </CardTitle>
         <CardDescription>
-          Visualizzazione aggregata per dipendente
+          Visualizzazione aggregata per dipendente con tutte le sessioni multiple
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -926,6 +1007,9 @@ function DailySummaryView({
                         <Badge variant="secondary">
                           {employee.total_hours.toFixed(1)}h totali
                         </Badge>
+                        <Badge variant="outline" className="text-purple-600 border-purple-200">
+                          {employee.timesheets.length} sessioni
+                        </Badge>
                         {employee.overtime_hours > 0 && (
                           <Badge variant="outline" className="text-orange-600 border-orange-200">
                             {employee.overtime_hours.toFixed(1)}h straord.
@@ -948,7 +1032,7 @@ function DailySummaryView({
                       <CollapsibleTrigger asChild>
                         <Button variant="ghost" className="w-full justify-between p-0 h-auto">
                           <span className="text-sm text-muted-foreground">
-                            Dettagli timesheet ({employee.timesheets.length} voci)
+                            Dettagli sessioni ({employee.timesheets.length} voci)
                           </span>
                           <ChevronDown className="h-4 w-4" />
                         </Button>
@@ -962,45 +1046,61 @@ function DailySummaryView({
                                 <TableHead>Progetto</TableHead>
                                 <TableHead>Orario</TableHead>
                                 <TableHead>Ore</TableHead>
+                                <TableHead>Tipo</TableHead>
                                 <TableHead>Buoni Pasto</TableHead>
                                 <TableHead>Posizione</TableHead>
                                 <TableHead>Azioni</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {employee.timesheets.map((timesheet) => {
+                              {employee.timesheets
+                                .sort((a, b) => {
+                                  // Prima ordina per data, poi per session_order
+                                  const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime();
+                                  if (dateCompare !== 0) return dateCompare;
+                                  return (a.session_order || 0) - (b.session_order || 0);
+                                })
+                                .map((session, index) => {
                                 const mealBenefits = BenefitsService.calculateMealBenefitsSync(
-                                  timesheet, 
-                                  employeeSettings[timesheet.user_id], 
+                                  session, 
+                                  employeeSettings[session.user_id], 
                                   companySettings
                                 );
                                 
+                                // ID originale per le azioni
+                                const originalId = session.is_session ? session.original_timesheet_id : session.id;
+                                
                                 return (
-                                  <TableRow key={timesheet.id}>
+                                  <TableRow key={`${session.id}_${index}`} className={session.is_session ? 'bg-purple-50/50' : ''}>
                                     <TableCell className="font-medium">
-                                      {format(parseISO(timesheet.date), 'dd/MM/yyyy', { locale: it })}
-                                      {(timesheet.is_saturday || timesheet.is_holiday) && (
+                                      {format(parseISO(session.date), 'dd/MM/yyyy', { locale: it })}
+                                      {(session.is_saturday || session.is_holiday) && (
                                         <Badge variant="outline" className="ml-2 text-xs">
-                                          {timesheet.is_holiday ? 'Festivo' : 'Sabato'}
+                                          {session.is_holiday ? 'Festivo' : 'Sabato'}
                                         </Badge>
                                       )}
                                     </TableCell>
                                     <TableCell>
-                                      {timesheet.projects ? timesheet.projects.name : 'N/A'}
+                                      {session.projects ? session.projects.name : 'N/A'}
                                     </TableCell>
                                     <TableCell>
                                       <div className="flex flex-col gap-1">
                                         <div className="flex items-center gap-2">
-                                          <span>{timesheet.start_time ? format(parseISO(timesheet.start_time), 'HH:mm') : '-'}</span>
+                                          <span>{session.start_time ? formatInTimeZone(parseISO(session.start_time), 'Europe/Rome', 'HH:mm') : '-'}</span>
                                           <span>→</span>
-                                          <span>{timesheet.end_time ? format(parseISO(timesheet.end_time), 'HH:mm') : 'In corso'}</span>
-                                          {!timesheet.end_time && (
+                                          <span>{session.end_time ? formatInTimeZone(parseISO(session.end_time), 'Europe/Rome', 'HH:mm') : 'In corso'}</span>
+                                          {!session.end_time && (
                                             <Badge variant="secondary" className="text-xs">ATTIVO</Badge>
                                           )}
                                         </div>
-                                        {timesheet.lunch_start_time && timesheet.lunch_end_time && (
+                                        {session.lunch_start_time && session.lunch_end_time && (
                                           <div className="text-xs text-muted-foreground">
-                                            Pausa: {format(parseISO(timesheet.lunch_start_time), 'HH:mm')} - {format(parseISO(timesheet.lunch_end_time), 'HH:mm')}
+                                            Pausa: {formatInTimeZone(parseISO(session.lunch_start_time), 'Europe/Rome', 'HH:mm')} - {formatInTimeZone(parseISO(session.lunch_end_time), 'Europe/Rome', 'HH:mm')}
+                                          </div>
+                                        )}
+                                        {session.session_notes && (
+                                          <div className="text-xs text-muted-foreground italic">
+                                            {session.session_notes}
                                           </div>
                                         )}
                                       </div>
@@ -1008,39 +1108,57 @@ function DailySummaryView({
                                     <TableCell>
                                       <div className="space-y-1">
                                         <div className="font-medium">
-                                          <HoursDisplay timesheet={timesheet} />
+                                          <HoursDisplayMultiSession session={session} />
                                         </div>
-                                        {timesheet.overtime_hours && timesheet.overtime_hours > 0 && (
+                                        {session.overtime_hours && session.overtime_hours > 0 && (
                                           <div className="text-xs text-orange-600">
-                                            +{timesheet.overtime_hours.toFixed(1)}h straord.
+                                            +{session.overtime_hours.toFixed(1)}h straord.
                                           </div>
                                         )}
-                                        {timesheet.night_hours && timesheet.night_hours > 0 && (
+                                        {session.night_hours && session.night_hours > 0 && (
                                           <div className="text-xs text-blue-600">
-                                            {timesheet.night_hours.toFixed(1)}h notturne
+                                            {session.night_hours.toFixed(1)}h notturne
                                           </div>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex flex-col gap-1">
+                                        {session.is_session ? (
+                                          <Badge variant="outline" className="text-xs w-fit">
+                                            Sessione #{session.session_order || 1}
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant="secondary" className="text-xs w-fit">
+                                            Standard
+                                          </Badge>
+                                        )}
+                                        {session.session_type && (
+                                          <span className="text-xs text-muted-foreground">
+                                            {session.session_type}
+                                          </span>
                                         )}
                                       </div>
                                     </TableCell>
                                     <TableCell>
                                       <div className="flex items-center gap-1">
-                                        {mealBenefits.mealVoucher && (
+                                        {mealBenefits.mealVoucher && !session.is_session && (
                                           <Badge variant="secondary" className="text-xs">Buono</Badge>
                                         )}
-                                        {mealBenefits.dailyAllowance && (
+                                        {mealBenefits.dailyAllowance && !session.is_session && (
                                           <Badge variant="outline" className="text-xs">Indennità</Badge>
                                         )}
-                                        {!mealBenefits.mealVoucher && !mealBenefits.dailyAllowance && (
+                                        {(!mealBenefits.mealVoucher && !mealBenefits.dailyAllowance) || session.is_session ? (
                                           <span className="text-xs text-muted-foreground">-</span>
-                                        )}
+                                        ) : null}
                                       </div>
                                     </TableCell>
                                     <TableCell>
                                       <LocationDisplay 
-                                        startLat={timesheet.start_location_lat}
-                                        startLng={timesheet.start_location_lng}
-                                        endLat={timesheet.end_location_lat}
-                                        endLng={timesheet.end_location_lng}
+                                        startLat={session.start_location_lat}
+                                        startLng={session.start_location_lng}
+                                        endLat={session.end_location_lat}
+                                        endLng={session.end_location_lng}
                                       />
                                     </TableCell>
                                     <TableCell>
@@ -1048,18 +1166,22 @@ function DailySummaryView({
                                         <Button
                                           variant="ghost"
                                           size="sm"
-                                          onClick={() => onEditTimesheet(timesheet)}
+                                          onClick={() => onEditTimesheet({ ...session, id: originalId })}
+                                          title="Modifica timesheet principale"
                                         >
                                           <Edit className="h-4 w-4" />
                                         </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => onDeleteTimesheet(timesheet.id)}
-                                          className="text-red-600 hover:text-red-700"
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </Button>
+                                        {!session.is_session && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => onDeleteTimesheet(originalId)}
+                                            className="text-red-600 hover:text-red-700"
+                                            title="Elimina timesheet"
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        )}
                                       </div>
                                     </TableCell>
                                   </TableRow>
