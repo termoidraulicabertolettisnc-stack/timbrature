@@ -961,6 +961,7 @@ export type Database = {
         | "conteggio_giorni"
         | "disabilitato"
       overtime_type: "dopo_8_ore" | "sempre"
+      saturday_handling: "straordinario" | "trasferta" | "normale"
       saturday_type: "trasferta" | "straordinario"
       user_role: "dipendente" | "amministratore"
     }
@@ -1115,6 +1116,7 @@ export const Constants = {
         "disabilitato",
       ],
       overtime_type: ["dopo_8_ore", "sempre"],
+      saturday_handling: ["straordinario", "trasferta", "normale"],
       saturday_type: ["trasferta", "straordinario"],
       user_role: ["dipendente", "amministratore"],
     },

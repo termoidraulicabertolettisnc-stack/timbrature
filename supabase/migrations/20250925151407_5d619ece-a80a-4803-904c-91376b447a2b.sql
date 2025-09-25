@@ -1,0 +1,542 @@
+-- CORREZIONE: Aggiungi opzione per sabato normale basata su orario settimanale
+-- Il sistema deve supportare 3 modalità per il sabato:
+-- 1. 'straordinario': tutto straordinario (attuale)
+-- 2. 'trasferta': tutto in trasferte (attuale) 
+-- 3. 'normale': ore ordinarie secondo standard_weekly_hours (NUOVO)
+
+-- 1. AGGIUNGI NUOVO VALORE AL TIPO ENUM
+DO $$ 
+BEGIN
+    -- Verifica se esiste già il valore 'normale'
+    IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'normale' AND enumtypid = 'saturday_handling'::regtype) THEN
+        ALTER TYPE saturday_handling ADD VALUE 'normale';
+    END IF;
+EXCEPTION
+    WHEN undefined_object THEN
+        -- Se il tipo enum non esisteva, crealo
+        CREATE TYPE saturday_handling AS ENUM ('straordinario', 'trasferta', 'normale');
+END $$;
+
+-- 2. AGGIORNA LA LOGICA DEL TRIGGER per gestire il nuovo caso 'normale'
+CREATE OR REPLACE FUNCTION public.calculate_timesheet_hours_legacy()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+    work_duration interval;
+    lunch_duration interval;
+    total_minutes numeric;
+    company_settings_rec record;
+    employee_settings_rec record;
+    night_start_time time;
+    night_end_time time;
+    calculated_night_hours numeric := 0;
+    calculated_overtime_hours numeric := 0;
+    standard_daily_hours_for_day integer := 8;
+    weekly_hours_config jsonb;
+    day_name text;
+    is_saturday boolean;
+    lunch_break_minutes integer := 60;
+    lunch_break_min_hours numeric := 6;
+    saturday_handling_type text;
+    hours_worked_without_lunch numeric;
+    
+    -- Variables for night hours calculation (in local time)
+    local_start_time timestamp without time zone;
+    local_end_time timestamp without time zone;
+    night_start_today timestamp without time zone;
+    night_end_tomorrow timestamp without time zone;
+    night_start_yesterday timestamp without time zone;
+    night_end_today timestamp without time zone;
+    night_overlap_minutes numeric := 0;
+    temp_start timestamp without time zone;
+    temp_end timestamp without time zone;
+    
+    -- Variables for lunch break overlap calculation
+    lunch_overlap_seconds numeric := 0;
+    shift_start timestamp with time zone;
+    shift_end timestamp with time zone;
+    lunch_start_tz timestamp with time zone;
+    lunch_end_tz timestamp with time zone;
+BEGIN
+    -- Skip if this timesheet has sessions (handled by session trigger)
+    IF EXISTS (SELECT 1 FROM public.timesheet_sessions WHERE timesheet_id = NEW.id) THEN
+        RETURN NEW;
+    END IF;
+
+    -- Se è un'assenza, non calcolare ore lavorate
+    IF NEW.is_absence = true THEN
+        NEW.total_hours := 0;
+        NEW.overtime_hours := 0;
+        NEW.night_hours := 0;
+        RETURN NEW;
+    END IF;
+
+    -- Se non c'è end_time, non calcolare nulla
+    IF NEW.end_time IS NULL OR NEW.start_time IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    -- Calculate hours using legacy method for manual entries
+    local_start_time := NEW.start_time AT TIME ZONE 'Europe/Rome';
+    local_end_time := NEW.end_time AT TIME ZONE 'Europe/Rome';
+    
+    shift_start := NEW.start_time;
+    shift_end := NEW.end_time;
+    work_duration := shift_end - shift_start;
+    hours_worked_without_lunch := EXTRACT(EPOCH FROM work_duration) / 3600.0;
+    
+    -- Get employee settings
+    SELECT es.* INTO employee_settings_rec
+    FROM public.employee_settings es
+    WHERE es.user_id = NEW.user_id
+      AND (es.valid_from IS NULL OR es.valid_from <= NEW.date)
+      AND (es.valid_to IS NULL OR es.valid_to >= NEW.date)
+    ORDER BY es.valid_from DESC NULLS LAST, es.created_at DESC
+    LIMIT 1;
+
+    -- Get company settings by joining with profiles
+    SELECT cs.* INTO company_settings_rec
+    FROM public.company_settings cs
+    JOIN public.profiles p ON p.company_id = cs.company_id
+    WHERE p.user_id = NEW.user_id
+    LIMIT 1;
+
+    -- Determine lunch break settings
+    IF employee_settings_rec IS NOT NULL AND employee_settings_rec.lunch_break_type IS NOT NULL THEN
+        CASE employee_settings_rec.lunch_break_type::text
+            WHEN '0_minuti' THEN lunch_break_minutes := 0;
+            WHEN '15_minuti' THEN lunch_break_minutes := 15;
+            WHEN '30_minuti' THEN lunch_break_minutes := 30;
+            WHEN '45_minuti' THEN lunch_break_minutes := 45;
+            WHEN '60_minuti' THEN lunch_break_minutes := 60;
+            WHEN '90_minuti' THEN lunch_break_minutes := 90;
+            WHEN '120_minuti' THEN lunch_break_minutes := 120;
+            ELSE lunch_break_minutes := 60;
+        END CASE;
+    ELSIF company_settings_rec IS NOT NULL AND company_settings_rec.lunch_break_type IS NOT NULL THEN
+        CASE company_settings_rec.lunch_break_type::text
+            WHEN '0_minuti' THEN lunch_break_minutes := 0;
+            WHEN '15_minuti' THEN lunch_break_minutes := 15;
+            WHEN '30_minuti' THEN lunch_break_minutes := 30;
+            WHEN '45_minuti' THEN lunch_break_minutes := 45;
+            WHEN '60_minuti' THEN lunch_break_minutes := 60;
+            WHEN '90_minuti' THEN lunch_break_minutes := 90;
+            WHEN '120_minuti' THEN lunch_break_minutes := 120;
+            ELSE lunch_break_minutes := 60;
+        END CASE;
+    ELSE
+        lunch_break_minutes := 60;
+    END IF;
+
+    -- Get lunch break minimum hours
+    IF employee_settings_rec IS NOT NULL AND employee_settings_rec.lunch_break_min_hours IS NOT NULL THEN
+        lunch_break_min_hours := employee_settings_rec.lunch_break_min_hours;
+    ELSIF company_settings_rec IS NOT NULL AND company_settings_rec.lunch_break_min_hours IS NOT NULL THEN
+        lunch_break_min_hours := company_settings_rec.lunch_break_min_hours;
+    ELSE
+        lunch_break_min_hours := 6;
+    END IF;
+
+    -- Calculate lunch overlap for manual entries
+    lunch_overlap_seconds := 0;
+    
+    IF NEW.lunch_start_time IS NOT NULL AND NEW.lunch_end_time IS NOT NULL THEN
+        lunch_start_tz := NEW.lunch_start_time;
+        lunch_end_tz := NEW.lunch_end_time;
+        
+        IF lunch_end_tz > shift_start AND lunch_start_tz < shift_end THEN
+            lunch_overlap_seconds := EXTRACT(EPOCH FROM (
+                LEAST(shift_end, lunch_end_tz) - GREATEST(shift_start, lunch_start_tz)
+            ));
+            lunch_overlap_seconds := GREATEST(0, lunch_overlap_seconds);
+        END IF;
+        
+    ELSIF NEW.lunch_duration_minutes IS NOT NULL THEN
+        lunch_overlap_seconds := LEAST(
+            EXTRACT(EPOCH FROM work_duration),
+            (NEW.lunch_duration_minutes::numeric * 60)
+        );
+        
+    ELSE
+        IF lunch_break_minutes > 0 AND hours_worked_without_lunch > lunch_break_min_hours THEN
+            lunch_overlap_seconds := LEAST(
+                EXTRACT(EPOCH FROM work_duration),
+                (lunch_break_minutes::numeric * 60)
+            );
+        END IF;
+    END IF;
+
+    -- Apply lunch deduction
+    work_duration := work_duration - (lunch_overlap_seconds || ' seconds')::interval;
+    
+    IF work_duration < INTERVAL '0' THEN
+        work_duration := INTERVAL '0';
+    END IF;
+
+    total_minutes := EXTRACT(EPOCH FROM work_duration) / 60;
+    NEW.total_hours := ROUND(total_minutes / 60.0, 2);
+
+    -- Calculate day info for overtime
+    CASE EXTRACT(DOW FROM (local_start_time)::date)
+        WHEN 1 THEN day_name := 'lun';
+        WHEN 2 THEN day_name := 'mar';
+        WHEN 3 THEN day_name := 'mer';
+        WHEN 4 THEN day_name := 'gio';
+        WHEN 5 THEN day_name := 'ven';
+        WHEN 6 THEN day_name := 'sab';
+        WHEN 0 THEN day_name := 'dom';
+    END CASE;
+
+    is_saturday := EXTRACT(DOW FROM (local_start_time)::date) = 6;
+    NEW.is_saturday := is_saturday;
+
+    -- Determine weekly hours configuration
+    IF employee_settings_rec IS NOT NULL AND employee_settings_rec.standard_weekly_hours IS NOT NULL THEN
+        weekly_hours_config := employee_settings_rec.standard_weekly_hours;
+    ELSIF company_settings_rec IS NOT NULL AND company_settings_rec.standard_weekly_hours IS NOT NULL THEN
+        weekly_hours_config := company_settings_rec.standard_weekly_hours;
+    ELSE
+        weekly_hours_config := '{"lun": 8, "mar": 8, "mer": 8, "gio": 8, "ven": 8, "sab": 0, "dom": 0}'::jsonb;
+    END IF;
+
+    standard_daily_hours_for_day := COALESCE((weekly_hours_config->>day_name)::integer, 8);
+
+    -- Calculate overtime hours with new 'normale' logic
+    IF employee_settings_rec IS NOT NULL THEN
+        saturday_handling_type := COALESCE(employee_settings_rec.saturday_handling::text, 'straordinario');
+    ELSIF company_settings_rec IS NOT NULL THEN
+        saturday_handling_type := company_settings_rec.saturday_handling::text;
+    ELSE
+        saturday_handling_type := 'straordinario';
+    END IF;
+
+    IF is_saturday THEN
+        CASE saturday_handling_type
+            WHEN 'trasferta' THEN
+                -- Tutte le ore sono ordinarie, nessun straordinario (gestito in trasferta)
+                calculated_overtime_hours := 0;
+                
+            WHEN 'normale' THEN
+                -- NUOVO: Sabato normale - calcola straordinari basandosi su standard_weekly_hours
+                IF standard_daily_hours_for_day > 0 THEN
+                    -- Ha ore ordinarie configurate per sabato
+                    calculated_overtime_hours := GREATEST(0, NEW.total_hours - standard_daily_hours_for_day);
+                ELSE
+                    -- Nessuna ora ordinaria configurata per sabato = tutto straordinario
+                    calculated_overtime_hours := NEW.total_hours;
+                END IF;
+                
+            WHEN 'straordinario' THEN
+                -- Comportamento attuale: tutte le ore del sabato sono straordinarie
+                IF standard_daily_hours_for_day = 0 THEN
+                    calculated_overtime_hours := NEW.total_hours;
+                ELSIF NEW.total_hours > standard_daily_hours_for_day THEN
+                    calculated_overtime_hours := NEW.total_hours - standard_daily_hours_for_day;
+                ELSE
+                    calculated_overtime_hours := 0;
+                END IF;
+                
+            ELSE
+                -- Default fallback
+                calculated_overtime_hours := NEW.total_hours;
+        END CASE;
+    ELSE
+        -- Non è sabato: logica normale
+        IF NEW.total_hours > standard_daily_hours_for_day THEN
+            calculated_overtime_hours := NEW.total_hours - standard_daily_hours_for_day;
+        ELSE
+            calculated_overtime_hours := 0;
+        END IF;
+    END IF;
+    
+    NEW.overtime_hours := calculated_overtime_hours;
+
+    -- Calculate night hours (same 3-segment logic)
+    IF employee_settings_rec IS NOT NULL THEN
+        night_start_time := COALESCE(employee_settings_rec.night_shift_start, '22:00:00'::time);
+        night_end_time := COALESCE(employee_settings_rec.night_shift_end, '05:00:00'::time);
+    ELSIF company_settings_rec IS NOT NULL THEN
+        night_start_time := company_settings_rec.night_shift_start;
+        night_end_time := company_settings_rec.night_shift_end;
+    ELSE
+        night_start_time := '22:00:00'::time;
+        night_end_time := '05:00:00'::time;
+    END IF;
+
+    night_overlap_minutes := 0;
+    
+    IF night_start_time > night_end_time THEN
+        -- Night period crosses midnight - use 3 segments
+        night_start_today := DATE(local_start_time) + night_start_time;
+        night_end_tomorrow := DATE(local_start_time) + INTERVAL '1 day' + night_end_time;
+        night_start_yesterday := DATE(local_start_time) - INTERVAL '1 day' + night_start_time;
+        night_end_today := DATE(local_start_time) + night_end_time;
+        
+        -- Segment 1: previous night end (00:00 to 05:00 today)
+        IF local_start_time < night_end_today AND local_end_time > (DATE(local_start_time)::timestamp) THEN
+            temp_start := GREATEST(local_start_time, DATE(local_start_time)::timestamp);
+            temp_end := LEAST(local_end_time, night_end_today);
+            IF temp_end > temp_start THEN
+                night_overlap_minutes := night_overlap_minutes + EXTRACT(EPOCH FROM (temp_end - temp_start)) / 60;
+            END IF;
+        END IF;
+        
+        -- Segment 2: current night start (22:00 today to 00:00 tomorrow)
+        IF local_start_time < (DATE(local_start_time) + INTERVAL '1 day')::timestamp AND local_end_time > night_start_today THEN
+            temp_start := GREATEST(local_start_time, night_start_today);
+            temp_end := LEAST(local_end_time, (DATE(local_start_time) + INTERVAL '1 day')::timestamp);
+            IF temp_end > temp_start THEN
+                night_overlap_minutes := night_overlap_minutes + EXTRACT(EPOCH FROM (temp_end - temp_start)) / 60;
+            END IF;
+        END IF;
+        
+        -- Segment 3: next night end (00:00 to 05:00 tomorrow)
+        IF local_start_time < night_end_tomorrow AND local_end_time > (DATE(local_start_time) + INTERVAL '1 day')::timestamp THEN
+            temp_start := GREATEST(local_start_time, (DATE(local_start_time) + INTERVAL '1 day')::timestamp);
+            temp_end := LEAST(local_end_time, night_end_tomorrow);
+            IF temp_end > temp_start THEN
+                night_overlap_minutes := night_overlap_minutes + EXTRACT(EPOCH FROM (temp_end - temp_start)) / 60;
+            END IF;
+        END IF;
+    ELSE
+        -- Night period within same day
+        night_start_today := DATE(local_start_time) + night_start_time;
+        night_end_today := DATE(local_start_time) + night_end_time;
+        
+        IF local_start_time < night_end_today AND local_end_time > night_start_today THEN
+            temp_start := GREATEST(local_start_time, night_start_today);
+            temp_end := LEAST(local_end_time, night_end_today);
+            night_overlap_minutes := EXTRACT(EPOCH FROM (temp_end - temp_start)) / 60;
+        END IF;
+    END IF;
+    
+    calculated_night_hours := ROUND(GREATEST(0, night_overlap_minutes) / 60.0, 2);
+    NEW.night_hours := calculated_night_hours;
+
+    RETURN NEW;
+END;
+$function$;
+
+-- 3. AGGIORNA ANCHE IL TRIGGER PER LE SESSIONI con la nuova logica
+CREATE OR REPLACE FUNCTION public.calculate_hours_on_session_change()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+    timesheet_record record;
+    total_work_minutes numeric := 0;
+    session_rec record;
+    work_duration interval;
+    calculated_overtime_hours numeric := 0;
+    calculated_night_hours numeric := 0;
+    standard_daily_hours_for_day integer := 8;
+    weekly_hours_config jsonb;
+    day_name text;
+    is_saturday_calc boolean;
+    employee_settings_rec record := NULL;
+    company_settings_rec record := NULL;
+    saturday_handling_type text;
+    local_start_time timestamp without time zone;
+    local_end_time timestamp without time zone;
+    night_start_time time := '22:00:00'::time;
+    night_end_time time := '05:00:00'::time;
+    night_overlap_minutes numeric := 0;
+    night_start_today timestamp without time zone;
+    night_end_today timestamp without time zone;
+    temp_start timestamp without time zone;
+    temp_end timestamp without time zone;
+BEGIN
+    -- Get the timesheet ID to work with
+    IF TG_OP = 'DELETE' THEN
+        SELECT * INTO timesheet_record FROM public.timesheets WHERE id = OLD.timesheet_id;
+    ELSE
+        SELECT * INTO timesheet_record FROM public.timesheets WHERE id = NEW.timesheet_id;
+    END IF;
+    
+    -- Exit early if no timesheet found
+    IF timesheet_record IS NULL THEN
+        RETURN COALESCE(NEW, OLD);
+    END IF;
+    
+    -- Skip calculation for absences
+    IF timesheet_record.is_absence = true THEN
+        UPDATE public.timesheets 
+        SET total_hours = 0, overtime_hours = 0, night_hours = 0, updated_at = now()
+        WHERE id = timesheet_record.id;
+        RETURN COALESCE(NEW, OLD);
+    END IF;
+
+    -- Get employee settings
+    SELECT es.* INTO employee_settings_rec
+    FROM public.employee_settings es
+    WHERE es.user_id = timesheet_record.user_id
+      AND (es.valid_from IS NULL OR es.valid_from <= timesheet_record.date)
+      AND (es.valid_to IS NULL OR es.valid_to >= timesheet_record.date)
+    ORDER BY es.valid_from DESC NULLS LAST, es.created_at DESC
+    LIMIT 1;
+
+    -- Get company settings
+    SELECT cs.* INTO company_settings_rec
+    FROM public.company_settings cs
+    JOIN public.profiles p ON p.company_id = cs.company_id
+    WHERE p.user_id = timesheet_record.user_id
+    LIMIT 1;
+
+    -- Calculate total work hours from all work sessions
+    FOR session_rec IN 
+        SELECT * FROM public.timesheet_sessions 
+        WHERE timesheet_id = timesheet_record.id 
+        AND session_type = 'work' 
+        AND end_time IS NOT NULL
+        ORDER BY session_order
+    LOOP
+        work_duration := session_rec.end_time - session_rec.start_time;
+        total_work_minutes := total_work_minutes + (EXTRACT(EPOCH FROM work_duration) / 60);
+        
+        -- Calculate night hours for this session
+        local_start_time := session_rec.start_time AT TIME ZONE 'Europe/Rome';
+        local_end_time := session_rec.end_time AT TIME ZONE 'Europe/Rome';
+
+        -- Determine night shift times
+        IF employee_settings_rec.user_id IS NOT NULL THEN
+            night_start_time := COALESCE(employee_settings_rec.night_shift_start, '22:00:00'::time);
+            night_end_time := COALESCE(employee_settings_rec.night_shift_end, '05:00:00'::time);
+        ELSIF company_settings_rec.company_id IS NOT NULL THEN
+            night_start_time := company_settings_rec.night_shift_start;
+            night_end_time := company_settings_rec.night_shift_end;
+        END IF;
+
+        -- Calculate night hours for this session
+        IF night_start_time > night_end_time THEN
+            -- Night period crosses midnight
+            night_start_today := DATE(local_start_time) + night_start_time;
+            night_end_today := DATE(local_start_time) + night_end_time;
+            
+            -- Check overlap with night period before midnight
+            IF local_start_time < night_end_today AND local_end_time > (DATE(local_start_time)::timestamp) THEN
+                temp_start := GREATEST(local_start_time, DATE(local_start_time)::timestamp);
+                temp_end := LEAST(local_end_time, night_end_today);
+                IF temp_end > temp_start THEN
+                    night_overlap_minutes := night_overlap_minutes + EXTRACT(EPOCH FROM (temp_end - temp_start)) / 60;
+                END IF;
+            END IF;
+            
+            -- Check overlap with night period after midnight
+            IF local_start_time < (DATE(local_start_time) + INTERVAL '1 day')::timestamp AND local_end_time > night_start_today THEN
+                temp_start := GREATEST(local_start_time, night_start_today);
+                temp_end := LEAST(local_end_time, (DATE(local_start_time) + INTERVAL '1 day')::timestamp);
+                IF temp_end > temp_start THEN
+                    night_overlap_minutes := night_overlap_minutes + EXTRACT(EPOCH FROM (temp_end - temp_start)) / 60;
+                END IF;
+            END IF;
+        ELSE
+            -- Night period within same day
+            night_start_today := DATE(local_start_time) + night_start_time;
+            night_end_today := DATE(local_start_time) + night_end_time;
+            
+            IF local_start_time < night_end_today AND local_end_time > night_start_today THEN
+                temp_start := GREATEST(local_start_time, night_start_today);
+                temp_end := LEAST(local_end_time, night_end_today);
+                night_overlap_minutes := night_overlap_minutes + EXTRACT(EPOCH FROM (temp_end - temp_start)) / 60;
+            END IF;
+        END IF;
+    END LOOP;
+
+    -- Calculate day info for overtime using first session
+    SELECT start_time INTO local_start_time FROM public.timesheet_sessions 
+    WHERE timesheet_id = timesheet_record.id AND session_type = 'work' 
+    ORDER BY session_order LIMIT 1;
+    
+    IF local_start_time IS NOT NULL THEN
+        local_start_time := local_start_time AT TIME ZONE 'Europe/Rome';
+        
+        CASE EXTRACT(DOW FROM (local_start_time)::date)
+            WHEN 1 THEN day_name := 'lun';
+            WHEN 2 THEN day_name := 'mar';
+            WHEN 3 THEN day_name := 'mer';
+            WHEN 4 THEN day_name := 'gio';
+            WHEN 5 THEN day_name := 'ven';
+            WHEN 6 THEN day_name := 'sab';
+            WHEN 0 THEN day_name := 'dom';
+        END CASE;
+
+        is_saturday_calc := EXTRACT(DOW FROM (local_start_time)::date) = 6;
+
+        -- Determine weekly hours configuration
+        IF employee_settings_rec.user_id IS NOT NULL AND employee_settings_rec.standard_weekly_hours IS NOT NULL THEN
+            weekly_hours_config := employee_settings_rec.standard_weekly_hours;
+        ELSIF company_settings_rec.company_id IS NOT NULL AND company_settings_rec.standard_weekly_hours IS NOT NULL THEN
+            weekly_hours_config := company_settings_rec.standard_weekly_hours;
+        ELSE
+            weekly_hours_config := '{"lun": 8, "mar": 8, "mer": 8, "gio": 8, "ven": 8, "sab": 0, "dom": 0}'::jsonb;
+        END IF;
+
+        standard_daily_hours_for_day := COALESCE((weekly_hours_config->>day_name)::integer, 8);
+
+        -- Calculate overtime hours with new 'normale' logic
+        IF employee_settings_rec.user_id IS NOT NULL THEN
+            saturday_handling_type := COALESCE(employee_settings_rec.saturday_handling::text, 'straordinario');
+        ELSIF company_settings_rec.company_id IS NOT NULL THEN
+            saturday_handling_type := company_settings_rec.saturday_handling::text;
+        ELSE
+            saturday_handling_type := 'straordinario';
+        END IF;
+
+        IF is_saturday_calc THEN
+            CASE saturday_handling_type
+                WHEN 'trasferta' THEN
+                    -- Tutte le ore sono ordinarie, nessun straordinario
+                    calculated_overtime_hours := 0;
+                    
+                WHEN 'normale' THEN
+                    -- NUOVO: Sabato normale - calcola straordinari basandosi su standard_weekly_hours
+                    IF standard_daily_hours_for_day > 0 THEN
+                        -- Ha ore ordinarie configurate per sabato
+                        calculated_overtime_hours := GREATEST(0, ROUND(total_work_minutes / 60.0, 2) - standard_daily_hours_for_day);
+                    ELSE
+                        -- Nessuna ora ordinaria configurata per sabato = tutto straordinario
+                        calculated_overtime_hours := ROUND(total_work_minutes / 60.0, 2);
+                    END IF;
+                    
+                WHEN 'straordinario' THEN
+                    -- Comportamento attuale: tutte le ore del sabato sono straordinarie
+                    IF standard_daily_hours_for_day = 0 THEN
+                        calculated_overtime_hours := ROUND(total_work_minutes / 60.0, 2);
+                    ELSIF (total_work_minutes / 60.0) > standard_daily_hours_for_day THEN
+                        calculated_overtime_hours := ROUND((total_work_minutes / 60.0) - standard_daily_hours_for_day, 2);
+                    ELSE
+                        calculated_overtime_hours := 0;
+                    END IF;
+                    
+                ELSE
+                    -- Default fallback
+                    calculated_overtime_hours := ROUND(total_work_minutes / 60.0, 2);
+            END CASE;
+        ELSE
+            -- Non è sabato: logica normale
+            IF (total_work_minutes / 60.0) > standard_daily_hours_for_day THEN
+                calculated_overtime_hours := ROUND((total_work_minutes / 60.0) - standard_daily_hours_for_day, 2);
+            ELSE
+                calculated_overtime_hours := 0;
+            END IF;
+        END IF;
+    END IF;
+
+    -- Update the timesheet record
+    UPDATE public.timesheets 
+    SET 
+        total_hours = ROUND(total_work_minutes / 60.0, 2),
+        overtime_hours = calculated_overtime_hours,
+        night_hours = ROUND(GREATEST(0, night_overlap_minutes) / 60.0, 2),
+        is_saturday = COALESCE(is_saturday_calc, false),
+        updated_at = now()
+    WHERE id = timesheet_record.id;
+
+    RETURN COALESCE(NEW, OLD);
+END;
+$function$;
