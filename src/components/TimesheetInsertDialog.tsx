@@ -352,7 +352,7 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
                 <SelectValue placeholder="Seleziona commessa (opzionale)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Nessuna commessa</SelectItem>
+                <SelectItem value="none">Nessuna commessa</SelectItem>
                 {projects.map((project) => (
                   <SelectItem key={project.id} value={project.id}>
                     {project.name}
