@@ -17,6 +17,7 @@ interface CompanySettings {
   company_id: string;
   standard_weekly_hours: any;
   lunch_break_type: '0_minuti' | '15_minuti' | '30_minuti' | '45_minuti' | '60_minuti' | '90_minuti' | '120_minuti' | 'libera' | null;
+  lunch_break_min_hours: number | null;
   saturday_handling: 'trasferta' | 'straordinario' | null;
   meal_allowance_policy: 'disabled' | 'meal_vouchers_only' | 'daily_allowance' | 'both' | null;
   night_shift_start: string | null;
@@ -43,6 +44,7 @@ export default function AdminSettings() {
     company_id: '',
     standard_weekly_hours: null,
     lunch_break_type: null,
+    lunch_break_min_hours: null,
     saturday_handling: null,
     meal_allowance_policy: null,
     night_shift_start: null,
@@ -118,6 +120,7 @@ export default function AdminSettings() {
           lun: 8, mar: 8, mer: 8, gio: 8, ven: 8, sab: 0, dom: 0
         },
         lunch_break_type: '60_minuti' as const,
+        lunch_break_min_hours: 6.0,
         saturday_handling: 'trasferta' as const,
         meal_voucher_policy: 'oltre_6_ore' as const,
         night_shift_start: '20:00:00',
@@ -165,6 +168,7 @@ export default function AdminSettings() {
         .update({
           standard_weekly_hours: settings.standard_weekly_hours,
           lunch_break_type: settings.lunch_break_type,
+          lunch_break_min_hours: settings.lunch_break_min_hours,
           saturday_handling: settings.saturday_handling,
           meal_allowance_policy: settings.meal_allowance_policy,
           night_shift_start: settings.night_shift_start,
@@ -351,6 +355,25 @@ export default function AdminSettings() {
                   </SelectContent>
                 </Select>
               </div>
+              
+              {settings.lunch_break_type && settings.lunch_break_type !== '0_minuti' && settings.lunch_break_type !== 'libera' && (
+                <div>
+                  <Label htmlFor="lunch_break_min_hours">Ore minime per pausa pranzo</Label>
+                  <Input
+                    id="lunch_break_min_hours"
+                    type="number"
+                    min="0"
+                    max="12"
+                    step="0.5"
+                    value={settings.lunch_break_min_hours || ''}
+                    onChange={(e) => updateSetting('lunch_break_min_hours', parseFloat(e.target.value) || null)}
+                    placeholder="6.0"
+                  />
+                  <p className="text-sm text-muted-foreground mt-1">
+                    La pausa viene applicata automaticamente solo se si lavora più di questo numero di ore
+                  </p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
