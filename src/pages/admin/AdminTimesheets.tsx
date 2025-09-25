@@ -46,44 +46,50 @@ import { MonthlyCalendarView } from '@/components/MonthlyCalendarView';
 import { WeeklyTimelineView } from '@/components/WeeklyTimelineView';
 import { TimesheetImportDialog } from '@/components/TimesheetImportDialog';
 
-// CORREZIONE COMPLETA: Funzione per estrarre correttamente l'UUID reale
+// CORREZIONE COMPLETA: Funzione migliorata per estrarre UUID con gestione di tutti i formati
 const extractRealTimesheetId = (compositeId: string): string => {
-  console.log('🔧 ID FIX - Input ID:', compositeId);
+  console.log('🔧 EXTRACT UUID - Input:', compositeId);
   
-  // Validazione UUID base
-  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  // Pattern per UUID valido
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   
   // Se è già un UUID valido, restituiscilo
   if (uuidPattern.test(compositeId)) {
-    console.log('🔧 ID FIX - Already valid UUID:', compositeId);
+    console.log('🔧 EXTRACT UUID - Already valid:', compositeId);
     return compositeId;
   }
   
-  // Gestisci ID compositi con diversi separatori
-  let realId = compositeId;
+  // Prova a estrarre il primo UUID valido dalla stringa
+  const potentialUuids = compositeId.split(/[-_]/);
   
+  // Ricostruisci possibili UUID combinando le parti
+  for (let i = 0; i <= potentialUuids.length - 5; i++) {
+    const candidate = potentialUuids.slice(i, i + 5).join('-');
+    if (uuidPattern.test(candidate)) {
+      console.log('🔧 EXTRACT UUID - Found valid UUID:', candidate, 'from position', i);
+      return candidate;
+    }
+  }
+  
+  // Fallback: prova con separatori diversi
   if (compositeId.includes('_session_')) {
-    // Formato: uuid_session_123_0
-    realId = compositeId.split('_session_')[0];
-  } else if (compositeId.includes('_')) {
-    // Formato: uuid_qualcosa
-    realId = compositeId.split('_')[0];
-  } else if (compositeId.includes('-session-')) {
-    // Formato: uuid-session-123
-    realId = compositeId.split('-session-')[0];
-  } else if (compositeId.includes('-legacy-')) {
-    // Formato: uuid-legacy-qualcosa
-    realId = compositeId.split('-legacy-')[0];
+    const beforeSession = compositeId.split('_session_')[0];
+    if (uuidPattern.test(beforeSession)) {
+      console.log('🔧 EXTRACT UUID - Extracted before _session_:', beforeSession);
+      return beforeSession;
+    }
   }
   
-  // Verifica che l'ID estratto sia un UUID valido
-  if (!uuidPattern.test(realId)) {
-    console.error('🔧 ID FIX - Extracted ID is not valid UUID:', realId, 'from:', compositeId);
-    throw new Error(`ID timesheet non valido: ${compositeId}`);
+  if (compositeId.includes('_')) {
+    const firstPart = compositeId.split('_')[0];
+    if (uuidPattern.test(firstPart)) {
+      console.log('🔧 EXTRACT UUID - Extracted first part:', firstPart);
+      return firstPart;
+    }
   }
   
-  console.log('🔧 ID FIX - Extracted valid UUID:', realId, 'from:', compositeId);
-  return realId;
+  console.error('🔧 EXTRACT UUID - No valid UUID found in:', compositeId);
+  throw new Error(`Impossibile estrarre UUID valido da: ${compositeId}`);
 };
 
 // CORREZIONE: Validazione UUID helper
@@ -588,115 +594,270 @@ export default function AdminTimesheets() {
     );
   };
 
-  // CORREZIONE: Funzione di eliminazione migliorata
-  const handleDeleteTimesheetFixed = async (timesheetId: string) => {
-    console.log('🔧 DELETE FIX - Starting deletion for ID:', timesheetId);
-    
-    // Conferma eliminazione
-    if (!confirm('Sei sicuro di voler eliminare questo timesheet? Questa azione non può essere annullata.')) {
-      return;
+  // CORREZIONE COMPLETA: Funzione unificata per eliminazione con opzioni
+  const handleDeleteTimesheetUnified = async (
+    timesheetId: string, 
+    deleteType: 'timesheet' | 'session' = 'timesheet',
+    sessionId?: string
+  ) => {
+    console.log('🔧 UNIFIED DELETE - Starting:', {
+      timesheetId,
+      deleteType,
+      sessionId
+    });
+
+    // Conferma appropriata in base al tipo
+    const confirmMessage = deleteType === 'session' 
+      ? 'Sei sicuro di voler eliminare questa sessione?' 
+      : 'Sei sicuro di voler eliminare questo timesheet con tutte le sessioni?';
+      
+    if (!confirm(`${confirmMessage} Questa azione non può essere annullata.`)) {
+      return false;
     }
 
     try {
-      // Estrai l'ID reale usando la funzione corretta
+      // Estrai UUID reale
       const realId = extractRealTimesheetId(timesheetId);
-      console.log('🔧 DELETE FIX - Using real ID:', realId);
+      console.log('🔧 UNIFIED DELETE - Real ID:', realId);
 
       // Verifica autenticazione
       const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
       if (authError || !user) {
         throw new Error('Utente non autenticato');
       }
 
-      // 1. Prima controlla se il timesheet esiste
-      const { data: existingTimesheet, error: checkError } = await supabase
+      // Verifica esistenza timesheet
+      const { data: timesheet, error: checkError } = await supabase
         .from('timesheets')
         .select('id, user_id')
         .eq('id', realId)
         .single();
-      
-      console.log('🔧 DELETE FIX - Existing timesheet check:', { 
-        data: existingTimesheet, 
-        error: checkError,
-        realId: realId
-      });
-      
+        
       if (checkError) {
         if (checkError.code === 'PGRST116') {
-          throw new Error('Timesheet non trovato nel database');
-        } else {
-          throw new Error(`Errore nella verifica del timesheet: ${checkError.message}`);
+          throw new Error('Timesheet non trovato');
         }
+        throw new Error(`Errore verifica timesheet: ${checkError.message}`);
       }
 
-      // 2. Elimina prima tutte le sessioni collegate
-      console.log('🔧 DELETE FIX - Checking for sessions to delete');
-      const { data: sessions, error: sessionsCheckError } = await supabase
-        .from('timesheet_sessions')
-        .select('id')
-        .eq('timesheet_id', realId);
-      
-      console.log('🔧 DELETE FIX - Found sessions:', sessions?.length || 0);
-      
-      if (sessions && sessions.length > 0) {
-        console.log('🔧 DELETE FIX - Deleting sessions first');
-        const { error: deleteSessionsError } = await supabase
+      if (deleteType === 'session' && sessionId) {
+        // ELIMINA SOLO UNA SESSIONE SPECIFICA
+        console.log('🔧 UNIFIED DELETE - Deleting specific session:', sessionId);
+        
+        const { error: sessionError } = await supabase
+          .from('timesheet_sessions')
+          .delete()
+          .eq('id', sessionId)
+          .eq('timesheet_id', realId);
+          
+        if (sessionError) {
+          throw new Error(`Errore eliminazione sessione: ${sessionError.message}`);
+        }
+        
+        console.log('🔧 UNIFIED DELETE - Session deleted successfully');
+        
+      } else {
+        // ELIMINA TUTTO IL TIMESHEET CON TUTTE LE SESSIONI
+        console.log('🔧 UNIFIED DELETE - Deleting entire timesheet');
+        
+        // Prima elimina tutte le sessioni
+        const { error: sessionsError } = await supabase
           .from('timesheet_sessions')
           .delete()
           .eq('timesheet_id', realId);
-        
-        if (deleteSessionsError) {
-          console.error('🔧 DELETE FIX - Error deleting sessions:', deleteSessionsError);
-          throw new Error(`Errore nell'eliminazione delle sessioni: ${deleteSessionsError.message}`);
+          
+        if (sessionsError) {
+          console.error('🔧 UNIFIED DELETE - Sessions deletion error:', sessionsError);
+          throw new Error(`Errore eliminazione sessioni: ${sessionsError.message}`);
         }
         
-        console.log('🔧 DELETE FIX - Sessions deleted successfully');
+        // Poi elimina il timesheet principale
+        const { error: timesheetError } = await supabase
+          .from('timesheets')
+          .delete()
+          .eq('id', realId);
+          
+        if (timesheetError) {
+          throw new Error(`Errore eliminazione timesheet: ${timesheetError.message}`);
+        }
+        
+        console.log('🔧 UNIFIED DELETE - Entire timesheet deleted successfully');
       }
 
-      // 3. Ora elimina il timesheet principale
-      console.log('🔧 DELETE FIX - Deleting main timesheet');
-      const { error: deleteError } = await supabase
-        .from('timesheets')
-        .delete()
-        .eq('id', realId);
-
-      if (deleteError) {
-        console.error('🔧 DELETE FIX - Delete error details:', {
-          message: deleteError.message,
-          details: deleteError.details,
-          hint: deleteError.hint,
-          code: deleteError.code,
-          realId: realId
-        });
-        throw new Error(`Errore nell'eliminazione del timesheet: ${deleteError.message}`);
-      }
-
-      console.log('🔧 DELETE FIX - Deletion completed successfully');
-
-      // Mostra messaggio di successo
+      // Messaggio di successo
       toast({
         title: "Successo",
-        description: "Timesheet eliminato con successo",
+        description: deleteType === 'session' 
+          ? "Sessione eliminata con successo" 
+          : "Timesheet eliminato con successo",
       });
 
       // Ricarica i dati
       loadTimesheets();
-      
+      return true;
+
     } catch (error: any) {
-      console.error('🔧 DELETE FIX - General error:', error);
-      
-      let errorMessage = 'Errore sconosciuto nell\'eliminazione';
-      if (error?.message) {
-        errorMessage = error.message;
-      }
+      console.error('🔧 UNIFIED DELETE - Error:', error);
       
       toast({
         title: "Errore",
-        description: errorMessage,
+        description: error.message || 'Errore durante l\'eliminazione',
         variant: "destructive",
       });
+      
+      return false;
     }
+  };
+
+  // CORREZIONE COMPLETA: Componenti specifici per ogni vista definiti all'interno del componente
+
+  // VISTA SETTIMANALE: Pulsanti per eliminare singola sessione
+  const WeeklyTimelineEntryActions = ({ 
+    entry, 
+    onDeleteTimesheet, 
+    onEditTimesheet,
+    originalId 
+  }: any) => {
+    const handleDeleteClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      
+      // Determina se eliminare sessione o timesheet intero
+      const isMultiSession = entry.timesheet.id.includes('_session_');
+      const sessionId = isMultiSession ? entry.timesheet.id.split('_')[2] : undefined;
+      
+      console.log('🔧 WEEKLY DELETE - Click:', {
+        entryId: entry.timesheet.id,
+        originalId,
+        isMultiSession,
+        sessionId
+      });
+      
+      if (isMultiSession && sessionId) {
+        // Elimina solo la sessione specifica
+        handleDeleteTimesheetUnified(originalId, 'session', sessionId)
+          .then(success => success && onDeleteTimesheet?.(originalId));
+      } else {
+        // Elimina tutto il timesheet
+        handleDeleteTimesheetUnified(originalId, 'timesheet')
+          .then(success => success && onDeleteTimesheet?.(originalId));
+      }
+    };
+
+    return (
+      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-4 w-4 p-0 text-white hover:text-white hover:bg-white/20"
+          onClick={(e) => {
+            e.stopPropagation();
+            onEditTimesheet?.(entry.timesheet);
+          }}
+        >
+          <Edit className="h-3 w-3" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-4 w-4 p-0 text-white hover:text-red-200 hover:bg-red-500/20"
+          onClick={handleDeleteClick}
+          title={entry.timesheet.id.includes('_session_') ? "Elimina questa sessione" : "Elimina tutto il timesheet"}
+        >
+          <Trash2 className="h-3 w-3" />
+        </Button>
+      </div>
+    );
+  };
+
+  // VISTA MENSILE: Pulsante per eliminare intera giornata
+  const MonthlyDayActions = ({ 
+    dayData, 
+    onDeleteTimesheet 
+  }: {
+    dayData: any;
+    onDeleteTimesheet: (id: string) => void;
+  }) => {
+    const handleDeleteDay = () => {
+      // Trova il timesheet principale (primo della giornata)
+      const mainTimesheet = dayData.timesheets[0];
+      if (!mainTimesheet) return;
+      
+      console.log('🔧 MONTHLY DELETE - Day:', {
+        date: dayData.date,
+        timesheetsCount: dayData.timesheets.length,
+        mainTimesheetId: mainTimesheet.id
+      });
+      
+      // Elimina tutto il timesheet della giornata
+      handleDeleteTimesheetUnified(mainTimesheet.id, 'timesheet')
+        .then(success => success && onDeleteTimesheet(mainTimesheet.id));
+    };
+
+    if (dayData.timesheets.length === 0) return null;
+
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+        onClick={handleDeleteDay}
+        title={`Elimina tutte le ${dayData.timesheets.length} sessioni di questa giornata`}
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    );
+  };
+
+  // VISTA GIORNALIERA: Pulsanti per ogni sessione individuale
+  const DailySummarySessionActions = ({
+    session,
+    onDeleteTimesheetLocal,
+    onEditTimesheet
+  }: any) => {
+    const handleDeleteSession = () => {
+      const isSpecificSession = session.id.includes('_session_');
+      const sessionId = isSpecificSession ? session.id.split('_')[2] : undefined;
+      const originalId = isSpecificSession ? session.id.split('_')[0] : session.id;
+      
+      console.log('🔧 DAILY DELETE - Session:', {
+        sessionId: session.id,
+        isSpecificSession,
+        extractedSessionId: sessionId,
+        originalId
+      });
+      
+      if (isSpecificSession && sessionId) {
+        // Elimina solo questa sessione
+        handleDeleteTimesheetUnified(originalId, 'session', sessionId)
+          .then(success => success && onDeleteTimesheetLocal?.(originalId));
+      } else {
+        // Elimina tutto il timesheet
+        handleDeleteTimesheetUnified(originalId, 'timesheet')
+          .then(success => success && onDeleteTimesheetLocal?.(originalId));
+      }
+    };
+
+    return (
+      <div className="flex gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0"
+          onClick={() => onEditTimesheet(session)}
+        >
+          <Edit className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+          onClick={handleDeleteSession}
+          title={session.id.includes('_session_') ? "Elimina questa sessione" : "Elimina tutto il timesheet"}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    );
   };
 
   const loadTimesheets = async () => {
@@ -1138,7 +1299,7 @@ export default function AdminTimesheets() {
               setEditingTimesheet(timesheet);
               setEditDialogOpen(true);
             }}
-            onDeleteTimesheet={handleDeleteTimesheetFixed}
+            onDeleteTimesheet={handleDeleteTimesheetUnified}
           />
         </TabsContent>
 
@@ -1153,7 +1314,7 @@ export default function AdminTimesheets() {
               setEditingTimesheet(timesheet);
               setEditDialogOpen(true);
             }}
-            onDeleteTimesheet={handleDeleteTimesheetFixed}
+            onDeleteTimesheet={handleDeleteTimesheetUnified}
             onAddTimesheet={handleAddTimesheet}
             onAddAbsence={handleAddAbsence}
             onNavigatePrevious={navigatePrevious}
@@ -1174,7 +1335,7 @@ export default function AdminTimesheets() {
               setEditingTimesheet(timesheet);
               setEditDialogOpen(true);
             }}
-            onDeleteTimesheet={handleDeleteTimesheetFixed}
+            onDeleteTimesheet={handleDeleteTimesheetUnified}
             onAddTimesheet={handleAddTimesheet}
             onAddAbsence={handleAddAbsence}
             onNavigatePrevious={navigatePrevious}
@@ -1248,6 +1409,8 @@ export default function AdminTimesheets() {
     </div>
   );
 }
+
+// CORREZIONE COMPLETA: Componenti specifici per ogni vista
 
 // CORREZIONE: Vista giornaliera aggiornata per gestire le sessioni multiple
 function DailySummaryViewFixed({ 
@@ -1461,29 +1624,37 @@ function DailySummaryViewFixed({
                                         endLng={session.end_location_lng}
                                       />
                                     </TableCell>
-                                    <TableCell>
-                                      <div className="flex items-center gap-2">
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => onEditTimesheet({ ...session, id: originalId })}
-                                          title="Modifica timesheet principale"
-                                        >
-                                          <Edit className="h-4 w-4" />
-                                        </Button>
-                                        {!session.is_session && (
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => onDeleteTimesheet(originalId)}
-                                            className="text-red-600 hover:text-red-700"
-                                            title="Elimina timesheet"
-                                          >
-                                            <Trash2 className="h-4 w-4" />
-                                          </Button>
-                                        )}
-                                      </div>
-                                    </TableCell>
+                                     <TableCell>
+                                       {(() => {
+                                         return (
+                                           <div className="flex gap-1">
+                                             <Button
+                                               variant="ghost"
+                                               size="sm"
+                                               className="h-6 w-6 p-0"
+                                               onClick={() => {
+                                                 const originalId = session.is_session ? session.original_timesheet_id : session.id;
+                                                 onEditTimesheet({ ...session, id: originalId });
+                                               }}
+                                             >
+                                               <Edit className="h-4 w-4" />
+                                             </Button>
+                                             <Button
+                                               variant="ghost"
+                                               size="sm"
+                                               className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                                               onClick={() => {
+                                                 const originalId = session.is_session ? session.original_timesheet_id : session.id;
+                                                 onDeleteTimesheet(originalId);
+                                               }}
+                                               title="Elimina timesheet"
+                                             >
+                                               <Trash2 className="h-4 w-4" />
+                                             </Button>
+                                           </div>
+                                         );
+                                       })()}
+                                     </TableCell>
                                   </TableRow>
                                 );
                               })}
