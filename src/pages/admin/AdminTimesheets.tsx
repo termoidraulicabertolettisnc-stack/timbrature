@@ -50,15 +50,26 @@ import { TimesheetImportDialog } from '@/components/TimesheetImportDialog';
 const extractRealTimesheetId = (compositeId: string): string => {
   console.log('🔧 ID FIX - Input composite ID:', compositeId);
   
-  // Se l'ID contiene underscore, è un ID composito generato dal frontend
-  if (compositeId.includes('_')) {
-    // Estrai la prima parte che è l'UUID reale
+  // Se l'ID contiene underscore o trattino, è un ID composito generato dal frontend
+  if (compositeId.includes('_') || compositeId.includes('-legacy-') || compositeId.includes('-session-')) {
+    // Per gli ID con -legacy- o -session-, estrai solo la prima parte UUID
+    if (compositeId.includes('-legacy-') || compositeId.includes('-session-')) {
+      const parts = compositeId.split('-');
+      // Ricostruisci l'UUID dalle prime 5 parti (formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+      if (parts.length >= 5) {
+        const realId = parts.slice(0, 5).join('-');
+        console.log('🔧 ID FIX - Extracted real ID from legacy/session:', realId);
+        return realId;
+      }
+    }
+    
+    // Fallback per ID con underscore
     const realId = compositeId.split('_')[0];
-    console.log('🔧 ID FIX - Extracted real ID:', realId);
+    console.log('🔧 ID FIX - Extracted real ID from underscore:', realId);
     return realId;
   }
   
-  // Se non contiene underscore, è già un ID reale
+  // Se non contiene separatori, è già un ID reale
   console.log('🔧 ID FIX - Already real ID:', compositeId);
   return compositeId;
 };
