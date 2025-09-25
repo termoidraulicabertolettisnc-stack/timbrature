@@ -11,6 +11,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
+import { fromZonedTime } from 'date-fns-tz';
 import { cn } from '@/lib/utils';
 
 interface TimesheetInsertDialogProps {
@@ -20,19 +21,33 @@ interface TimesheetInsertDialogProps {
   selectedDate?: Date;
 }
 
+// Funzione helper per conversione timezone
+const localTimeToUtc = (dateString: string, timeString: string): string => {
+  try {
+    const localDateTime = `${dateString}T${timeString}:00`;
+    // Usa fromZonedTime per convertire da timezone locale a UTC
+    const localDate = new Date(localDateTime);
+    const utcDate = fromZonedTime(localDate, 'Europe/Rome');
+    return utcDate.toISOString();
+  } catch (error) {
+    console.error('Error converting local time to UTC:', error);
+    return new Date().toISOString();
+  }
+};
+
 export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedDate }: TimesheetInsertDialogProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [lunchDuration, setLunchDuration] = useState(60);
   
   const [formData, setFormData] = useState({
-    user_id: '',
     project_id: '',
-    date: new Date(),
+    date: '',
     start_time: '',
     end_time: '',
-    lunch_duration_minutes: 60,
     notes: ''
   });
 
@@ -40,17 +55,17 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
     if (open) {
       loadData();
       // Reset form
+      setSelectedEmployee('');
+      setLunchDuration(60);
       setFormData({
-        user_id: '',
         project_id: '',
-        date: selectedDate || new Date(),
+        date: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
         start_time: '',
         end_time: '',
-        lunch_duration_minutes: 60,
         notes: ''
       });
     }
-  }, [open]);
+  }, [open, selectedDate]);
 
   const loadData = async () => {
     try {
@@ -84,10 +99,20 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
     }
   };
 
+  // DEBUG per TimesheetInsertDialog - Versione con debug completo
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.user_id || !formData.start_time) {
+    console.log('🐛 INSERT DEBUG - Starting timesheet insertion');
+    console.log('🐛 INSERT DEBUG - Form data:', {
+      date: formData.date,
+      start_time: formData.start_time,
+      end_time: formData.end_time,
+      employee: selectedEmployee,
+      project: formData.project_id
+    });
+    
+    if (!selectedEmployee || !formData.start_time) {
       toast({
         title: "Errore",
         description: "Dipendente e ora di inizio sono obbligatori",
@@ -95,58 +120,172 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
       });
       return;
     }
-
+    
     setLoading(true);
-
+    
     try {
-      const dateStr = format(formData.date, 'yyyy-MM-dd');
+      // Verifica se esiste già un timesheet per questa data/utente
+      const { data: existingTimesheets, error: checkError } = await supabase
+        .from('timesheets')
+        .select('id, date, start_time, end_time')
+        .eq('user_id', selectedEmployee)
+        .eq('date', formData.date);
       
-      // Costruisci i timestamp completi
-      const startTimestamp = `${dateStr}T${formData.start_time}:00`;
-      let endTimestamp = null;
+      console.log('🐛 INSERT DEBUG - Existing timesheets check:', {
+        data: existingTimesheets,
+        error: checkError,
+        count: existingTimesheets?.length || 0
+      });
+      
+      if (checkError) {
+        console.error('🐛 INSERT DEBUG - Error checking existing timesheets:', checkError);
+        throw new Error(`Errore nella verifica timesheet esistenti: ${checkError.message}`);
+      }
+      
+      // Ottieni utente corrente
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      console.log('🐛 INSERT DEBUG - Current user:', user?.id);
+      
+      if (authError || !user) {
+        throw new Error('Utente non autenticato');
+      }
+      
+      // Converti gli orari in UTC (usando la conversione timezone)
+      let startTimeUTC = null;
+      let endTimeUTC = null;
+      
+      if (formData.start_time) {
+        startTimeUTC = localTimeToUtc(formData.date, formData.start_time);
+        console.log('🐛 INSERT DEBUG - Start time conversion:', {
+          input: `${formData.date} ${formData.start_time}`,
+          output: startTimeUTC
+        });
+      }
       
       if (formData.end_time) {
-        endTimestamp = `${dateStr}T${formData.end_time}:00`;
-        
-        // Se l'ora di fine è minore dell'ora di inizio, assume sia il giorno dopo
-        if (formData.end_time < formData.start_time) {
-          const nextDay = new Date(formData.date);
-          nextDay.setDate(nextDay.getDate() + 1);
-          endTimestamp = `${format(nextDay, 'yyyy-MM-dd')}T${formData.end_time}:00`;
-        }
+        endTimeUTC = localTimeToUtc(formData.date, formData.end_time);
+        console.log('🐛 INSERT DEBUG - End time conversion:', {
+          input: `${formData.date} ${formData.end_time}`,
+          output: endTimeUTC
+        });
       }
-
-      const timesheetData = {
-        user_id: formData.user_id,
-        project_id: formData.project_id === "none" ? null : formData.project_id || null,
-        date: dateStr,
-        start_time: startTimestamp,
-        end_time: endTimestamp,
-        lunch_duration_minutes: formData.lunch_duration_minutes,
+      
+      // Prepare insert data
+      const insertData = {
+        user_id: selectedEmployee,
+        date: formData.date,
+        start_time: startTimeUTC,
+        end_time: endTimeUTC,
+        project_id: formData.project_id === 'none' ? null : formData.project_id,
         notes: formData.notes || null,
-        created_by: formData.user_id,
-        is_absence: false
+        lunch_duration_minutes: lunchDuration || 60,
+        created_by: user.id,
+        updated_by: user.id
       };
-
-      const { error } = await supabase
+      
+      console.log('🐛 INSERT DEBUG - Insert data prepared:', insertData);
+      
+      // STRATEGIA 1: Prova a inserire come nuovo timesheet separato
+      const { data: newTimesheet, error: insertError } = await supabase
         .from('timesheets')
-        .insert([timesheetData]);
-
-      if (error) throw error;
-
+        .insert(insertData)
+        .select()
+        .single();
+      
+      console.log('🐛 INSERT DEBUG - Insert result:', {
+        data: newTimesheet,
+        error: insertError
+      });
+      
+      if (insertError) {
+        console.error('🐛 INSERT DEBUG - Insert error details:', {
+          message: insertError.message,
+          details: insertError.details,
+          hint: insertError.hint,
+          code: insertError.code
+        });
+        
+        // Se l'errore è per duplicato, prova strategia alternativa
+        if (insertError.code === '23505' || insertError.message.includes('unique')) {
+          console.log('🐛 INSERT DEBUG - Duplicate detected, trying session approach');
+          
+          // STRATEGIA 2: Crea come sessione del timesheet esistente
+          if (existingTimesheets && existingTimesheets.length > 0) {
+            const mainTimesheet = existingTimesheets[0];
+            
+            // Calcola session_order
+            const { data: existingSessions } = await supabase
+              .from('timesheet_sessions')
+              .select('session_order')
+              .eq('timesheet_id', mainTimesheet.id)
+              .order('session_order', { ascending: false })
+              .limit(1);
+            
+            const nextOrder = existingSessions && existingSessions.length > 0 
+              ? existingSessions[0].session_order + 1 
+              : 1;
+            
+            console.log('🐛 INSERT DEBUG - Creating session with order:', nextOrder);
+            
+            const sessionData = {
+              timesheet_id: mainTimesheet.id,
+              session_order: nextOrder,
+              start_time: startTimeUTC,
+              end_time: endTimeUTC,
+              session_type: 'work',
+              notes: formData.notes || null
+            };
+            
+            const { data: newSession, error: sessionError } = await supabase
+              .from('timesheet_sessions')
+              .insert(sessionData)
+              .select();
+            
+            console.log('🐛 INSERT DEBUG - Session insert result:', {
+              data: newSession,
+              error: sessionError
+            });
+            
+            if (sessionError) {
+              throw new Error(`Errore creazione sessione: ${sessionError.message}`);
+            }
+            
+            console.log('🐛 INSERT DEBUG - Session created successfully');
+          } else {
+            throw insertError;
+          }
+        } else {
+          throw insertError;
+        }
+      } else {
+        console.log('🐛 INSERT DEBUG - New timesheet created successfully');
+      }
+      
       toast({
         title: "Successo",
-        description: "Timesheet inserito con successo",
+        description: "Timbratura inserita con successo",
       });
-
+      
       onSuccess();
       onOpenChange(false);
-
-    } catch (error) {
-      console.error('Error inserting timesheet:', error);
+      
+    } catch (error: any) {
+      console.error('🐛 INSERT DEBUG - Catch block error:', error);
+      console.error('🐛 INSERT DEBUG - Error type:', typeof error);
+      console.error('🐛 INSERT DEBUG - Error properties:', Object.keys(error));
+      
+      let errorMessage = 'Errore sconosciuto nell\'inserimento';
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      console.error('🐛 INSERT DEBUG - Final error message:', errorMessage);
+      
       toast({
         title: "Errore",
-        description: "Errore nell'inserimento del timesheet",
+        description: `Errore nell'inserimento del timesheet: ${errorMessage}`,
         variant: "destructive",
       });
     } finally {
@@ -167,7 +306,7 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="user_id">Dipendente *</Label>
-            <Select value={formData.user_id} onValueChange={(value) => setFormData(prev => ({ ...prev, user_id: value }))}>
+            <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
               <SelectTrigger>
                 <SelectValue placeholder="Seleziona dipendente" />
               </SelectTrigger>
@@ -200,32 +339,12 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
 
           <div className="space-y-2">
             <Label>Data</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !formData.date && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {format(formData.date, 'dd/MM/yyyy')}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={formData.date}
-                  onSelect={(date) => {
-                    if (date) {
-                      setFormData(prev => ({ ...prev, date }));
-                    }
-                  }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <Input
+              type="date"
+              value={formData.date}
+              onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+              required
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -254,8 +373,8 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
           <div className="space-y-2">
             <Label htmlFor="lunch_duration">Pausa Pranzo (minuti)</Label>
             <Select 
-              value={formData.lunch_duration_minutes.toString()} 
-              onValueChange={(value) => setFormData(prev => ({ ...prev, lunch_duration_minutes: parseInt(value) }))}
+              value={lunchDuration.toString()} 
+              onValueChange={(value) => setLunchDuration(parseInt(value))}
             >
               <SelectTrigger>
                 <SelectValue />
