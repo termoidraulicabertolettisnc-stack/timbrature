@@ -265,7 +265,7 @@ export function DayEditDialog({
       const timesheetPayload = {
         user_id: employee.user_id,
         date: date,
-        project_id: timesheetData.project_id || null,
+        project_id: timesheetData.project_id === 'none' ? null : timesheetData.project_id || null,
         notes: timesheetData.notes || null,
         is_saturday: timesheetData.is_saturday,
         is_holiday: timesheetData.is_holiday,
@@ -384,7 +384,7 @@ export function DayEditDialog({
                       <SelectValue placeholder="Seleziona progetto" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Nessun progetto</SelectItem>
+                      <SelectItem value="none">Nessun progetto</SelectItem>
                       {projects.map((project) => (
                         <SelectItem key={project.id} value={project.id}>
                           {project.name}
