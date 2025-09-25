@@ -260,30 +260,29 @@ export function WeeklyTimelineView({
       end_time: entry.timesheet.end_time
     });
 
-    // CORREZIONE: Crea un oggetto timesheet con i dati della sessione specifica
     const handleEditClick = () => {
-      if (isSpecificSession) {
-        // Per sessioni specifiche, crea un timesheet temporaneo con i dati della sessione
-        const sessionBasedTimesheet = {
+      // Estrai l'ID originale se è un ID composito
+      const originalId = entry.timesheet.id.includes('_') ? entry.timesheet.id.split('_')[0] : entry.timesheet.id;
+      
+      // Verifica se è una sessione specifica (ha session_id nei metadata)
+      const hasSessionMetadata = entry.timesheet.id.includes('_session_') || entry.timesheet.id.includes('_legacy_');
+      
+      if (hasSessionMetadata) {
+        // Per sessioni specifiche, crea un timesheet con i dati corretti della sessione
+        const sessionTimesheet = {
           ...entry.timesheet,
-          id: originalId, // Usa l'ID originale per il database
-          start_time: entry.timesheet.start_time, // Orari della sessione specifica
-          end_time: entry.timesheet.end_time,     // Orari della sessione specifica
-          total_hours: entry.timesheet.total_hours, // Ore della sessione specifica
-          // Mantieni tutti gli altri dati dal timesheet originale
-          date: entry.timesheet.date,
-          project_id: entry.timesheet.project_id,
-          notes: (entry.timesheet as any).session_notes || entry.timesheet.notes,
-          // Aggiungi flag per identificare che stiamo modificando una sessione specifica
-          _editing_session_id: (entry.timesheet as any).session_id,
-          _editing_session_order: (entry.timesheet as any).session_order
+          id: originalId, // Usa ID originale per il database
+          // IMPORTANTE: Mantieni start_time e end_time della sessione specifica
+          start_time: entry.start_time ? `${entry.timesheet.date}T${entry.start_time}` : entry.timesheet.start_time,
+          end_time: entry.end_time ? `${entry.timesheet.date}T${entry.end_time}` : entry.timesheet.end_time,
+          // Aggiungi metadati per identificare la sessione da modificare
+          _editing_session_id: entry.timesheet.id.includes('_legacy_') ? 'legacy' : entry.timesheet.id.split('_')[2],
+          _editing_session_order: (entry.timesheet as any).session_order || 1
         };
         
-        console.log('🔧 WEEKLY SESSION FIX - Editing specific session:', sessionBasedTimesheet);
-        onEditTimesheet(sessionBasedTimesheet);
+        onEditTimesheet(sessionTimesheet);
       } else {
-        // Per timesheet principali, usa l'approccio normale
-        console.log('🔧 WEEKLY SESSION FIX - Editing main timesheet:', originalId);
+        // Per timesheet normali
         onEditTimesheet({ ...entry.timesheet, id: originalId });
       }
     };
