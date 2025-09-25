@@ -210,15 +210,38 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
     }
   };
 
+  // CORREZIONE: Funzione per estrarre l'ID reale del timesheet
+  const extractRealTimesheetId = (compositeId: string): string => {
+    console.log('🔧 ID FIX - Input composite ID:', compositeId);
+    
+    // Se l'ID contiene underscore, è un ID composito generato dal frontend
+    if (compositeId.includes('_')) {
+      // Estrai la prima parte che è l'UUID reale
+      const realId = compositeId.split('_')[0];
+      console.log('🔧 ID FIX - Extracted real ID:', realId);
+      return realId;
+    }
+    
+    // Se non contiene underscore, è già un ID reale
+    console.log('🔧 ID FIX - Already real ID:', compositeId);
+    return compositeId;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!timesheet) return;
 
     setLoading(true);
+    
+    console.log('🔧 ID FIX - Starting timesheet update');
+    console.log('🔧 ID FIX - Original timesheet ID:', timesheet.id);
+    
+    // CORREZIONE PRINCIPALE: Estrai l'ID reale
+    const realTimesheetId = extractRealTimesheetId(timesheet.id);
+    console.log('🔧 ID FIX - Using real timesheet ID for update:', realTimesheetId);
+    
     try {
-      console.log('🔧 TIMEZONE FIX - Submitting form data:', formData);
-
-      // Validazioni prima dell'update
+      // Validazioni esistenti...
       if (formData.start_time && formData.end_time) {
         const startDateTime = new Date(`${formData.date}T${formData.start_time}:00`);
         const endDateTime = new Date(`${formData.end_date || formData.date}T${formData.end_time}:00`);
@@ -234,7 +257,6 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         }
       }
 
-      // Validazione pausa pranzo quando si usa la modalità orari
       if (lunchBreakMode === 'times' && (!!formData.lunch_start_time !== !!formData.lunch_end_time)) {
         toast({ 
           title: 'Errore', 
@@ -245,9 +267,12 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         return;
       }
 
-      const currentUser = (await supabase.auth.getUser()).data.user;
+      const currentUserResult = await supabase.auth.getUser();
+      if (currentUserResult.error) {
+        throw new Error(`Errore autenticazione: ${currentUserResult.error.message}`);
+      }
 
-      // Prepare the update data
+      // Prepare update data
       const updateData: any = {
         date: formData.date,
         end_date: formData.end_date,
@@ -255,17 +280,12 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         notes: formData.notes || null,
         is_saturday: formData.is_saturday,
         is_holiday: formData.is_holiday,
-        updated_by: currentUser?.id ?? timesheet.user_id,
+        updated_by: currentUserResult.data.user?.id ?? timesheet.user_id,
       };
 
-      // CORREZIONE PRINCIPALE: Usa la nuova funzione di conversione timezone
+      // Handle timezone conversion
       if (formData.start_time) {
         updateData.start_time = localTimeToUtc(formData.date, formData.start_time);
-        console.log('🔧 TIMEZONE FIX - Start time conversion:', {
-          input_date: formData.date,
-          input_time: formData.start_time,
-          output_utc: updateData.start_time
-        });
       } else {
         updateData.start_time = null;
       }
@@ -273,16 +293,11 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
       if (formData.end_time) {
         const endDate = formData.end_date || formData.date;
         updateData.end_time = localTimeToUtc(endDate, formData.end_time);
-        console.log('🔧 TIMEZONE FIX - End time conversion:', {
-          input_date: endDate,
-          input_time: formData.end_time,
-          output_utc: updateData.end_time
-        });
       } else {
         updateData.end_time = null;
       }
 
-      // Handle lunch times based on mode
+      // Handle lunch times
       if (lunchBreakMode === 'times') {
         if (formData.lunch_start_time) {
           const lunchDate = formData.lunch_start_time < formData.start_time && formData.end_date !== formData.date 
@@ -309,19 +324,28 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         updateData.lunch_duration_minutes = lunchDuration;
       }
 
-      console.log('🔧 TIMEZONE FIX - Final update data:', updateData);
+      console.log('🔧 ID FIX - Final update data:', updateData);
 
-      const { error } = await supabase
+      // CORREZIONE: Usa l'ID reale nella query
+      const { data: updatedData, error } = await supabase
         .from('timesheets')
         .update(updateData)
-        .eq('id', timesheet.id);
+        .eq('id', realTimesheetId) // ← FIX: Usa ID reale invece di composito
+        .select();
+
+      console.log('🔧 ID FIX - Supabase response:', { data: updatedData, error });
 
       if (error) {
-        console.error('🔧 TIMEZONE FIX - Database error:', error);
+        console.error('🔧 ID FIX - Supabase error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
         throw error;
       }
 
-      console.log('🔧 TIMEZONE FIX - Update successful');
+      console.log('🔧 ID FIX - Update successful:', updatedData);
 
       toast({
         title: "Successo",
@@ -330,11 +354,23 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
 
       onSuccess();
       onOpenChange(false);
-    } catch (error) {
-      console.error('Error updating timesheet:', error);
+    } catch (error: any) {
+      console.error('🔧 ID FIX - Catch block error:', error);
+      
+      let errorMessage = 'Errore sconosciuto';
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error?.details) {
+        errorMessage = error.details;
+      }
+      
+      console.error('🔧 ID FIX - Final error message:', errorMessage);
+      
       toast({
         title: "Errore",
-        description: `Errore nella modifica del timesheet: ${error instanceof Error ? error.message : 'Errore sconosciuto'}`,
+        description: `Errore nella modifica del timesheet: ${errorMessage}`,
         variant: "destructive",
       });
     } finally {

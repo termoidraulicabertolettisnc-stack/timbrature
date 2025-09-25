@@ -45,6 +45,23 @@ import { MonthlyCalendarView } from '@/components/MonthlyCalendarView';
 import { WeeklyTimelineView } from '@/components/WeeklyTimelineView';
 import { TimesheetImportDialog } from '@/components/TimesheetImportDialog';
 
+// CORREZIONE: Funzione per estrarre l'ID reale del timesheet
+const extractRealTimesheetId = (compositeId: string): string => {
+  console.log('🔧 ID FIX - Input composite ID:', compositeId);
+  
+  // Se l'ID contiene underscore, è un ID composito generato dal frontend
+  if (compositeId.includes('_')) {
+    // Estrai la prima parte che è l'UUID reale
+    const realId = compositeId.split('_')[0];
+    console.log('🔧 ID FIX - Extracted real ID:', realId);
+    return realId;
+  }
+  
+  // Se non contiene underscore, è già un ID reale
+  console.log('🔧 ID FIX - Already real ID:', compositeId);
+  return compositeId;
+};
+
 // CORREZIONE: Funzione per gestire correttamente le sessioni multiple
 const processTimesheetSessions = (timesheet: TimesheetWithProfile): ExtendedTimesheetWithProfile[] => {
   const sessions: ExtendedTimesheetWithProfile[] = [];
@@ -414,18 +431,78 @@ export default function AdminTimesheets() {
     );
   };
 
-  const deleteTimesheet = async (id: string) => {
+  const deleteTimesheet = async (compositeId: string) => {
+    console.log('🔧 ID FIX - Starting deletion for composite ID:', compositeId);
+    
+    // CORREZIONE: Estrai l'ID reale
+    const realId = extractRealTimesheetId(compositeId);
+    console.log('🔧 ID FIX - Using real ID for deletion:', realId);
+    
     if (!confirm('Sei sicuro di voler eliminare questo timesheet? Questa azione non può essere annullata.')) {
       return;
     }
 
     try {
-      const { error } = await supabase
+      // Verifica autenticazione
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        throw new Error('Utente non autenticato');
+      }
+
+      // Controlla se il timesheet esiste
+      const { data: existingTimesheet, error: checkError } = await supabase
+        .from('timesheets')
+        .select('id, user_id')
+        .eq('id', realId) // ← FIX: Usa ID reale
+        .single();
+      
+      console.log('🔧 ID FIX - Existing timesheet check:', { data: existingTimesheet, error: checkError });
+      
+      if (checkError) {
+        if (checkError.code === 'PGRST116') {
+          throw new Error('Timesheet non trovato');
+        } else {
+          throw new Error(`Errore nella verifica del timesheet: ${checkError.message}`);
+        }
+      }
+
+      // Elimina le sessioni collegate
+      const { data: sessions, error: sessionsError } = await supabase
+        .from('timesheet_sessions')
+        .select('id')
+        .eq('timesheet_id', realId); // ← FIX: Usa ID reale
+      
+      if (sessions && sessions.length > 0) {
+        console.log('🔧 ID FIX - Deleting sessions first');
+        const { error: deleteSessionsError } = await supabase
+          .from('timesheet_sessions')
+          .delete()
+          .eq('timesheet_id', realId); // ← FIX: Usa ID reale
+        
+        if (deleteSessionsError) {
+          throw new Error(`Errore nell'eliminazione delle sessioni: ${deleteSessionsError.message}`);
+        }
+      }
+
+      // Elimina il timesheet principale
+      console.log('🔧 ID FIX - Deleting main timesheet with real ID:', realId);
+      const { error: deleteError } = await supabase
         .from('timesheets')
         .delete()
-        .eq('id', id);
+        .eq('id', realId); // ← FIX: Usa ID reale
 
-      if (error) throw error;
+      if (deleteError) {
+        console.error('🔧 ID FIX - Delete error details:', {
+          message: deleteError.message,
+          details: deleteError.details,
+          hint: deleteError.hint,
+          code: deleteError.code
+        });
+        throw new Error(`Errore nell'eliminazione: ${deleteError.message}`);
+      }
+
+      console.log('🔧 ID FIX - Deletion successful');
 
       toast({
         title: "Successo",
@@ -434,11 +511,17 @@ export default function AdminTimesheets() {
 
       // Ricarica i dati
       loadTimesheets();
-    } catch (error) {
-      console.error('Error deleting timesheet:', error);
+    } catch (error: any) {
+      console.error('🔧 ID FIX - Delete error:', error);
+      
+      let errorMessage = 'Errore sconosciuto nell\'eliminazione';
+      if (error?.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Errore",
-        description: "Errore nell'eliminazione del timesheet",
+        description: `Errore nell'eliminazione del timesheet: ${errorMessage}`,
         variant: "destructive",
       });
     }
