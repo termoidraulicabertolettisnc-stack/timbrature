@@ -99,12 +99,12 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
     }
   };
 
-  // DEBUG per TimesheetInsertDialog - Versione con debug completo
+  // CORREZIONE per TimesheetInsertDialog - Fix project_id
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    console.log('🐛 INSERT DEBUG - Starting timesheet insertion');
-    console.log('🐛 INSERT DEBUG - Form data:', {
+    console.log('🔧 INSERT FIX - Starting timesheet insertion');
+    console.log('🔧 INSERT FIX - Form data:', {
       date: formData.date,
       start_time: formData.start_time,
       end_time: formData.end_time,
@@ -131,32 +131,32 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
         .eq('user_id', selectedEmployee)
         .eq('date', formData.date);
       
-      console.log('🐛 INSERT DEBUG - Existing timesheets check:', {
+      console.log('🔧 INSERT FIX - Existing timesheets check:', {
         data: existingTimesheets,
         error: checkError,
         count: existingTimesheets?.length || 0
       });
       
       if (checkError) {
-        console.error('🐛 INSERT DEBUG - Error checking existing timesheets:', checkError);
+        console.error('🔧 INSERT FIX - Error checking existing timesheets:', checkError);
         throw new Error(`Errore nella verifica timesheet esistenti: ${checkError.message}`);
       }
       
       // Ottieni utente corrente
       const { data: { user }, error: authError } = await supabase.auth.getUser();
-      console.log('🐛 INSERT DEBUG - Current user:', user?.id);
+      console.log('🔧 INSERT FIX - Current user:', user?.id);
       
       if (authError || !user) {
         throw new Error('Utente non autenticato');
       }
       
-      // Converti gli orari in UTC (usando la conversione timezone)
+      // Converti gli orari in UTC
       let startTimeUTC = null;
       let endTimeUTC = null;
       
       if (formData.start_time) {
         startTimeUTC = localTimeToUtc(formData.date, formData.start_time);
-        console.log('🐛 INSERT DEBUG - Start time conversion:', {
+        console.log('🔧 INSERT FIX - Start time conversion:', {
           input: `${formData.date} ${formData.start_time}`,
           output: startTimeUTC
         });
@@ -164,11 +164,22 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
       
       if (formData.end_time) {
         endTimeUTC = localTimeToUtc(formData.date, formData.end_time);
-        console.log('🐛 INSERT DEBUG - End time conversion:', {
+        console.log('🔧 INSERT FIX - End time conversion:', {
           input: `${formData.date} ${formData.end_time}`,
           output: endTimeUTC
         });
       }
+      
+      // CORREZIONE PRINCIPALE: Fix project_id
+      let projectId = null;
+      if (formData.project_id && formData.project_id !== '' && formData.project_id !== 'none') {
+        projectId = formData.project_id;
+      }
+      
+      console.log('🔧 INSERT FIX - Project ID correction:', {
+        original: formData.project_id,
+        corrected: projectId
+      });
       
       // Prepare insert data
       const insertData = {
@@ -176,14 +187,14 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
         date: formData.date,
         start_time: startTimeUTC,
         end_time: endTimeUTC,
-        project_id: formData.project_id === 'none' ? null : formData.project_id,
+        project_id: projectId, // ← FIX: null invece di stringa vuota
         notes: formData.notes || null,
         lunch_duration_minutes: lunchDuration || 60,
         created_by: user.id,
         updated_by: user.id
       };
       
-      console.log('🐛 INSERT DEBUG - Insert data prepared:', insertData);
+      console.log('🔧 INSERT FIX - Insert data prepared:', insertData);
       
       // STRATEGIA 1: Prova a inserire come nuovo timesheet separato
       const { data: newTimesheet, error: insertError } = await supabase
@@ -192,22 +203,22 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
         .select()
         .single();
       
-      console.log('🐛 INSERT DEBUG - Insert result:', {
+      console.log('🔧 INSERT FIX - Insert result:', {
         data: newTimesheet,
         error: insertError
       });
       
       if (insertError) {
-        console.error('🐛 INSERT DEBUG - Insert error details:', {
+        console.error('🔧 INSERT FIX - Insert error details:', {
           message: insertError.message,
           details: insertError.details,
           hint: insertError.hint,
           code: insertError.code
         });
         
-        // Se l'errore è per duplicato, prova strategia alternativa
+        // Se l'errore è per duplicato, prova strategia alternativa (sessioni)
         if (insertError.code === '23505' || insertError.message.includes('unique')) {
-          console.log('🐛 INSERT DEBUG - Duplicate detected, trying session approach');
+          console.log('🔧 INSERT FIX - Duplicate detected, trying session approach');
           
           // STRATEGIA 2: Crea come sessione del timesheet esistente
           if (existingTimesheets && existingTimesheets.length > 0) {
@@ -225,7 +236,7 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
               ? existingSessions[0].session_order + 1 
               : 1;
             
-            console.log('🐛 INSERT DEBUG - Creating session with order:', nextOrder);
+            console.log('🔧 INSERT FIX - Creating session with order:', nextOrder);
             
             const sessionData = {
               timesheet_id: mainTimesheet.id,
@@ -241,7 +252,7 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
               .insert(sessionData)
               .select();
             
-            console.log('🐛 INSERT DEBUG - Session insert result:', {
+            console.log('🔧 INSERT FIX - Session insert result:', {
               data: newSession,
               error: sessionError
             });
@@ -250,7 +261,7 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
               throw new Error(`Errore creazione sessione: ${sessionError.message}`);
             }
             
-            console.log('🐛 INSERT DEBUG - Session created successfully');
+            console.log('🔧 INSERT FIX - Session created successfully');
           } else {
             throw insertError;
           }
@@ -258,7 +269,7 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
           throw insertError;
         }
       } else {
-        console.log('🐛 INSERT DEBUG - New timesheet created successfully');
+        console.log('🔧 INSERT FIX - New timesheet created successfully');
       }
       
       toast({
@@ -270,9 +281,7 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
       onOpenChange(false);
       
     } catch (error: any) {
-      console.error('🐛 INSERT DEBUG - Catch block error:', error);
-      console.error('🐛 INSERT DEBUG - Error type:', typeof error);
-      console.error('🐛 INSERT DEBUG - Error properties:', Object.keys(error));
+      console.error('🔧 INSERT FIX - Catch block error:', error);
       
       let errorMessage = 'Errore sconosciuto nell\'inserimento';
       if (error?.message) {
@@ -281,7 +290,7 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
         errorMessage = error;
       }
       
-      console.error('🐛 INSERT DEBUG - Final error message:', errorMessage);
+      console.error('🔧 INSERT FIX - Final error message:', errorMessage);
       
       toast({
         title: "Errore",
@@ -291,6 +300,22 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
     } finally {
       setLoading(false);
     }
+  };
+
+  // CORREZIONE: Fix anche nel form handling
+  const handleSelectChange = (field: string, value: string) => {
+    console.log('🔧 INSERT FIX - Select change:', { field, value });
+    
+    // Correggi il valore per project_id
+    if (field === 'project_id') {
+      // Se è stringa vuota o 'none', imposta come stringa vuota (che diventerà null nell'insert)
+      if (value === '' || value === 'none' || !value) {
+        setFormData(prev => ({ ...prev, [field]: '' }));
+        return;
+      }
+    }
+    
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -322,12 +347,12 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
 
           <div className="space-y-2">
             <Label htmlFor="project_id">Commessa</Label>
-            <Select value={formData.project_id} onValueChange={(value) => setFormData(prev => ({ ...prev, project_id: value }))}>
+            <Select value={formData.project_id} onValueChange={(value) => handleSelectChange('project_id', value)}>
               <SelectTrigger>
                 <SelectValue placeholder="Seleziona commessa (opzionale)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Nessuna commessa</SelectItem>
+                <SelectItem value="">Nessuna commessa</SelectItem>
                 {projects.map((project) => (
                   <SelectItem key={project.id} value={project.id}>
                     {project.name}
