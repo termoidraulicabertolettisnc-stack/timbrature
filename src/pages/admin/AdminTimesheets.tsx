@@ -108,8 +108,8 @@ const processTimesheetSessions = (timesheet: TimesheetWithProfile): ExtendedTime
   return sessions;
 };
 
-// CORREZIONE: Componente per visualizzare le ore con sessioni multiple
-function HoursDisplayMultiSession({ session }: { session: any }) {
+// CORREZIONE: Funzione per visualizzare le ore con sessioni multiple
+function HoursDisplayMultiSessionFixed({ session }: { session: any }) {
   const realtimeHours = useRealtimeHours(session);
   const [rtNightHours, setRtNightHours] = useState<number>(0);
 
@@ -690,22 +690,58 @@ export default function AdminTimesheets() {
            projectName.includes(searchTerm.toLowerCase());
   });
 
-  // CORREZIONE: Funzione aggregazione che considera le sessioni multiple
-  const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
+  // CORREZIONE COMPLETA: Funzione aggregazione che considera le sessioni multiple
+  const aggregateTimesheetsByEmployeeFixed = (): EmployeeSummary[] => {
     const employeesMap = new Map<string, EmployeeSummary>();
     
-    console.log('🔍 SESSIONI MULTIPLE - Starting aggregation with', filteredTimesheets.length, 'timesheets');
+    console.log('🔧 DAILY FIX - Starting aggregation with', filteredTimesheets.length, 'timesheets');
 
-    // Prima, espandi tutti i timesheet in sessioni
-    const allSessions: ExtendedTimesheetWithProfile[] = [];
+    // CORREZIONE: Espandi ogni timesheet nelle sue sessioni
+    const allSessions: any[] = [];
+    
     filteredTimesheets.forEach(timesheet => {
-      const sessions = processTimesheetSessions(timesheet);
-      allSessions.push(...sessions);
+      console.log('🔧 DAILY FIX - Processing timesheet:', timesheet.id, 'sessions:', timesheet.timesheet_sessions?.length || 0);
+      
+      if (timesheet.timesheet_sessions && timesheet.timesheet_sessions.length > 0) {
+        // Ha sessioni multiple - espandi ogni sessione
+        timesheet.timesheet_sessions.forEach((session, index) => {
+          if (session.start_time) {
+            const sessionTimesheet = {
+              ...timesheet,
+              id: `${timesheet.id}_session_${session.id}_${index}`,
+              start_time: session.start_time,
+              end_time: session.end_time,
+              // Calcola le ore per questa sessione specifica
+              session_hours: session.end_time ? 
+                ((new Date(session.end_time).getTime() - new Date(session.start_time).getTime()) / (1000 * 60 * 60)) : 0,
+              session_type: session.session_type,
+              session_notes: session.notes,
+              session_order: session.session_order,
+              is_session: true,
+              original_timesheet_id: timesheet.id
+            };
+            
+            allSessions.push(sessionTimesheet);
+            console.log('🔧 DAILY FIX - Added session:', sessionTimesheet.id, 'from', session.start_time, 'to', session.end_time, 'duration:', sessionTimesheet.session_hours?.toFixed(2) + 'h');
+          }
+        });
+      } else {
+        // Nessuna sessione - usa il timesheet principale
+        if (timesheet.start_time) {
+          const mainTimesheet = {
+            ...timesheet,
+            is_session: false,
+            session_hours: timesheet.total_hours || 0
+          };
+          allSessions.push(mainTimesheet);
+          console.log('🔧 DAILY FIX - Added main timesheet:', timesheet.id, 'duration:', mainTimesheet.session_hours?.toFixed(2) + 'h');
+        }
+      }
     });
     
-    console.log('🔍 SESSIONI MULTIPLE - Total sessions after expansion:', allSessions.length);
+    console.log('🔧 DAILY FIX - Total sessions after expansion:', allSessions.length);
 
-    // Poi raggruppa per dipendente
+    // Raggruppa per dipendente
     allSessions.forEach(session => {
       if (!session.profiles) return;
 
@@ -740,19 +776,20 @@ export default function AdminTimesheets() {
         calculatedOvertimeHours = session.overtime_hours || 0;
         calculatedNightHours = session.night_hours || 0;
       } else if (session.start_time) {
-        // Sessione aperta - calcola in tempo reale con timezone corretto
+        // Sessione aperta - calcola in tempo reale
         const startTime = new Date(session.start_time);
         const currentTime = new Date();
         const diffMs = currentTime.getTime() - startTime.getTime();
         calculatedHours = Math.max(0, diffMs / (1000 * 60 * 60));
         
-        // Calcolo straordinari (oltre 8 ore per l'intera giornata, non per singola sessione)
+        // CORREZIONE: Calcolo straordinari giornalieri, non per singola sessione
         const dailyHours = employee.total_hours + calculatedHours;
         if (dailyHours > 8) {
-          calculatedOvertimeHours = Math.max(0, dailyHours - 8);
+          // Solo le ore oltre le 8 giornaliere sono straordinari
+          calculatedOvertimeHours = Math.max(0, dailyHours - 8 - employee.overtime_hours);
         }
         
-        console.log(`🔍 SESSIONI MULTIPLE REAL-TIME - Session ${session.id}:`, {
+        console.log(`🔧 DAILY FIX REAL-TIME - Session ${session.id}:`, {
           start_time: session.start_time,
           hours_worked: calculatedHours.toFixed(2),
           daily_total: dailyHours.toFixed(2),
@@ -760,6 +797,7 @@ export default function AdminTimesheets() {
         });
       }
 
+      // CORREZIONE: Accumula le ore correttamente
       employee.total_hours += calculatedHours;
       employee.overtime_hours += calculatedOvertimeHours;
       employee.night_hours += calculatedNightHours;
@@ -781,7 +819,7 @@ export default function AdminTimesheets() {
       `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
     );
     
-    console.log('🔍 SESSIONI MULTIPLE - Final aggregation:', result.map(emp => ({
+    console.log('🔧 DAILY FIX - Final aggregation:', result.map(emp => ({
       name: `${emp.first_name} ${emp.last_name}`,
       sessions_count: emp.timesheets.length,
       total_hours: emp.total_hours.toFixed(2)
@@ -942,7 +980,7 @@ export default function AdminTimesheets() {
           <DailySummaryViewFixed 
             timesheets={filteredTimesheets}
             absences={absences}
-            aggregateTimesheetsByEmployee={aggregateTimesheetsByEmployee}
+            aggregateTimesheetsByEmployee={aggregateTimesheetsByEmployeeFixed}
             employeeSettings={employeeSettings}
             companySettings={companySettings}
             onEditTimesheet={(timesheet) => {
@@ -1190,9 +1228,9 @@ function DailySummaryViewFixed({
                                     </TableCell>
                                     <TableCell>
                                       <div className="space-y-1">
-                                        <div className="font-medium">
-                                          <HoursDisplayMultiSession session={session} />
-                                        </div>
+                                         <div className="font-medium">
+                                           <HoursDisplayMultiSessionFixed session={session} />
+                                         </div>
                                         {session.overtime_hours && session.overtime_hours > 0 && (
                                           <div className="text-xs text-orange-600">
                                             +{session.overtime_hours.toFixed(1)}h straord.
