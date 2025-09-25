@@ -145,8 +145,8 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
             continue;
           }
 
-          // Use upsert for idempotent insert (will ignore if already exists due to unique index)
-          const { error } = await supabase.from('timesheets').upsert({
+          // Usa upsert per evitare duplicati e ottenere l'ID
+          const { data: upsertedTimesheet, error } = await supabase.from('timesheets').upsert({
             user_id: employee.user_id,
             date: timesheet.date,
             start_time: timesheet.start_time,
@@ -158,17 +158,48 @@ export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: 
             lunch_start_time: timesheet.lunch_start_time,
             lunch_end_time: timesheet.lunch_end_time,
             created_by: currentUserId,
-            notes: `Importato da Excel - ${file?.name}`
+            notes: `Importato da Excel - ${file?.name}`,
+            total_hours: timesheet.total_hours
           }, { 
             onConflict: 'user_id,date', 
-            ignoreDuplicates: true 
-          });
+            ignoreDuplicates: false 
+          }).select();
 
           if (error) {
             console.error('Errore inserimento timbratura:', error);
             importResults.errors++;
-          } else {
+          } else if (upsertedTimesheet && upsertedTimesheet.length > 0) {
+            const timesheetId = upsertedTimesheet[0].id;
+            
+            // Crea le sessioni se presenti
+            if (timesheet.sessions && timesheet.sessions.length > 0) {
+              console.log(`Creando ${timesheet.sessions.length} sessioni per timesheet ${timesheetId}`);
+              
+              for (const session of timesheet.sessions) {
+                const { error: sessionError } = await supabase
+                  .from('timesheet_sessions')
+                  .insert({
+                    timesheet_id: timesheetId,
+                    session_order: session.session_order,
+                    session_type: session.session_type,
+                    start_time: session.start_time,
+                    end_time: session.end_time,
+                    start_location_lat: session.start_location_lat,
+                    start_location_lng: session.start_location_lng,
+                    end_location_lat: session.end_location_lat,
+                    end_location_lng: session.end_location_lng,
+                    notes: `Sessione ${session.session_order} importata da Excel`
+                  });
+                
+                if (sessionError) {
+                  console.error(`Errore creazione sessione ${session.session_order}:`, sessionError);
+                }
+              }
+            }
+            
             importResults.imported++;
+          } else {
+            importResults.skipped++;
           }
 
         } catch (error) {

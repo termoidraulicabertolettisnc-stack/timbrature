@@ -20,6 +20,18 @@ export interface ExcelTimesheetRow {
   ore_lavorate_effettive?: string;
 }
 
+export interface ParsedSession {
+  session_order: number;
+  start_time: string;
+  end_time: string;
+  session_type: 'work';
+  hours: number;
+  start_location_lat?: number;
+  start_location_lng?: number;
+  end_location_lat?: number;
+  end_location_lng?: number;
+}
+
 export interface ParsedTimesheet {
   employee_name: string;
   codice_fiscale: string;
@@ -33,6 +45,7 @@ export interface ParsedTimesheet {
   lunch_start_time?: string;
   lunch_end_time?: string;
   total_hours: number;
+  sessions?: ParsedSession[];
 }
 
 export interface ImportResult {
@@ -118,6 +131,27 @@ export class ExcelImportService {
         totalMinutes += (end.getTime() - start.getTime()) / (1000 * 60);
       });
 
+      // Crea le sessioni individuali
+      const sessions: ParsedSession[] = entries.map((entry, index) => {
+        const startCoords = this.parseCoordinates(entry.coordinate_ingresso);
+        const endCoords = this.parseCoordinates(entry.coordinate_uscita);
+        const sessionStart = new Date(entry.data_ingresso);
+        const sessionEnd = new Date(entry.data_uscita);
+        const sessionHours = (sessionEnd.getTime() - sessionStart.getTime()) / (1000 * 60 * 60);
+
+        return {
+          session_order: index + 1,
+          start_time: this.parseDateTime(entry.data_ingresso),
+          end_time: this.parseDateTime(entry.data_uscita),
+          session_type: 'work' as const,
+          hours: Math.round(sessionHours * 100) / 100,
+          start_location_lat: startCoords.lat,
+          start_location_lng: startCoords.lng,
+          end_location_lat: endCoords.lat,
+          end_location_lng: endCoords.lng
+        };
+      });
+
       const parsed: ParsedTimesheet = {
         employee_name: firstEntry.dipendente,
         codice_fiscale: firstEntry.codice_fiscale,
@@ -130,7 +164,8 @@ export class ExcelImportService {
         end_location_lng: endCoords.lng,
         lunch_start_time,
         lunch_end_time,
-        total_hours: Math.round((totalMinutes / 60) * 100) / 100
+        total_hours: Math.round((totalMinutes / 60) * 100) / 100,
+        sessions
       };
 
       result.set(key, parsed);
