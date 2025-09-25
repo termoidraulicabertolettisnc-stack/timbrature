@@ -196,11 +196,65 @@ interface EmployeeSummary {
   total_hours: number;
   overtime_hours: number;
   night_hours: number;
+  regular_hours: number;
   meal_vouchers: number;
-  saturday_hours: number;
-  holiday_hours: number;
+  saturday_hours?: number;
+  holiday_hours?: number;
   timesheets: ExtendedTimesheetWithProfile[];
 }
+
+// CORREZIONE: Componente per visualizzare ore con calcolo corretto
+export const HoursDisplayFixed = ({ 
+  employee, 
+  standardDailyHours = 8 
+}: { 
+  employee: EmployeeSummary;
+  standardDailyHours?: number;
+}) => {
+  const formatHours = (hours: number) => {
+    return hours.toFixed(1) + 'h';
+  };
+
+  return (
+    <div className="space-y-1">
+      <div className="text-sm">
+        <span className="font-medium">Totale: </span>
+        <Badge variant="secondary">{formatHours(employee.total_hours)}</Badge>
+      </div>
+      
+      <div className="text-xs text-gray-600">
+        <span>Ordinarie: </span>
+        <span className="text-green-600">{formatHours(employee.regular_hours)}</span>
+        
+        {employee.overtime_hours > 0 && (
+          <>
+            <span className="mx-1">•</span>
+            <span>Straordinari: </span>
+            <span className="text-orange-600 font-medium">
+              {formatHours(employee.overtime_hours)}
+            </span>
+          </>
+        )}
+        
+        {employee.night_hours > 0 && (
+          <>
+            <span className="mx-1">•</span>
+            <span>Notturne: </span>
+            <span className="text-blue-600">{formatHours(employee.night_hours)}</span>
+          </>
+        )}
+      </div>
+      
+      {employee.meal_vouchers > 0 && (
+        <div className="text-xs">
+          <Badge variant="outline" className="text-xs">
+            {employee.meal_vouchers} buoni pasto
+          </Badge>
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface DailyHours {
   date: string;
@@ -235,6 +289,17 @@ interface EmployeeMonthlyData {
   night_hours: number;
   meal_vouchers: number;
 }
+
+// CORREZIONE: Funzione centralizzata per calcolare straordinari giornalieri
+const calculateDailyOvertimeHours = (
+  totalDailyHours: number,
+  standardDailyHours: number = 8
+): { regularHours: number; overtimeHours: number } => {
+  const regularHours = Math.min(totalDailyHours, standardDailyHours);
+  const overtimeHours = Math.max(0, totalDailyHours - standardDailyHours);
+  
+  return { regularHours, overtimeHours };
+};
 
 export default function AdminTimesheets() {
   const { user } = useAuth();
@@ -715,140 +780,119 @@ export default function AdminTimesheets() {
            projectName.includes(searchTerm.toLowerCase());
   });
 
-  // CORREZIONE COMPLETA: Funzione aggregazione che considera le sessioni multiple
+  // CORREZIONE: Aggregazione corretta delle sessioni multiple per dipendente
   const aggregateTimesheetsByEmployeeFixed = (): EmployeeSummary[] => {
     const employeesMap = new Map<string, EmployeeSummary>();
-    
-    console.log('🔧 DAILY FIX - Starting aggregation with', filteredTimesheets.length, 'timesheets');
 
-    // CORREZIONE: Espandi ogni timesheet nelle sue sessioni
-    const allSessions: any[] = [];
-    
+    console.log('🔧 OVERTIME FIX - Starting aggregation for', filteredTimesheets.length, 'timesheets');
+
     filteredTimesheets.forEach(timesheet => {
-      console.log('🔧 DAILY FIX - Processing timesheet:', timesheet.id, 'sessions:', timesheet.timesheet_sessions?.length || 0);
-      
-      if (timesheet.timesheet_sessions && timesheet.timesheet_sessions.length > 0) {
-        // Ha sessioni multiple - espandi ogni sessione
-        timesheet.timesheet_sessions.forEach((session, index) => {
-          if (session.start_time) {
-            const sessionTimesheet = {
-              ...timesheet,
-              id: `${timesheet.id}_session_${session.id}_${index}`,
-              start_time: session.start_time,
-              end_time: session.end_time,
-              // Calcola le ore per questa sessione specifica
-              session_hours: session.end_time ? 
-                ((new Date(session.end_time).getTime() - new Date(session.start_time).getTime()) / (1000 * 60 * 60)) : 0,
-              session_type: session.session_type,
-              session_notes: session.notes,
-              session_order: session.session_order,
-              is_session: true,
-              original_timesheet_id: timesheet.id
-            };
-            
-            allSessions.push(sessionTimesheet);
-            console.log('🔧 DAILY FIX - Added session:', sessionTimesheet.id, 'from', session.start_time, 'to', session.end_time, 'duration:', sessionTimesheet.session_hours?.toFixed(2) + 'h');
-          }
-        });
-      } else {
-        // Nessuna sessione - usa il timesheet principale
-        if (timesheet.start_time) {
-          const mainTimesheet = {
-            ...timesheet,
-            is_session: false,
-            session_hours: timesheet.total_hours || 0
-          };
-          allSessions.push(mainTimesheet);
-          console.log('🔧 DAILY FIX - Added main timesheet:', timesheet.id, 'duration:', mainTimesheet.session_hours?.toFixed(2) + 'h');
-        }
-      }
-    });
-    
-    console.log('🔧 DAILY FIX - Total sessions after expansion:', allSessions.length);
+      if (!timesheet.profiles) return;
 
-    // Raggruppa per dipendente
-    allSessions.forEach(session => {
-      if (!session.profiles) return;
-
-      const key = session.user_id;
+      const key = timesheet.user_id;
       if (!employeesMap.has(key)) {
         employeesMap.set(key, {
-          user_id: session.user_id,
-          first_name: session.profiles.first_name,
-          last_name: session.profiles.last_name,
-          email: session.profiles.email,
+          user_id: timesheet.user_id,
+          first_name: timesheet.profiles.first_name,
+          last_name: timesheet.profiles.last_name,
+          email: timesheet.profiles.email,
+          timesheets: [],
           total_hours: 0,
           overtime_hours: 0,
           night_hours: 0,
-          meal_vouchers: 0,
-          saturday_hours: 0,
-          holiday_hours: 0,
-          timesheets: []
+          regular_hours: 0,
+          meal_vouchers: 0
         });
       }
 
       const employee = employeesMap.get(key)!;
-      employee.timesheets.push(session);
 
-      // Calcola le ore per questa sessione
-      let calculatedHours = 0;
-      let calculatedOvertimeHours = 0;
-      let calculatedNightHours = 0;
-
-      if (session.end_time) {
-        // Sessione chiusa - usa le ore calcolate
-        calculatedHours = session.session_hours || session.total_hours || 0;
-        calculatedOvertimeHours = session.overtime_hours || 0;
-        calculatedNightHours = session.night_hours || 0;
-      } else if (session.start_time) {
-        // Sessione aperta - calcola in tempo reale
-        const startTime = new Date(session.start_time);
-        const currentTime = new Date();
-        const diffMs = currentTime.getTime() - startTime.getTime();
-        calculatedHours = Math.max(0, diffMs / (1000 * 60 * 60));
+      // CORREZIONE: Gestisci sessioni multiple per timesheet
+      if (timesheet.timesheet_sessions && timesheet.timesheet_sessions.length > 0) {
+        console.log('🔧 OVERTIME FIX - Processing multiple sessions for timesheet:', timesheet.id);
         
-        // CORREZIONE: Calcolo straordinari giornalieri, non per singola sessione
-        const dailyHours = employee.total_hours + calculatedHours;
-        if (dailyHours > 8) {
-          // Solo le ore oltre le 8 giornaliere sono straordinari
-          calculatedOvertimeHours = Math.max(0, dailyHours - 8 - employee.overtime_hours);
+        // Calcola il totale delle ore per tutte le sessioni del giorno
+        let dailyTotalHours = 0;
+        let dailyNightHours = 0;
+        
+        timesheet.timesheet_sessions.forEach((session, sessionIndex) => {
+          if (session.start_time && session.end_time) {
+            const sessionHours = (new Date(session.end_time).getTime() - new Date(session.start_time).getTime()) / (1000 * 60 * 60);
+            dailyTotalHours += sessionHours;
+            dailyNightHours += 0; // Note: sessions non hanno night_hours in questo contesto
+            
+            // Crea una voce per ogni sessione per la visualizzazione
+            const sessionTimesheet = {
+              ...timesheet,
+              id: `${timesheet.id}_session_${session.id}_${sessionIndex}`,
+              start_time: session.start_time,
+              end_time: session.end_time,
+              total_hours: sessionHours,
+              session_hours: sessionHours,
+              session_type: session.session_type,
+              session_notes: session.notes,
+              session_order: session.session_order,
+              is_session: true
+            };
+            
+            employee.timesheets.push(sessionTimesheet);
+          }
+        });
+        
+        // CORREZIONE: Calcola straordinari una sola volta per giorno, non per sessione
+        const { regularHours, overtimeHours } = calculateDailyOvertimeHours(dailyTotalHours, 8);
+        
+        employee.total_hours += dailyTotalHours;
+        employee.regular_hours += regularHours;
+        employee.overtime_hours += overtimeHours;
+        employee.night_hours += dailyNightHours;
+        
+        // Buoni pasto: uno per giorno se ha lavorato più di 6 ore
+        if (dailyTotalHours > 6) {
+          employee.meal_vouchers += 1;
         }
         
-        console.log(`🔧 DAILY FIX REAL-TIME - Session ${session.id}:`, {
-          start_time: session.start_time,
-          hours_worked: calculatedHours.toFixed(2),
-          daily_total: dailyHours.toFixed(2),
-          overtime: calculatedOvertimeHours.toFixed(2)
+        console.log(`🔧 OVERTIME FIX - Day ${timesheet.date} for ${timesheet.profiles.first_name}:`, {
+          sessions: timesheet.timesheet_sessions.length,
+          dailyTotal: dailyTotalHours.toFixed(2),
+          regular: regularHours.toFixed(2),
+          overtime: overtimeHours.toFixed(2)
         });
-      }
-
-      // CORREZIONE: Accumula le ore correttamente
-      employee.total_hours += calculatedHours;
-      employee.overtime_hours += calculatedOvertimeHours;
-      employee.night_hours += calculatedNightHours;
-
-      // Calcola buoni pasto (solo una volta per timesheet principale, non per ogni sessione)
-      if (!session.is_session || session.session_order === 1) {
-        const mealBenefits = getMealBenefits(session);
-        if (mealBenefits.mealVoucher) {
+        
+      } else {
+        // Timesheet singolo senza sessioni multiple
+        const sessionTimesheet = { 
+          ...timesheet, 
+          is_session: false,
+          session_hours: timesheet.total_hours || 0
+        };
+        
+        employee.timesheets.push(sessionTimesheet);
+        
+        const totalHours = timesheet.total_hours || 0;
+        const { regularHours, overtimeHours } = calculateDailyOvertimeHours(totalHours, 8);
+        
+        employee.total_hours += totalHours;
+        employee.regular_hours += regularHours;
+        employee.overtime_hours += overtimeHours;
+        employee.night_hours += timesheet.night_hours || 0;
+        
+        if (totalHours > 6) {
           employee.meal_vouchers += 1;
         }
       }
-
-      // Calcola ore sabato/festivi
-      if (session.is_saturday) employee.saturday_hours += calculatedHours;
-      if (session.is_holiday) employee.holiday_hours += calculatedHours;
     });
 
-    const result = Array.from(employeesMap.values()).sort((a, b) => 
-      `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
-    );
+    const result = Array.from(employeesMap.values());
     
-    console.log('🔧 DAILY FIX - Final aggregation:', result.map(emp => ({
-      name: `${emp.first_name} ${emp.last_name}`,
-      sessions_count: emp.timesheets.length,
-      total_hours: emp.total_hours.toFixed(2)
-    })));
+    console.log('🔧 OVERTIME FIX - Final aggregation results:', 
+      result.map(emp => ({
+        name: `${emp.first_name} ${emp.last_name}`,
+        total: emp.total_hours.toFixed(2),
+        regular: emp.regular_hours.toFixed(2),
+        overtime: emp.overtime_hours.toFixed(2)
+      }))
+    );
     
     return result;
   };
@@ -1275,7 +1319,14 @@ function DailySummaryViewFixed({
                                     <TableCell>
                                       <div className="space-y-1">
                                          <div className="font-medium">
-                                           <HoursDisplayMultiSessionFixed session={session} />
+                                           <HoursDisplayFixed employee={{ 
+                                             ...employee, 
+                                             total_hours: session.session_hours || session.total_hours || 0,
+                                             regular_hours: Math.min(session.session_hours || session.total_hours || 0, 8),
+                                             overtime_hours: Math.max(0, (session.session_hours || session.total_hours || 0) - 8),
+                                             night_hours: session.night_hours || 0,
+                                             meal_vouchers: 0
+                                           }} />
                                          </div>
                                         {session.overtime_hours && session.overtime_hours > 0 && (
                                           <div className="text-xs text-orange-600">
