@@ -24,6 +24,7 @@ interface WeeklyTimelineViewProps {
   onNavigatePrevious: () => void;
   onNavigateNext: () => void;
   onNavigateToday: () => void;
+  onEditDay?: (date: string, employee: any, timesheet: TimesheetWithProfile | null, sessions: any[]) => void;
 }
 
 interface TimelineEntry {
@@ -70,7 +71,8 @@ export function WeeklyTimelineView({
   onAddAbsence,
   onNavigatePrevious,
   onNavigateNext,
-  onNavigateToday
+  onNavigateToday,
+  onEditDay
 }: WeeklyTimelineViewProps) {
   const baseDate = parseISO(dateFilter);
   const weekStart = startOfWeek(baseDate, { weekStartsOn: 1 });
@@ -261,7 +263,23 @@ export function WeeklyTimelineView({
     });
 
     const handleEditClick = () => {
-      // Estrai l'ID originale se è un ID composito
+      // Se è disponibile onEditDay, usa il nuovo dialog per la giornata intera
+      if (onEditDay) {
+        const originalId = entry.timesheet.id.includes('_') ? entry.timesheet.id.split('_')[0] : entry.timesheet.id;
+        const mainTimesheet = timesheets.find(t => t.id === originalId);
+        const employee = {
+          user_id: entry.timesheet.user_id,
+          first_name: entry.timesheet.profiles?.first_name || '',
+          last_name: entry.timesheet.profiles?.last_name || '',
+          email: entry.timesheet.profiles?.email || '',
+        };
+        const sessions = mainTimesheet?.timesheet_sessions || [];
+        
+        onEditDay(entry.timesheet.date, employee, mainTimesheet || null, sessions);
+        return;
+      }
+      
+      // Fallback al dialog singolo (logica originale)
       const originalId = entry.timesheet.id.includes('_') ? entry.timesheet.id.split('_')[0] : entry.timesheet.id;
       
       // Verifica se è una sessione specifica (ha session_id nei metadata)

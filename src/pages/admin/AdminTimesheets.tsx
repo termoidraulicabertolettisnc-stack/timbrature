@@ -19,6 +19,7 @@ import { TimesheetTimeline } from '@/components/TimesheetTimeline';
 import { TimesheetEditDialog } from '@/components/TimesheetEditDialog';
 import { TimesheetInsertDialog } from '@/components/TimesheetInsertDialog';
 import { AbsenceInsertDialog } from '@/components/AbsenceInsertDialog';
+import { DayEditDialog } from '@/components/DayEditDialog';
 import { DayActionMenu } from '@/components/DayActionMenu';
 import { AbsenceIndicator } from '@/components/AbsenceIndicator';
 import LocationDisplay from '@/components/LocationDisplay';
@@ -283,8 +284,15 @@ export default function AdminTimesheets() {
   const [insertDialogOpen, setInsertDialogOpen] = useState(false);
   const [absenceDialogOpen, setAbsenceDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [dayEditDialogOpen, setDayEditDialogOpen] = useState(false);
   const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
   const [selectedTimesheetDate, setSelectedTimesheetDate] = useState<string>('');
+  const [dayEditData, setDayEditData] = useState<{
+    date: string;
+    employee: any;
+    timesheet: TimesheetWithProfile | null;
+    sessions: any[];
+  } | null>(null);
 
   // Funzioni per aggiungere timesheet e assenze da specifici giorni
   const handleAddTimesheet = (date: string, userId: string) => {
@@ -297,6 +305,12 @@ export default function AdminTimesheets() {
     setSelectedTimesheetDate(date);
     setSelectedEmployee(userId); // Imposta l'utente selezionato  
     setAbsenceDialogOpen(true);
+  };
+
+  // Funzione per gestire l'apertura del DayEditDialog
+  const handleEditDay = (date: string, employee: any, timesheet: TimesheetWithProfile | null, sessions: any[]) => {
+    setDayEditData({ date, employee, timesheet, sessions });
+    setDayEditDialogOpen(true);
   };
 
   // Stati per le impostazioni
@@ -1008,6 +1022,7 @@ export default function AdminTimesheets() {
             onNavigatePrevious={navigatePrevious}
             onNavigateNext={navigateNext}
             onNavigateToday={navigateToToday}
+            onEditDay={handleEditDay}
           />
         </TabsContent>
 
@@ -1028,6 +1043,7 @@ export default function AdminTimesheets() {
             onNavigatePrevious={navigatePrevious}
             onNavigateNext={navigateNext}
             onNavigateToday={navigateToToday}
+            onEditDay={handleEditDay}
           />
         </TabsContent>
       </Tabs>
@@ -1073,6 +1089,25 @@ export default function AdminTimesheets() {
           loadTimesheets();
         }}
       />
+
+      {/* Dialog per modifica giornata completa */}
+      {dayEditData && (
+        <DayEditDialog
+          open={dayEditDialogOpen}
+          onOpenChange={setDayEditDialogOpen}
+          date={dayEditData.date}
+          employee={dayEditData.employee}
+          timesheet={dayEditData.timesheet}
+          sessions={dayEditData.sessions}
+          employeeSettings={employeeSettings}
+          companySettings={companySettings}
+          onSuccess={() => {
+            loadTimesheets();
+            setDayEditDialogOpen(false);
+            setDayEditData(null);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -23,6 +23,7 @@ interface MonthlyCalendarViewProps {
   onNavigatePrevious: () => void;
   onNavigateNext: () => void;
   onNavigateToday: () => void;
+  onEditDay?: (date: string, employee: any, timesheet: TimesheetWithProfile | null, sessions: any[]) => void;
 }
 
 interface DayData {
@@ -60,7 +61,8 @@ export function MonthlyCalendarView({
   onAddAbsence,
   onNavigatePrevious,
   onNavigateNext,
-  onNavigateToday
+  onNavigateToday,
+  onEditDay
 }: MonthlyCalendarViewProps) {
   const currentMonth = parseISO(dateFilter);
   const monthStart = startOfMonth(currentMonth);
@@ -414,7 +416,20 @@ export function MonthlyCalendarView({
                 variant="ghost"
                 size="sm"
                 className="h-4 w-4 p-0"
-                onClick={() => onEditTimesheet(dayData.timesheets[0])}
+                onClick={() => {
+                  if (onEditDay) {
+                    const employee = {
+                      user_id: dayData.timesheets[0].user_id,
+                      first_name: dayData.timesheets[0].profiles?.first_name || '',
+                      last_name: dayData.timesheets[0].profiles?.last_name || '',
+                      email: dayData.timesheets[0].profiles?.email || '',
+                    };
+                    const sessions = dayData.timesheets[0]?.timesheet_sessions || [];
+                    onEditDay(format(day, 'yyyy-MM-dd'), employee, dayData.timesheets[0], sessions);
+                  } else {
+                    onEditTimesheet(dayData.timesheets[0]);
+                  }
+                }}
               >
                 <Edit className="h-3 w-3" />
               </Button>
