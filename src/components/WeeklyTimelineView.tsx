@@ -242,15 +242,51 @@ export function WeeklyTimelineView({
   // Usa hook per aggiornamenti real-time
   const realtimeData = useWeeklyRealtimeHours(timesheets);
 
-  const renderTimelineEntry = (entry: TimelineEntry) => {
+  const renderTimelineEntryFixed = (entry: TimelineEntry) => {
     const regularWidth = (entry.regular_duration / entry.duration) * entry.width;
     const overtimeWidth = (entry.overtime_duration / entry.duration) * entry.width;
     
-    // Controlla se è un turno notturno (parte di un turno spezzato)
-    const isNightShiftPart = entry.timesheet.id.includes('_part');
-    const isFirstPart = entry.timesheet.id.includes('_part1');
-    const isSecondPart = entry.timesheet.id.includes('_part2');
-    const originalId = isNightShiftPart ? entry.timesheet.id.split('_part')[0] : entry.timesheet.id;
+    // Determina se è una sessione specifica o timesheet principale
+    const isSpecificSession = (entry.timesheet as any).session_id !== undefined;
+    const originalId = (entry.timesheet as any).original_timesheet_id || entry.timesheet.id.split('_')[0];
+    
+    console.log('🔧 WEEKLY SESSION FIX - Rendering entry:', {
+      entry_id: entry.timesheet.id,
+      original_id: originalId,
+      is_specific_session: isSpecificSession,
+      session_id: (entry.timesheet as any).session_id,
+      session_order: (entry.timesheet as any).session_order,
+      start_time: entry.timesheet.start_time,
+      end_time: entry.timesheet.end_time
+    });
+
+    // CORREZIONE: Crea un oggetto timesheet con i dati della sessione specifica
+    const handleEditClick = () => {
+      if (isSpecificSession) {
+        // Per sessioni specifiche, crea un timesheet temporaneo con i dati della sessione
+        const sessionBasedTimesheet = {
+          ...entry.timesheet,
+          id: originalId, // Usa l'ID originale per il database
+          start_time: entry.timesheet.start_time, // Orari della sessione specifica
+          end_time: entry.timesheet.end_time,     // Orari della sessione specifica
+          total_hours: entry.timesheet.total_hours, // Ore della sessione specifica
+          // Mantieni tutti gli altri dati dal timesheet originale
+          date: entry.timesheet.date,
+          project_id: entry.timesheet.project_id,
+          notes: (entry.timesheet as any).session_notes || entry.timesheet.notes,
+          // Aggiungi flag per identificare che stiamo modificando una sessione specifica
+          _editing_session_id: (entry.timesheet as any).session_id,
+          _editing_session_order: (entry.timesheet as any).session_order
+        };
+        
+        console.log('🔧 WEEKLY SESSION FIX - Editing specific session:', sessionBasedTimesheet);
+        onEditTimesheet(sessionBasedTimesheet);
+      } else {
+        // Per timesheet principali, usa l'approccio normale
+        console.log('🔧 WEEKLY SESSION FIX - Editing main timesheet:', originalId);
+        onEditTimesheet({ ...entry.timesheet, id: originalId });
+      }
+    };
     
     return (
       <div
@@ -261,50 +297,51 @@ export function WeeklyTimelineView({
         {/* Fascia orario normale */}
         {entry.regular_duration > 0 && (
           <div
-            className={`h-full ${isNightShiftPart ? 'bg-blue-600' : 'bg-primary'} 
-              ${isFirstPart ? 'rounded-l-sm' : isSecondPart ? 'rounded-r-sm' : 'rounded-l-sm'} 
-              ${entry.overtime_duration === 0 && !isSecondPart ? 'rounded-r-sm' : ''} 
+            className={`h-full bg-primary rounded-l-sm 
+              ${entry.overtime_duration === 0 ? 'rounded-r-sm' : ''} 
               ${entry.isActive ? 'animate-pulse' : ''} 
               cursor-pointer hover:opacity-80 transition-all
               flex items-center justify-between px-2 text-white text-xs
-              ${isNightShiftPart ? 'border-2 border-blue-400' : ''}`}
+              ${isSpecificSession ? 'border-2 border-purple-400' : ''}`}
             style={{ width: `${(regularWidth / entry.width) * 100}%` }}
-            onClick={() => onEditTimesheet({ ...entry.timesheet, id: originalId })}
-            title={isNightShiftPart ? `Turno notturno ${isFirstPart ? '(prima parte)' : '(seconda parte)'} - ${entry.start_time} - ${entry.end_time || 'in corso'}` : `${entry.start_time} - ${entry.end_time || 'in corso'}`}
+            onClick={handleEditClick}
+            title={`${isSpecificSession ? `Sessione ${(entry.timesheet as any).session_order || 1}` : 'Timesheet'} - ${entry.start_time} - ${entry.end_time || 'in corso'}`}
           >
             <div className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
               <span>{entry.regular_duration.toFixed(1)}h</span>
+              {(entry.timesheet as any).session_order && (
+                <span className="text-xs">#{(entry.timesheet as any).session_order}</span>
+              )}
             </div>
             
             <div className="flex items-center gap-1">
               {entry.mealVoucher && <UtensilsCrossed className="h-3 w-3" />}
-              {!isNightShiftPart && (
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-4 w-4 p-0 text-white hover:text-white hover:bg-white/20"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEditTimesheet({ ...entry.timesheet, id: originalId });
-                    }}
-                  >
-                    <Edit className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-4 w-4 p-0 text-white hover:text-red-200 hover:bg-red-500/20"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteTimesheet(originalId);
-                    }}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              )}
+              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-4 w-4 p-0 text-white hover:text-white hover:bg-white/20"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEditClick();
+                  }}
+                >
+                  <Edit className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-4 w-4 p-0 text-white hover:text-red-200 hover:bg-red-500/20"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    console.log('🔧 WEEKLY SESSION FIX - Delete button clicked:', originalId);
+                    onDeleteTimesheet(originalId);
+                  }}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -312,27 +349,16 @@ export function WeeklyTimelineView({
         {/* Fascia straordinari */}
         {entry.overtime_duration > 0 && (
           <div
-            className={`h-full ${isNightShiftPart ? 'bg-orange-600' : 'bg-orange-500'} 
-              ${isFirstPart && entry.regular_duration === 0 ? 'rounded-l-sm' : ''} 
-              ${!isFirstPart ? 'rounded-r-sm' : ''} 
+            className={`h-full bg-orange-500 rounded-r-sm 
               ${entry.isActive ? 'animate-pulse' : ''} 
               cursor-pointer hover:opacity-80 transition-all
-              flex items-center justify-center text-white text-xs font-medium
-              ${isNightShiftPart ? 'border-2 border-orange-400' : ''}`}
+              flex items-center justify-center text-white text-xs font-medium`}
             style={{ width: `${(overtimeWidth / entry.width) * 100}%` }}
-            onClick={() => onEditTimesheet({ ...entry.timesheet, id: originalId })}
-            title={`Straordinari: ${entry.overtime_duration.toFixed(1)}h ${isNightShiftPart ? (isFirstPart ? '(prima parte)' : '(seconda parte)') : ''}`}
+            onClick={handleEditClick}
+            title={`Straordinari: ${entry.overtime_duration.toFixed(1)}h`}
           >
             +{entry.overtime_duration.toFixed(1)}h
           </div>
-        )}
-        
-        {/* Indicatore di connessione per turni notturni */}
-        {isFirstPart && (
-          <div className="absolute -right-1 top-1/2 transform -translate-y-1/2 w-2 h-1 bg-blue-400 rounded-full animate-pulse" />
-        )}
-        {isSecondPart && (
-          <div className="absolute -left-1 top-1/2 transform -translate-y-1/2 w-2 h-1 bg-blue-400 rounded-full animate-pulse" />
         )}
       </div>
     );
@@ -464,7 +490,7 @@ export function WeeklyTimelineView({
                           </div>
 
                           {/* Timeline entries */}
-                          {day.entries.map(renderTimelineEntry)}
+                          {day.entries.map(renderTimelineEntryFixed)}
                         </div>
                       </div>
                     ))}
