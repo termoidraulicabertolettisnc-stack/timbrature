@@ -11,6 +11,17 @@ import { toast } from 'sonner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { syncEmployeeSettingsStructure } from '@/utils/syncEmployeeSettings';
 
+const LUNCH_BREAK_OPTIONS = [
+  { value: '0_minuti', label: 'Nessuna Pausa (0 min)' },
+  { value: '15_minuti', label: '15 Minuti Fissi' },
+  { value: '30_minuti', label: '30 Minuti Fissi' },
+  { value: '45_minuti', label: '45 Minuti Fissi' },
+  { value: '60_minuti', label: '60 Minuti Fissi (1 ora)' },
+  { value: '90_minuti', label: '90 Minuti Fissi (1.5 ore)' },
+  { value: '120_minuti', label: '120 Minuti Fissi (2 ore)' },
+  { value: 'libera', label: 'Pausa Libera (Timbrata Manualmente)' }
+];
+
 
 interface CompanySettings {
   id?: string;
@@ -329,7 +340,7 @@ export default function AdminSettings() {
               Pausa Pranzo
             </CardTitle>
             <CardDescription>
-              Configurazione della pausa pranzo
+              Configurazione della pausa pranzo aziendale
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -337,41 +348,61 @@ export default function AdminSettings() {
               <div>
                 <Label>Tipo Pausa Pranzo</Label>
                 <Select
-                  value={settings.lunch_break_type || ''}
+                  value={settings.lunch_break_type || '60_minuti'}
                   onValueChange={(value) => updateSetting('lunch_break_type', value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Seleziona tipo" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="0_minuti">Nessuna Pausa</SelectItem>
-                    <SelectItem value="15_minuti">15 Minuti Fissi</SelectItem>
-                    <SelectItem value="30_minuti">30 Minuti Fissi</SelectItem>
-                    <SelectItem value="45_minuti">45 Minuti Fissi</SelectItem>
-                    <SelectItem value="60_minuti">60 Minuti Fissi</SelectItem>
-                    <SelectItem value="90_minuti">90 Minuti Fissi</SelectItem>
-                    <SelectItem value="120_minuti">120 Minuti Fissi</SelectItem>
-                    <SelectItem value="libera">Libera (Segnata Manualmente)</SelectItem>
+                    {LUNCH_BREAK_OPTIONS.map(option => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               
-              {settings.lunch_break_type && settings.lunch_break_type !== '0_minuti' && settings.lunch_break_type !== 'libera' && (
+              {settings.lunch_break_type && 
+               settings.lunch_break_type !== '0_minuti' && 
+               settings.lunch_break_type !== 'libera' && (
                 <div>
-                  <Label htmlFor="lunch_break_min_hours">Ore minime per pausa pranzo</Label>
+                  <Label htmlFor="lunch_break_min_hours">
+                    Ore minime di lavoro per applicare la pausa
+                  </Label>
                   <Input
                     id="lunch_break_min_hours"
                     type="number"
                     min="0"
                     max="12"
                     step="0.5"
-                    value={settings.lunch_break_min_hours || ''}
-                    onChange={(e) => updateSetting('lunch_break_min_hours', parseFloat(e.target.value) || null)}
-                    placeholder="6.0"
+                    value={settings.lunch_break_min_hours || 6}
+                    onChange={(e) => updateSetting('lunch_break_min_hours', 
+                      e.target.value ? parseFloat(e.target.value) : 6)}
                   />
-                  <p className="text-sm text-muted-foreground mt-1">
-                    La pausa viene applicata automaticamente solo se si lavora più di questo numero di ore
-                  </p>
+                  <div className="text-sm text-muted-foreground mt-1">
+                    La pausa sarà sottratta automaticamente solo se il dipendente 
+                    lavora più di {settings.lunch_break_min_hours || 6} ore
+                  </div>
+                </div>
+              )}
+
+              {settings.lunch_break_type === 'libera' && (
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <div className="text-sm text-blue-700">
+                    <strong>Pausa Libera:</strong> I dipendenti dovranno timbrare 
+                    manualmente l'inizio e la fine della pausa pranzo.
+                  </div>
+                </div>
+              )}
+              
+              {settings.lunch_break_type === '0_minuti' && (
+                <div className="bg-yellow-50 p-3 rounded-lg">
+                  <div className="text-sm text-yellow-700">
+                    <strong>Nessuna Pausa:</strong> Non verrà sottratta alcuna pausa 
+                    dalle ore lavorate.
+                  </div>
                 </div>
               )}
             </div>

@@ -9,14 +9,26 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { AlertTriangle, Save, RotateCcw, CalendarIcon, Settings } from 'lucide-react';
+import { AlertTriangle, Save, RotateCcw, CalendarIcon, Settings, Coffee } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { saveTemporalEmployeeSettings, recalculateTimesheetsFromDate } from '@/utils/temporalEmployeeSettings';
+
+const LUNCH_BREAK_OPTIONS = [
+  { value: '0_minuti', label: 'Nessuna Pausa (0 min)' },
+  { value: '15_minuti', label: '15 Minuti Fissi' },
+  { value: '30_minuti', label: '30 Minuti Fissi' },
+  { value: '45_minuti', label: '45 Minuti Fissi' },
+  { value: '60_minuti', label: '60 Minuti Fissi (1 ora)' },
+  { value: '90_minuti', label: '90 Minuti Fissi (1.5 ore)' },
+  { value: '120_minuti', label: '120 Minuti Fissi (2 ore)' },
+  { value: 'libera', label: 'Pausa Libera (Timbrata Manualmente)' }
+];
 
 interface EmployeeSettings {
   id?: string;
@@ -24,6 +36,7 @@ interface EmployeeSettings {
   company_id: string;
   standard_weekly_hours: any;
   lunch_break_type: string | null;
+  lunch_break_min_hours: number | null;
   saturday_handling: string | null;
   meal_voucher_policy: string | null;
   night_shift_start: string | null;
@@ -48,6 +61,7 @@ interface EmployeeSettings {
 interface CompanySettings {
   standard_weekly_hours: any;
   lunch_break_type: '0_minuti' | '15_minuti' | '30_minuti' | '45_minuti' | '60_minuti' | '90_minuti' | '120_minuti' | 'libera';
+  lunch_break_min_hours: number;
   saturday_handling: 'trasferta' | 'straordinario';
   meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni' | 'disabilitato';
   night_shift_start: string;
@@ -88,6 +102,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
     company_id: employee.company_id,
     standard_weekly_hours: null,
     lunch_break_type: null,
+    lunch_break_min_hours: null,
     saturday_handling: null,
     meal_voucher_policy: null,
     night_shift_start: null,
@@ -169,6 +184,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
           company_id: selectedCompanyId,
           standard_weekly_hours: null,
           lunch_break_type: null,
+          lunch_break_min_hours: null,
           saturday_handling: null,
           meal_voucher_policy: null,
           night_shift_start: null,
@@ -185,6 +201,9 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
           enable_entry_tolerance: null,
           standard_start_time: null,
           entry_tolerance_minutes: null,
+          // Overtime conversion fields
+          enable_overtime_conversion: null,
+          overtime_conversion_rate: null,
         });
       }
     } catch (error) {
@@ -291,6 +310,7 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
       company_id: selectedCompanyId,
       standard_weekly_hours: null,
       lunch_break_type: null,
+      lunch_break_min_hours: null,
       saturday_handling: null,
       meal_voucher_policy: null,
       night_shift_start: null,
@@ -307,6 +327,9 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
       enable_entry_tolerance: null,
       standard_start_time: null,
       entry_tolerance_minutes: null,
+      // Overtime conversion fields
+      enable_overtime_conversion: null,
+      overtime_conversion_rate: null,
     });
     setHasChanges(true);
   };
@@ -465,34 +488,89 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
           {/* Lunch Break */}
           <Card>
             <CardHeader>
-              <CardTitle>Pausa Pranzo</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Coffee className="h-5 w-5" />
+                Pausa Pranzo Personalizzata
+              </CardTitle>
               <CardDescription>
-                Configurazione della pausa pranzo
-                {companySettings && ` (Aziendale: ${companySettings.lunch_break_type})`}
+                Configurazione specifica per questo dipendente (sovrascrive quella aziendale)
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div>
-                  <Label>Tipo Pausa Pranzo</Label>
-                  <Select
-                    value={settings.lunch_break_type || 'company_default'}
-                    onValueChange={(value) => updateSetting('lunch_break_type', value === 'company_default' ? null : value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={companySettings ? `Default: ${companySettings.lunch_break_type}` : 'Seleziona tipo'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="company_default">Usa Default Aziendale</SelectItem>
-                      <SelectItem value="libera">Libera</SelectItem>
-                      <SelectItem value="30_minuti">30 minuti fissi</SelectItem>
-                      <SelectItem value="60_minuti">60 minuti fissi</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Valore effettivo: {getEffectiveValue(settings.lunch_break_type, companySettings?.lunch_break_type)}
-                  </p>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="use_custom_lunch"
+                    checked={!!settings.lunch_break_type}
+                    onCheckedChange={(checked) => {
+                      if (!checked) {
+                        updateSetting('lunch_break_type', null);
+                        updateSetting('lunch_break_min_hours', null);
+                      }
+                    }}
+                  />
+                  <Label htmlFor="use_custom_lunch">
+                    Usa configurazione personalizzata per pausa pranzo
+                  </Label>
                 </div>
+
+                {settings.lunch_break_type && (
+                  <>
+                    <div>
+                      <Label>Tipo Pausa Pranzo</Label>
+                      <Select
+                        value={settings.lunch_break_type || ''}
+                        onValueChange={(value) => updateSetting('lunch_break_type', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleziona tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LUNCH_BREAK_OPTIONS.map(option => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    {settings.lunch_break_type && 
+                     settings.lunch_break_type !== '0_minuti' && 
+                     settings.lunch_break_type !== 'libera' && (
+                      <div>
+                        <Label htmlFor="employee_lunch_break_min_hours">
+                          Ore minime di lavoro per applicare la pausa
+                        </Label>
+                        <Input
+                          id="employee_lunch_break_min_hours"
+                          type="number"
+                          min="0"
+                          max="12"
+                          step="0.5"
+                          value={settings.lunch_break_min_hours || 6}
+                          onChange={(e) => updateSetting('lunch_break_min_hours', 
+                            e.target.value ? parseFloat(e.target.value) : 6)}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {!settings.lunch_break_type && companySettings?.lunch_break_type && (
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <div className="text-sm text-gray-600">
+                      <strong>Configurazione Aziendale:</strong> {
+                        LUNCH_BREAK_OPTIONS.find(opt => opt.value === companySettings.lunch_break_type)?.label
+                      }
+                      {companySettings.lunch_break_min_hours && 
+                       companySettings.lunch_break_type !== '0_minuti' &&
+                       companySettings.lunch_break_type !== 'libera' && (
+                        <span> (applicata dopo {companySettings.lunch_break_min_hours} ore)</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
