@@ -1564,14 +1564,13 @@ function DailySummaryViewFixed({
                                     <TableCell>
                                       <div className="space-y-1">
                                          <div className="font-medium">
-                                           <HoursDisplayFixed employee={{ 
-                                             ...employee, 
-                                             total_hours: session.total_hours || 0,
-                                             regular_hours: session.regular_hours || 0,
-                                             overtime_hours: session.overtime_hours || 0,
-                                             night_hours: session.night_hours || 0,
-                                             meal_vouchers: 0
-                                           }} />
+                                            <HoursDisplayFixed employee={{ 
+                                              ...employee, 
+                                              total_hours: session.total_hours || 0,
+                                              overtime_hours: session.overtime_hours || 0,
+                                              night_hours: session.night_hours || 0,
+                                              meal_vouchers: 0
+                                            }} />
                                          </div>
                                         {session.overtime_hours && session.overtime_hours > 0 && (
                                           <div className="text-xs text-orange-600">
