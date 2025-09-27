@@ -1566,9 +1566,9 @@ function DailySummaryViewFixed({
                                          <div className="font-medium">
                                            <HoursDisplayFixed employee={{ 
                                              ...employee, 
-                                             total_hours: session.session_hours || session.total_hours || 0,
-                                             regular_hours: Math.min(session.session_hours || session.total_hours || 0, 8),
-                                             overtime_hours: Math.max(0, (session.session_hours || session.total_hours || 0) - 8),
+                                             total_hours: session.total_hours || 0,
+                                             regular_hours: session.regular_hours || 0,
+                                             overtime_hours: session.overtime_hours || 0,
                                              night_hours: session.night_hours || 0,
                                              meal_vouchers: 0
                                            }} />
