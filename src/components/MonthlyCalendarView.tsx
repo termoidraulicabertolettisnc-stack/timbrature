@@ -100,7 +100,7 @@ export function MonthlyCalendarView({
         segments.forEach((segment, segmentIndex) => {
           const localStart = utcToLocal(segment.startUtc);
           const localEnd = utcToLocal(segment.endUtc);
-          const sessionHours = (localEnd.getTime() - localStart.getTime()) / (1000 * 60 * 60);
+          const sessionHours = timesheet.total_hours || ((localEnd.getTime() - localStart.getTime()) / (1000 * 60 * 60));
 
           // Calculate meal benefits only for the first segment of each day
           let mealBenefits = { mealVoucher: false, dailyAllowance: false };
