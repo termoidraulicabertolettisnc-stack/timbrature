@@ -1060,7 +1060,7 @@ export default function AdminTimesheets() {
         
         timesheet.timesheet_sessions.forEach((session, sessionIndex) => {
           if (session.start_time && session.end_time) {
-            const sessionHours = (new Date(session.end_time).getTime() - new Date(session.start_time).getTime()) / (1000 * 60 * 60);
+            const sessionHours = session.total_hours || ((new Date(session.end_time).getTime() - new Date(session.start_time).getTime()) / (1000 * 60 * 60));
             dailyTotalHours += sessionHours;
             dailyNightHours += 0; // Note: sessions non hanno night_hours in questo contesto
             
