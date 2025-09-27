@@ -136,13 +136,11 @@ export function MonthlyCalendarView({
 
           employee.days[dayISO].timesheets.push(segmentTimesheet);
           
-          // 🔧 CORREZIONE: Non calcolare ore ordinarie/straordinari per sessioni singole
-          // I calcoli sono già fatti correttamente dal trigger PostgreSQL
-          const regularHours = 0; // NON calcolare qui
-          const overtimeHours = 0; // NON calcolare qui
+          const regularHours = Math.min(sessionHours, 8);
+          const overtimeHours = Math.max(0, sessionHours - 8);
 
-          employee.days[dayISO].regular_hours += 0; // Solo nel riassunto totale
-          employee.days[dayISO].overtime_hours += 0; // Solo nel riassunto totale
+          employee.days[dayISO].regular_hours += regularHours;
+          employee.days[dayISO].overtime_hours += overtimeHours;
           employee.days[dayISO].night_hours += (timesheet.night_hours || 0) * (sessionHours / (timesheet.total_hours || sessionHours));
 
           if (mealBenefits.mealVoucher) {
