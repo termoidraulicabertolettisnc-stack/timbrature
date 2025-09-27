@@ -171,7 +171,16 @@ export function WeeklyTimelineView({
         segments.forEach((segment, segmentIndex) => {
           const localStart = utcToLocal(segment.startUtc);
           const localEnd = utcToLocal(segment.endUtc);
-          const sessionDuration = (localEnd.getTime() - localStart.getTime()) / (1000 * 60 * 60);
+          
+          // Use timesheet.total_hours when available (closed timesheet), otherwise calculate duration
+          let sessionDuration: number;
+          if (timesheet.end_time && timesheet.total_hours !== null) {
+            // For closed timesheets, use the calculated total_hours from database
+            sessionDuration = timesheet.total_hours;
+          } else {
+            // For open timesheets, calculate duration in real-time
+            sessionDuration = (localEnd.getTime() - localStart.getTime()) / (1000 * 60 * 60);
+          }
           
           if (sessionDuration <= 0) return;
 
