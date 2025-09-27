@@ -1567,7 +1567,8 @@ function DailySummaryViewFixed({
                                             <HoursDisplayFixed employee={{ 
                                               ...employee, 
                                               total_hours: session.total_hours || 0,
-                                              overtime_hours: session.overtime_hours || 0,
+                                              regular_hours: 0,  // Non calcolare qui
+                                              overtime_hours: 0, // Non calcolare qui
                                               night_hours: session.night_hours || 0,
                                               meal_vouchers: 0
                                             }} />
