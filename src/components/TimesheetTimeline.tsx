@@ -174,18 +174,10 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
     return mealBenefitsCache[timesheet.id] || { mealVoucher: false, dailyAllowance: false };
   };
 
-  // Calcola le ore lavorate per un timesheet (anche se in corso)
-  const calculateWorkedHours = (timesheet: TimesheetWithProfile): number => {
-    if (!timesheet.start_time) return 0;
-    
-    // Se il timesheet è chiuso, usa le ore già calcolate
-    if (timesheet.end_time && timesheet.total_hours !== null) {
-      return timesheet.total_hours;
-    }
-    
-    // Se il timesheet è aperto, calcola le ore in tempo reale
-    const startTime = new Date(timesheet.start_time);
-    const endTime = timesheet.end_time ? new Date(timesheet.end_time) : new Date();
+  // Legge le ore dal database (già calcolate)
+  const getTimesheetHours = (timesheet: TimesheetWithProfile): number => {
+    return timesheet.total_hours || 0;
+  };
     
     const diffMs = endTime.getTime() - startTime.getTime();
     const diffHours = diffMs / (1000 * 60 * 60);
@@ -705,7 +697,7 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
                       const blockHeight = minutesToPosition(block.endMinutes) - minutesToPosition(block.startMinutes);
                       const blockTop = minutesToPosition(block.startMinutes);
                       
-                      const workedHours = calculateWorkedHours(block.timesheet);
+                      const workedHours = getTimesheetHours(block.timesheet);
                       const mealBenefits = getMealBenefits(block.timesheet);
 
                       return (
