@@ -119,21 +119,7 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
 
     loadEmployeeSettings();
   }, [employeeUserIds.join(',')]);
-
-  // Get meal benefits for a timesheet using temporal calculation
-  const [mealBenefitsCache, setMealBenefitsCache] = useState<{ [key: string]: { mealVoucher: boolean; dailyAllowance: boolean } }>({});
-
-  // Precompute meal benefits for all timesheets
-  useEffect(() => {
-    const computeMealBenefits = async () => {
-      const cache: { [key: string]: { mealVoucher: boolean; dailyAllowance: boolean } } = {};
-      
-      for (const timesheet of realtimeTimesheets) {
-        if (timesheet.start_time) {
-          try {
-            const { calculateMealBenefitsTemporal } = await import('@/utils/mealBenefitsCalculator');
-            const { getEmployeeSettingsForDate } = await import('@/utils/temporalEmployeeSettings');
-            
+           
             // Get temporal settings for this specific date
             const temporalSettings = await getEmployeeSettingsForDate(timesheet.user_id, timesheet.date);
             
