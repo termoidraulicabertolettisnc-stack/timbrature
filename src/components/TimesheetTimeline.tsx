@@ -8,7 +8,6 @@ import { Clock, Zap, Moon, Utensils, Euro, TreePalm, Stethoscope, AlertTriangle,
 import { cn } from '@/lib/utils';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { supabase } from '@/integrations/supabase/client';
-import { calculateMealBenefits } from '@/utils/mealBenefitsCalculator';
 import { sessionsForDay, calculateDynamicBounds, utcToLocal, type Seg } from '@/utils/timeSegments';
 
 interface TimeBlock {
@@ -170,8 +169,8 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
   }, [realtimeTimesheets, companySettings]);
 
   // Get cached meal benefits for a timesheet
-  const getMealBenefits = (timesheet: TimesheetWithProfile) => {
-    return mealBenefitsCache[timesheet.id] || { mealVoucher: false, dailyAllowance: false };
+  const getMealVoucher = (timesheet: TimesheetWithProfile): boolean => {
+    return timesheet.meal_voucher_earned || false;
   };
 
   // Legge le ore dal database (già calcolate)
