@@ -367,16 +367,6 @@ export default function AdminTimesheets() {
   const { user } = useAuth();
   const { toast } = useToast();
   
-  // CORREZIONE: Funzione centralizzata per calcolare straordinari giornalieri
-  const calculateDailyOvertimeHours = (
-    totalDailyHours: number,
-    standardDailyHours: number = 8
-  ): { regularHours: number; overtimeHours: number } => {
-    const regularHours = Math.min(totalDailyHours, standardDailyHours);
-    const overtimeHours = Math.max(0, totalDailyHours - standardDailyHours);
-    
-    return { regularHours, overtimeHours };
-  };
   const [timesheets, setTimesheets] = useState<TimesheetWithProfile[]>([]);
   const [absences, setAbsences] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
