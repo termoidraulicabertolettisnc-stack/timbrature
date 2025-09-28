@@ -1024,121 +1024,45 @@ export default function AdminTimesheets() {
   });
 
   // CORREZIONE: Aggregazione corretta delle sessioni multiple per dipendente
-  const aggregateTimesheetsByEmployeeFixed = (): EmployeeSummary[] => {
-    const employeesMap = new Map<string, EmployeeSummary>();
+const aggregateTimesheetsByEmployeeFixed = (): EmployeeSummary[] => {
+  const employeesMap = new Map<string, EmployeeSummary>();
 
-    console.log('🔧 OVERTIME FIX - Starting aggregation for', filteredTimesheets.length, 'timesheets');
+  filteredTimesheets.forEach(timesheet => {
+    if (!timesheet.profiles) return;
 
-    filteredTimesheets.forEach(timesheet => {
-      if (!timesheet.profiles) return;
+    const key = timesheet.user_id;
+    if (!employeesMap.has(key)) {
+      employeesMap.set(key, {
+        user_id: timesheet.user_id,
+        first_name: timesheet.profiles.first_name,
+        last_name: timesheet.profiles.last_name,
+        email: timesheet.profiles.email,
+        timesheets: [],
+        total_hours: 0,
+        overtime_hours: 0,
+        night_hours: 0,
+        regular_hours: 0,
+        meal_vouchers: 0
+      });
+    }
 
-      const key = timesheet.user_id;
-      if (!employeesMap.has(key)) {
-        employeesMap.set(key, {
-          user_id: timesheet.user_id,
-          first_name: timesheet.profiles.first_name,
-          last_name: timesheet.profiles.last_name,
-          email: timesheet.profiles.email,
-          timesheets: [],
-          total_hours: 0,
-          overtime_hours: 0,
-          night_hours: 0,
-          regular_hours: 0,
-          meal_vouchers: 0
-        });
-      }
+    const employee = employeesMap.get(key)!;
+    employee.timesheets.push(timesheet);
 
-      const employee = employeesMap.get(key)!;
-
-      // CORREZIONE: Gestisci sessioni multiple per timesheet
-      if (timesheet.timesheet_sessions && timesheet.timesheet_sessions.length > 0) {
-        console.log('🔧 OVERTIME FIX - Processing multiple sessions for timesheet:', timesheet.id);
-        
-        // Calcola il totale delle ore per tutte le sessioni del giorno
-        let dailyTotalHours = 0;
-        let dailyNightHours = 0;
-        
-        timesheet.timesheet_sessions.forEach((session, sessionIndex) => {
-          if (session.start_time && session.end_time) {
-            const sessionHours = session.total_hours || ((new Date(session.end_time).getTime() - new Date(session.start_time).getTime()) / (1000 * 60 * 60));
-            dailyTotalHours += sessionHours;
-            dailyNightHours += 0; // Note: sessions non hanno night_hours in questo contesto
-            
-            // Crea una voce per ogni sessione per la visualizzazione
-            const sessionTimesheet = {
-              ...timesheet,
-              id: `${timesheet.id}_session_${session.id}_${sessionIndex}`,
-              start_time: session.start_time,
-              end_time: session.end_time,
-              total_hours: sessionHours,
-              session_hours: sessionHours,
-              session_type: session.session_type,
-              session_notes: session.notes,
-              session_order: session.session_order,
-              is_session: true
-            };
-            
-            employee.timesheets.push(sessionTimesheet);
-          }
-        });
-        
-        // CORREZIONE: Calcola straordinari una sola volta per giorno, non per sessione
-        const { regularHours, overtimeHours } = calculateDailyOvertimeHours(dailyTotalHours, 8);
-        
-        employee.total_hours += dailyTotalHours;
-        employee.regular_hours += regularHours;
-        employee.overtime_hours += overtimeHours;
-        employee.night_hours += dailyNightHours;
-        
-        // Buoni pasto: uno per giorno se ha lavorato più di 6 ore
-        if (dailyTotalHours > 6) {
-          employee.meal_vouchers += 1;
-        }
-        
-        console.log(`🔧 OVERTIME FIX - Day ${timesheet.date} for ${timesheet.profiles.first_name}:`, {
-          sessions: timesheet.timesheet_sessions.length,
-          dailyTotal: dailyTotalHours.toFixed(2),
-          regular: regularHours.toFixed(2),
-          overtime: overtimeHours.toFixed(2)
-        });
-        
-      } else {
-        // Timesheet singolo senza sessioni multiple
-        const sessionTimesheet = { 
-          ...timesheet, 
-          is_session: false,
-          session_hours: timesheet.total_hours || 0
-        };
-        
-        employee.timesheets.push(sessionTimesheet);
-        
-        const totalHours = timesheet.total_hours || 0;
-        const { regularHours, overtimeHours } = calculateDailyOvertimeHours(totalHours, 8);
-        
-        employee.total_hours += totalHours;
-        employee.regular_hours += regularHours;
-        employee.overtime_hours += overtimeHours;
-        employee.night_hours += timesheet.night_hours || 0;
-        
-        if (totalHours > 6) {
-          employee.meal_vouchers += 1;
-        }
-      }
-    });
-
-    const result = Array.from(employeesMap.values());
+    // SOLO lettura dal database
+    employee.total_hours += timesheet.total_hours || 0;
+    employee.overtime_hours += timesheet.overtime_hours || 0;
+    employee.night_hours += timesheet.night_hours || 0;
+    employee.regular_hours += Math.max(0, (timesheet.total_hours || 0) - (timesheet.overtime_hours || 0));
     
-    console.log('🔧 OVERTIME FIX - Final aggregation results:', 
-      result.map(emp => ({
-        name: `${emp.first_name} ${emp.last_name}`,
-        total: emp.total_hours.toFixed(2),
-        regular: emp.regular_hours.toFixed(2),
-        overtime: emp.overtime_hours.toFixed(2)
-      }))
-    );
-    
-    return result;
-  };
+    // USA il campo già calcolato dal database
+    if (timesheet.meal_voucher_earned) {
+      employee.meal_vouchers += 1;
+    }
+  });
+
+  return Array.from(employeesMap.values());
+};
 
   if (loading) {
     return (
