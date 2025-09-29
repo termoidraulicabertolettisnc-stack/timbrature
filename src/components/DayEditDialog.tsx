@@ -126,11 +126,10 @@ export function DayEditDialog({
   const [showLunchOverride, setShowLunchOverride] = useState(false);
   
   // Load projects when dialog opens
-   useEffect(() => {
+  useEffect(() => {
     if (open) {
       loadProjects();
       initializeData();
-      loadLunchBreakConfig();
     }
   }, [open, timesheet, initialSessions]);
 
@@ -245,34 +244,6 @@ export function DayEditDialog({
     setSessions(prev => prev.map((session, i) => 
       i === index ? { ...session, [field]: value } : session
     ));
-  };
-
-  const saveLunchOverride = async () => {
-    if (!timesheet) return;
-
-    try {
-      const { error } = await supabase
-        .rpc('set_lunch_override', {
-          p_timesheet_id: timesheet.id,
-          p_minutes: showLunchOverride ? lunchBreakData.override_minutes : null
-        });
-
-      if (error) throw error;
-
-      toast({
-        title: "Pausa pranzo aggiornata",
-        description: showLunchOverride 
-          ? `Override impostato a ${lunchBreakData.override_minutes} minuti`
-          : "Override rimosso, uso configurazione standard",
-      });
-    } catch (error) {
-      console.error('Error saving lunch override:', error);
-      toast({
-        title: "Errore",
-        description: "Impossibile salvare la modifica della pausa pranzo",
-        variant: "destructive",
-      });
-    }
   };
 
   const calculateTotals = () => {
@@ -397,6 +368,7 @@ export function DayEditDialog({
         }
       }
 
+      await saveLunchOverride();
       toast({
         title: "Successo",
         description: `Giornata del ${format(parseISO(date), 'dd MMMM yyyy', { locale: it })} salvata con successo`,
@@ -591,66 +563,6 @@ export function DayEditDialog({
               )}
             </CardContent>
           </Card>
-
-          {/* Gestione Pausa Pranzo */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <UtensilsCrossed className="h-5 w-5" />
-              Pausa Pranzo
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Configurazione Standard</Label>
-                <div className="p-3 bg-muted rounded-md">
-                  <div className="text-sm text-muted-foreground">
-                    Da impostazioni: {lunchBreakData.configured_minutes} minuti
-                  </div>
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Override Manuale</Label>
-                  <Switch
-                    checked={showLunchOverride}
-                    onCheckedChange={setShowLunchOverride}
-                  />
-                </div>
-                {showLunchOverride && (
-                  <div className="flex gap-2 items-center">
-                    <Input
-                      type="number"
-                      min="0"
-                      max="180"
-                      value={lunchBreakData.override_minutes || ''}
-                      onChange={(e) => setLunchBreakData(prev => ({
-                        ...prev,
-                        override_minutes: parseInt(e.target.value) || 0,
-                        effective_minutes: parseInt(e.target.value) || prev.configured_minutes
-                      }))}
-                      placeholder="Minuti pausa"
-                      className="w-24"
-                    />
-                    <span className="text-sm text-muted-foreground">minuti</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {showLunchOverride && (
-              <Alert>
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  L'override manuale ha priorità su tutte le configurazioni (dipendente, azienda, default).
-                  Valore effettivo: {lunchBreakData.effective_minutes} minuti
-                </AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
 
           {/* Summary */}
           <Card>
