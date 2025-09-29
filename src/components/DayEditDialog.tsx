@@ -25,7 +25,9 @@ import {
   Clock, 
   UtensilsCrossed,
   CalendarDays,
-  User
+  User,
+  AlertTriangle
+} from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertTriangle } from 'lucide-react';
@@ -368,7 +370,6 @@ export function DayEditDialog({
         }
       }
 
-      await saveLunchOverride();
       toast({
         title: "Successo",
         description: `Giornata del ${format(parseISO(date), 'dd MMMM yyyy', { locale: it })} salvata con successo`,
