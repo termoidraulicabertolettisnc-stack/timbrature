@@ -26,7 +26,9 @@ import {
   UtensilsCrossed,
   CalendarDays,
   User
-} from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertTriangle } from 'lucide-react';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { BenefitsService } from '@/services/BenefitsService';
 
@@ -35,6 +37,11 @@ interface Project {
   name: string;
 }
 
+interface LunchBreakData {
+  configured_minutes: number;
+  override_minutes: number | null;
+  effective_minutes: number;
+}
 interface SessionData {
   id?: string;
   session_order: number;
@@ -110,7 +117,14 @@ export function DayEditDialog({
 
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [nextSessionOrder, setNextSessionOrder] = useState(1);
-
+  // Stati per gestione pausa pranzo
+  const [lunchBreakData, setLunchBreakData] = useState<LunchBreakData>({
+  configured_minutes: 60,
+  override_minutes: null,
+  effective_minutes: 60,
+  });
+  const [showLunchOverride, setShowLunchOverride] = useState(false);
+  
   // Load projects when dialog opens
   useEffect(() => {
     if (open) {
@@ -183,6 +197,29 @@ export function DayEditDialog({
     }
 
     setSessions(sessionData);
+  };
+
+   const loadLunchBreakConfig = async () => {
+    if (!timesheet?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('v_timesheet_day_edit')
+        .select('lunch_minutes_effective, lunch_minutes_override, lunch_config_type')
+        .eq('timesheet_id', timesheet.id)
+        .single();
+
+      if (data) {
+        setLunchBreakData({
+          configured_minutes: data.lunch_minutes_effective || 60,
+          override_minutes: data.lunch_minutes_override,
+          effective_minutes: data.lunch_minutes_override || data.lunch_minutes_effective || 60,
+        });
+        setShowLunchOverride(data.lunch_minutes_override !== null);
+      }
+    } catch (error) {
+      console.error('Error loading lunch config:', error);
+    }
   };
 
   const addNewSession = () => {
