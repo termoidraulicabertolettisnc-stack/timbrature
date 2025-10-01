@@ -30,7 +30,6 @@ import {
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertTriangle } from 'lucide-react';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { BenefitsService } from '@/services/BenefitsService';
 
@@ -206,18 +205,19 @@ export function DayEditDialog({
     
     try {
       const { data, error } = await supabase
-        .from('v_timesheet_day_edit')
-        .select('lunch_minutes_effective, lunch_minutes_override, lunch_config_type')
-        .eq('timesheet_id', timesheet.id)
+        .from('timesheets')
+        .select('lunch_duration_minutes')
+        .eq('id', timesheet.id)
         .single();
 
       if (data) {
+        const lunchMinutes = data.lunch_duration_minutes || 60;
         setLunchBreakData({
-          configured_minutes: data.lunch_minutes_effective || 60,
-          override_minutes: data.lunch_minutes_override,
-          effective_minutes: data.lunch_minutes_override || data.lunch_minutes_effective || 60,
+          configured_minutes: lunchMinutes,
+          override_minutes: null,
+          effective_minutes: lunchMinutes,
         });
-        setShowLunchOverride(data.lunch_minutes_override !== null);
+        setShowLunchOverride(false);
       }
     } catch (error) {
       console.error('Error loading lunch config:', error);

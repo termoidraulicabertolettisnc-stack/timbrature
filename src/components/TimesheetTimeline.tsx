@@ -119,40 +119,6 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
 
     loadEmployeeSettings();
   }, [employeeUserIds.join(',')]);
-           
-            // Get temporal settings for this specific date
-            const temporalSettings = await getEmployeeSettingsForDate(timesheet.user_id, timesheet.date);
-            
-            const mealBenefits = await calculateMealBenefitsTemporal(
-              timesheet,
-              temporalSettings ? {
-                meal_allowance_policy: temporalSettings.meal_allowance_policy,
-                meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
-                daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
-                lunch_break_type: temporalSettings.lunch_break_type
-              } : undefined,
-              companySettings,
-              timesheet.date
-            );
-            
-            cache[timesheet.id] = {
-              mealVoucher: mealBenefits.mealVoucher,
-              dailyAllowance: mealBenefits.dailyAllowance
-            };
-          } catch (error) {
-            console.error('Error computing meal benefits for timesheet', timesheet.id, error);
-            cache[timesheet.id] = { mealVoucher: false, dailyAllowance: false };
-          }
-        }
-      }
-      
-      setMealBenefitsCache(cache);
-    };
-
-    if (realtimeTimesheets.length > 0 && companySettings) {
-      computeMealBenefits();
-    }
-  }, [realtimeTimesheets, companySettings]);
 
   // Get cached meal benefits for a timesheet
   const getMealVoucher = (timesheet: TimesheetWithProfile): boolean => {
@@ -162,29 +128,6 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
   // Legge le ore dal database (già calcolate)
   const getTimesheetHours = (timesheet: TimesheetWithProfile): number => {
     return timesheet.total_hours || 0;
-  };
-    
-    const diffMs = endTime.getTime() - startTime.getTime();
-    const diffHours = diffMs / (1000 * 60 * 60);
-    
-    // Sottrai la pausa pranzo se necessario
-    const settings = employeeSettings[timesheet.user_id];
-    
-    let lunchBreakHours = 0;
-    if (timesheet.lunch_start_time && timesheet.lunch_end_time) {
-      const lunchStart = new Date(timesheet.lunch_start_time);
-      const lunchEnd = new Date(timesheet.lunch_end_time);
-      lunchBreakHours = (lunchEnd.getTime() - lunchStart.getTime()) / (1000 * 60 * 60);
-    } else if (timesheet.lunch_duration_minutes) {
-      lunchBreakHours = timesheet.lunch_duration_minutes / 60;
-    } else if (diffHours > 6) {
-      // Pausa pranzo automatica se più di 6 ore
-      const lunchBreakType = settings?.lunch_break_type || companySettings?.lunch_break_type || '60_minuti';
-      const lunchMinutes = parseInt(lunchBreakType.split('_')[0]) || 60;
-      lunchBreakHours = lunchMinutes / 60;
-    }
-    
-    return Math.max(0, diffHours - lunchBreakHours);
   };
 
   // Calculate if timesheet qualifies for daily allowance using temporal settings
@@ -683,7 +626,8 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
                       const blockTop = minutesToPosition(block.startMinutes);
                       
                       const workedHours = getTimesheetHours(block.timesheet);
-                      const mealBenefits = getMealBenefits(block.timesheet);
+                      const hasMealVoucher = getMealVoucher(block.timesheet);
+                      const hasDailyAllowance = false; // TODO: implement daily allowance check
 
                       return (
                         <Tooltip key={`${block.timesheet.id}-${blockIndex}`}>
@@ -736,13 +680,13 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
                                 
                                 {/* Benefits indicators */}
                                 <div className="flex gap-1 mt-1">
-                                  {mealBenefits.mealVoucher && (
+                                  {hasMealVoucher && (
                                     <Badge variant="secondary" className="text-xs px-1 py-0">
                                       <Utensils className="h-2 w-2 mr-1" />
                                       MV
                                     </Badge>
                                   )}
-                                  {mealBenefits.dailyAllowance && (
+                                  {hasDailyAllowance && (
                                     <Badge variant="secondary" className="text-xs px-1 py-0">
                                       <Euro className="h-2 w-2 mr-1" />
                                       DA
@@ -778,11 +722,11 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
                               )}
                               <div className="text-sm">
                                 <div className="flex gap-2">
-                                  <span className={mealBenefits.mealVoucher ? "text-green-600" : "text-muted-foreground"}>
-                                    Buono pasto: {mealBenefits.mealVoucher ? "✓" : "✗"}
+                                  <span className={hasMealVoucher ? "text-green-600" : "text-muted-foreground"}>
+                                    Buono pasto: {hasMealVoucher ? "✓" : "✗"}
                                   </span>
-                                  <span className={mealBenefits.dailyAllowance ? "text-green-600" : "text-muted-foreground"}>
-                                    Diaria: {mealBenefits.dailyAllowance ? "✓" : "✗"}
+                                  <span className={hasDailyAllowance ? "text-green-600" : "text-muted-foreground"}>
+                                    Diaria: {hasDailyAllowance ? "✓" : "✗"}
                                   </span>
                                 </div>
                               </div>
