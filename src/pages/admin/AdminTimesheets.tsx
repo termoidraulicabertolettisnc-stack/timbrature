@@ -853,7 +853,7 @@ export default function AdminTimesheets() {
 const loadTimesheets = async () => {
   setLoading(true);
   try {
-    // Usa la vista unificata
+    // Usa la vista unificata che ora mantiene le sessioni separate
     let query = supabase
       .from('v_timesheets_unified')
       .select('*');
@@ -862,11 +862,6 @@ const loadTimesheets = async () => {
     if (selectedEmployee !== 'all') {
       query = query.eq('user_id', selectedEmployee);
     }
-    
-    // Nota: selectedProject potrebbe non funzionare con la vista, da verificare
-    // if (selectedProject !== 'all') {
-    //   query = query.eq('project_id', selectedProject);
-    // }
     
     // Filtri per periodo
     const baseDate = parseISO(dateFilter);
@@ -890,46 +885,52 @@ const loadTimesheets = async () => {
     query = query
       .gte('date', format(startDate, 'yyyy-MM-dd'))
       .lte('date', format(endDate, 'yyyy-MM-dd'))
-      .order('date', { ascending: false });
+      .order('date', { ascending: false })
+      .order('session_order', { ascending: true });
 
     const { data: unifiedData, error } = await query;
     
     if (error) throw error;
 
-    // Trasforma i dati dalla vista
-    const transformedData = unifiedData?.map(row => ({
-      id: row.id,
-      date: row.date,
-      user_id: row.user_id,
-      start_time: row.effective_start_time ? 
-        `${row.date}T${row.effective_start_time}Z` : null,
-      end_time: row.effective_end_time ? 
-        `${row.date}T${row.effective_end_time}Z` : null,
-      total_hours: parseFloat(row.effective_total_hours || 0),
-      lunch_duration_minutes: row.lunch_duration_minutes,
-      overtime_hours: parseFloat(row.overtime_hours || 0),
-      night_hours: parseFloat(row.night_hours || 0),
-      is_saturday: row.is_saturday,
-      is_holiday: row.is_holiday,
-      notes: row.notes,
-      profiles: {
-        first_name: row.first_name,
-        last_name: row.last_name,
-        email: row.email
-      },
-      projects: null, // Da gestire separatamente se necessario
-      timesheet_sessions: row.session_count > 0 ? [{
-        id: row.id + '_session',
-        session_details: row.session_times,
-        session_count: row.session_count
-      }] : [],
-      has_multiple_sessions: row.data_source === 'SESSIONI_MULTIPLE',
-      session_display_text: row.session_times
-    })) || [];
+    // Trasforma i dati mantenendo le sessioni separate
+    const transformedData = unifiedData?.map(row => {
+      // Converti gli orari nel formato corretto per il frontend
+      const startDateTime = row.effective_start_time ? 
+        new Date(`${row.date}T${row.effective_start_time}`) : null;
+      const endDateTime = row.effective_end_time ? 
+        new Date(`${row.date}T${row.effective_end_time}`) : null;
+      
+      return {
+        id: row.display_id || row.id,
+        original_timesheet_id: row.id, // ID originale del timesheet
+        date: row.date,
+        user_id: row.user_id,
+        start_time: startDateTime?.toISOString() || null,
+        end_time: endDateTime?.toISOString() || null,
+        total_hours: parseFloat(row.effective_total_hours || 0),
+        lunch_duration_minutes: row.lunch_duration_minutes,
+        overtime_hours: parseFloat(row.overtime_hours || 0),
+        night_hours: parseFloat(row.night_hours || 0),
+        is_saturday: row.is_saturday,
+        is_holiday: row.is_holiday,
+        notes: row.notes,
+        profiles: {
+          first_name: row.first_name,
+          last_name: row.last_name,
+          email: row.email
+        },
+        projects: null,
+        timesheet_sessions: [],
+        // Flag per identificare le sessioni
+        is_session: row.is_session,
+        session_order: row.session_order,
+        data_source: row.data_source
+      };
+    }) || [];
 
     setTimesheets(transformedData as unknown as TimesheetWithProfile[]);
     
-    // Carica anche le assenze per lo stesso periodo
+    // Carica anche le assenze
     await loadAbsences(startDate, endDate);
     
   } catch (error) {
