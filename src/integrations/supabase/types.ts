@@ -760,6 +760,105 @@ export type Database = {
         }
         Relationships: []
       }
+      import_staging: {
+        Row: {
+          batch_id: string
+          date: string | null
+          employee_code: string | null
+          end_time: string | null
+          id: string
+          imported_at: string | null
+          imported_by: string | null
+          notes: string | null
+          pause_minutes: number | null
+          processed: boolean | null
+          project_code: string | null
+          project_id: string | null
+          row_number: number
+          site_code: string | null
+          site_id: string | null
+          source_row_index: number | null
+          start_time: string | null
+          user_id: string | null
+          validation_messages: Json | null
+          validation_status: string | null
+        }
+        Insert: {
+          batch_id: string
+          date?: string | null
+          employee_code?: string | null
+          end_time?: string | null
+          id?: string
+          imported_at?: string | null
+          imported_by?: string | null
+          notes?: string | null
+          pause_minutes?: number | null
+          processed?: boolean | null
+          project_code?: string | null
+          project_id?: string | null
+          row_number: number
+          site_code?: string | null
+          site_id?: string | null
+          source_row_index?: number | null
+          start_time?: string | null
+          user_id?: string | null
+          validation_messages?: Json | null
+          validation_status?: string | null
+        }
+        Update: {
+          batch_id?: string
+          date?: string | null
+          employee_code?: string | null
+          end_time?: string | null
+          id?: string
+          imported_at?: string | null
+          imported_by?: string | null
+          notes?: string | null
+          pause_minutes?: number | null
+          processed?: boolean | null
+          project_code?: string | null
+          project_id?: string | null
+          row_number?: number
+          site_code?: string | null
+          site_id?: string | null
+          source_row_index?: number | null
+          start_time?: string | null
+          user_id?: string | null
+          validation_messages?: Json | null
+          validation_status?: string | null
+        }
+        Relationships: []
+      }
+      import_templates: {
+        Row: {
+          created_at: string | null
+          example_rows: Json | null
+          headers: Json
+          id: string
+          template_name: string
+          template_type: string
+          validation_rules: Json | null
+        }
+        Insert: {
+          created_at?: string | null
+          example_rows?: Json | null
+          headers: Json
+          id?: string
+          template_name: string
+          template_type: string
+          validation_rules?: Json | null
+        }
+        Update: {
+          created_at?: string | null
+          example_rows?: Json | null
+          headers?: Json
+          id?: string
+          template_name?: string
+          template_type?: string
+          validation_rules?: Json | null
+        }
+        Relationships: []
+      }
       location_pings: {
         Row: {
           accuracy: number | null
@@ -1446,6 +1545,34 @@ export type Database = {
       }
     }
     Views: {
+      import_preview: {
+        Row: {
+          batch_id: string | null
+          calculated_hours: number | null
+          date: string | null
+          employee_code: string | null
+          employee_name: string | null
+          end_time: string | null
+          id: string | null
+          imported_at: string | null
+          imported_by: string | null
+          notes: string | null
+          pause_minutes: number | null
+          processed: boolean | null
+          project_code: string | null
+          project_id: string | null
+          row_color: string | null
+          row_number: number | null
+          site_code: string | null
+          site_id: string | null
+          source_row_index: number | null
+          start_time: string | null
+          user_id: string | null
+          validation_messages: Json | null
+          validation_status: string | null
+        }
+        Relationships: []
+      }
       v_timesheet_day_edit: {
         Row: {
           date: string | null
@@ -1583,6 +1710,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      cleanup_old_imports: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       explain_timesheet_calculation: {
         Args: {
           p_date: string
@@ -1651,6 +1782,15 @@ export type Database = {
           p_user_id: string
         }
         Returns: undefined
+      }
+      process_import_batch: {
+        Args: { p_batch_id: string; p_mode?: string; p_user_id?: string }
+        Returns: {
+          error_count: number
+          messages: Json
+          success_count: number
+          warning_count: number
+        }[]
       }
       recalculate_affected_timesheets: {
         Args: { p_user_id: string; p_valid_from: string; p_valid_to?: string }

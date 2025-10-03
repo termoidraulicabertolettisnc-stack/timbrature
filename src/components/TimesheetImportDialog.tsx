@@ -226,7 +226,7 @@ export function TimesheetImportDialog({
       const currentUserId = userData?.user?.id;
       
       // Insert all rows into staging table
-      const { error: insertError } = await supabase
+      const { error: insertError } = await (supabase as any)
         .from('import_staging')
         .insert(
           data.map((row, index) => ({
@@ -240,7 +240,7 @@ export function TimesheetImportDialog({
       if (insertError) throw insertError;
       
       // Fetch validation results
-      const { data: validationData, error: validationError } = await supabase
+      const { data: validationData, error: validationError } = await (supabase as any)
         .from('import_preview')
         .select('*')
         .eq('batch_id', newBatchId)
@@ -325,7 +325,7 @@ export function TimesheetImportDialog({
       }, 200);
       
       // Call the process function
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .rpc('process_import_batch', {
           p_batch_id: batchId,
           p_mode: importMode,
