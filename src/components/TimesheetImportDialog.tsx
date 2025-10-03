@@ -245,6 +245,10 @@ export function TimesheetImportDialog({
       const newBatchId = crypto.randomUUID();
       setBatchId(newBatchId);
       
+      // Get current user first
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUserId = userData?.user?.id;
+      
       // Insert all rows into staging table
       const { error: insertError } = await supabase
         .from('import_staging')
@@ -253,7 +257,7 @@ export function TimesheetImportDialog({
             batch_id: newBatchId,
             row_number: index + 1,
             ...row,
-            imported_by: (await supabase.auth.getUser()).data.user?.id
+            imported_by: currentUserId
           }))
         );
       
@@ -322,12 +326,16 @@ export function TimesheetImportDialog({
     setProgress(0);
     
     try {
+      // Get current user first
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUserId = userData?.user?.id;
+      
       // Call the process function
       const { data, error } = await supabase
         .rpc('process_import_batch', {
           p_batch_id: batchId,
           p_mode: importMode,
-          p_user_id: (await supabase.auth.getUser()).data.user?.id
+          p_user_id: currentUserId
         });
       
       if (error) throw error;
