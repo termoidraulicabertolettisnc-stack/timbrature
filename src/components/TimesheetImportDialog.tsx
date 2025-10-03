@@ -1,448 +1,743 @@
-import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import React, { useState, useCallback } from 'react';
+import * as XLSX from 'xlsx';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import { Upload, FileSpreadsheet, Users, Clock, AlertTriangle, CheckCircle } from 'lucide-react';
-import { ExcelImportService, ParsedTimesheet, ImportResult } from '@/services/ExcelImportService';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  FileSpreadsheet,
+  Upload,
+  AlertCircle,
+  CheckCircle,
+  XCircle,
+  Download,
+  Eye,
+  AlertTriangle,
+  RefreshCw,
+  FileDown,
+} from 'lucide-react';
+import { format } from 'date-fns';
+import { it } from 'date-fns/locale';
+
+// =====================================================
+// TYPES & INTERFACES
+// =====================================================
+interface ImportRow {
+  employee_code: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  pause_minutes?: number;
+  notes?: string;
+  site_code?: string;
+  project_code?: string;
+  source_row_index?: number;
+}
+
+interface ValidationResult {
+  row_number: number;
+  status: 'valid' | 'warning' | 'error';
+  messages: Array<{
+    type: 'error' | 'warning' | 'info';
+    field: string;
+    message: string;
+  }>;
+  data: ImportRow;
+  employee_name?: string;
+  calculated_hours?: number;
+}
+
+interface ImportStats {
+  total: number;
+  valid: number;
+  warnings: number;
+  errors: number;
+}
 
 interface TimesheetImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onImportComplete: () => void;
+  onImportComplete?: () => void;
 }
 
-export function TimesheetImportDialog({ open, onOpenChange, onImportComplete }: TimesheetImportDialogProps) {
-  const [file, setFile] = useState<File | null>(null);
-  const [parsing, setParsing] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [parseResult, setParseResult] = useState<ImportResult | null>(null);
-  const [step, setStep] = useState<'upload' | 'preview' | 'importing' | 'complete'>('upload');
-  const [progress, setProgress] = useState(0);
+// =====================================================
+// MAIN COMPONENT
+// =====================================================
+export function TimesheetImportDialog({
+  open,
+  onOpenChange,
+  onImportComplete
+}: TimesheetImportDialogProps) {
   const { toast } = useToast();
+  
+  // State management
+  const [step, setStep] = useState<'upload' | 'mapping' | 'preview' | 'importing' | 'complete'>('upload');
+  const [file, setFile] = useState<File | null>(null);
+  const [rawData, setRawData] = useState<any[]>([]);
+  const [mappedData, setMappedData] = useState<ImportRow[]>([]);
+  const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
+  const [importMode, setImportMode] = useState<'all_or_nothing' | 'partial'>('all_or_nothing');
+  const [batchId, setBatchId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [stats, setStats] = useState<ImportStats>({ total: 0, valid: 0, warnings: 0, errors: 0 });
+  
+  // Column mapping state
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({
+    employee_code: '',
+    date: '',
+    start_time: '',
+    end_time: '',
+    pause_minutes: '',
+    notes: '',
+    site_code: '',
+    project_code: ''
+  });
 
+  // =====================================================
+  // FILE HANDLING
+  // =====================================================
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (selectedFile) {
-      if (selectedFile.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
-          selectedFile.name.endsWith('.xlsx')) {
-        setFile(selectedFile);
-        setParseResult(null);
-        setStep('upload');
-      } else {
-        toast({
-          title: "Errore",
-          description: "Seleziona un file Excel (.xlsx)",
-          variant: "destructive"
-        });
-      }
+      setFile(selectedFile);
+      parseExcelFile(selectedFile);
     }
   };
 
-  const handleParse = async () => {
-    if (!file) return;
-
-    setParsing(true);
+  const parseExcelFile = async (file: File) => {
     try {
-      const result = await ExcelImportService.parseExcelFile(file);
-      setParseResult(result);
-      setStep('preview');
+      setLoading(true);
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+        header: 1,
+        raw: false,
+        dateNF: 'yyyy-mm-dd'
+      });
+      
+      if (jsonData.length > 0) {
+        const headers = jsonData[0] as string[];
+        const rows = jsonData.slice(1).map((row: any, index) => {
+          const obj: any = { source_row_index: index + 2 }; // +2 because Excel is 1-indexed and we skip header
+          headers.forEach((header, i) => {
+            obj[header] = row[i];
+          });
+          return obj;
+        });
+        
+        setRawData(rows);
+        autoDetectColumns(headers);
+        setStep('mapping');
+      }
     } catch (error) {
+      console.error('Error parsing file:', error);
       toast({
         title: "Errore",
-        description: "Errore durante l'analisi del file",
+        description: "Impossibile leggere il file Excel",
         variant: "destructive"
       });
     } finally {
-      setParsing(false);
+      setLoading(false);
     }
   };
 
-  const getMyCompany = async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('company_id')
-      .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
-      .single();
-    return data?.company_id;
-  };
-
-  const findEmployeeByFiscalCode = async (fiscalCode: string, employeeName: string) => {
-    const companyId = await getMyCompany();
-    const cf = (fiscalCode || '').trim().toUpperCase();
-
-    // First try to find by fiscal code within the same company
-    const { data: fiscalData, error: fiscalError } = await supabase
-      .from('profiles')
-      .select('user_id, first_name, last_name, company_id')
-      .eq('company_id', companyId)
-      .eq('codice_fiscale', cf)
-      .maybeSingle();
-
-    if (!fiscalError && fiscalData) {
-      return fiscalData;
-    }
+  // =====================================================
+  // COLUMN MAPPING
+  // =====================================================
+  const autoDetectColumns = (headers: string[]) => {
+    const mapping: Record<string, string> = {};
     
-    // If there was an error (not just no data), don't proceed to name fallback
-    if (fiscalError) {
-      return null;
-    }
-
-    // If fiscal code not found, try to find by name within the same company
-    const nameParts = employeeName.trim().split(/\s+/);
-    if (nameParts.length < 2) {
-      return null;
-    }
-
-    const firstName = nameParts[0];
-    const lastName = nameParts.slice(1).join(' ');
-
-    const { data: nameData, error: nameError } = await supabase
-      .from('profiles')
-      .select('user_id, first_name, last_name, company_id')
-      .eq('company_id', companyId)
-      .ilike('first_name', firstName)
-      .ilike('last_name', lastName)
-      .maybeSingle();
-
-    return (!nameError && nameData) ? nameData : null;
+    // Mapping rules for common Italian field names
+    const mappingRules: Record<string, string[]> = {
+      employee_code: ['codice_fiscale', 'cf', 'employee_code', 'codice_dipendente', 'matricola'],
+      date: ['data', 'date', 'giorno'],
+      start_time: ['ora_entrata', 'entrata', 'start_time', 'inizio', 'ora_inizio'],
+      end_time: ['ora_uscita', 'uscita', 'end_time', 'fine', 'ora_fine'],
+      pause_minutes: ['pausa', 'pausa_minuti', 'pause_minutes', 'minuti_pausa'],
+      notes: ['note', 'notes', 'descrizione', 'commento'],
+      site_code: ['sede', 'site_code', 'codice_sede', 'location'],
+      project_code: ['progetto', 'project_code', 'commessa', 'codice_progetto']
+    };
+    
+    Object.entries(mappingRules).forEach(([field, patterns]) => {
+      const header = headers.find(h => 
+        patterns.some(p => h.toLowerCase().includes(p.toLowerCase()))
+      );
+      if (header) {
+        mapping[field] = header;
+      }
+    });
+    
+    setColumnMapping(mapping);
   };
 
+  const applyMapping = () => {
+    if (!validateMapping()) {
+      toast({
+        title: "Mappatura incompleta",
+        description: "Mappa almeno i campi obbligatori: Codice Dipendente, Data, Ora Entrata, Ora Uscita",
+        variant: "destructive"
+      });
+      return;
+    }
 
-  const handleImport = async () => {
-    if (!parseResult || parseResult.success.length === 0) return;
+    const mapped = rawData.map((row, index) => ({
+      employee_code: row[columnMapping.employee_code] || '',
+      date: row[columnMapping.date] || '',
+      start_time: row[columnMapping.start_time] || '',
+      end_time: row[columnMapping.end_time] || '',
+      pause_minutes: row[columnMapping.pause_minutes] ? parseInt(row[columnMapping.pause_minutes]) : undefined,
+      notes: row[columnMapping.notes] || '',
+      site_code: row[columnMapping.site_code] || '',
+      project_code: row[columnMapping.project_code] || '',
+      source_row_index: index + 2
+    }));
+    
+    setMappedData(mapped);
+    validateData(mapped);
+  };
 
-    setImporting(true);
-    setStep('importing');
-    setProgress(0);
+  const validateMapping = (): boolean => {
+    return !!(
+      columnMapping.employee_code &&
+      columnMapping.date &&
+      columnMapping.start_time &&
+      columnMapping.end_time
+    );
+  };
 
-    const importResults = {
-      imported: 0,
-      skipped: 0,
-      errors: 0
-    };
-
+  // =====================================================
+  // VALIDATION
+  // =====================================================
+  const validateData = async (data: ImportRow[]) => {
+    setLoading(true);
+    setStep('preview');
+    
     try {
-      const total = parseResult.success.length;
-      const currentUserId = (await supabase.auth.getUser()).data.user?.id;
+      // Generate batch ID
+      const newBatchId = crypto.randomUUID();
+      setBatchId(newBatchId);
+      
+      // Insert all rows into staging table
+      const { error: insertError } = await supabase
+        .from('import_staging')
+        .insert(
+          data.map((row, index) => ({
+            batch_id: newBatchId,
+            row_number: index + 1,
+            ...row,
+            imported_by: (await supabase.auth.getUser()).data.user?.id
+          }))
+        );
+      
+      if (insertError) throw insertError;
+      
+      // Fetch validation results
+      const { data: validationData, error: validationError } = await supabase
+        .from('import_preview')
+        .select('*')
+        .eq('batch_id', newBatchId)
+        .order('row_number');
+      
+      if (validationError) throw validationError;
+      
+      // Transform to ValidationResult format
+      const results: ValidationResult[] = validationData.map((v: any) => ({
+        row_number: v.row_number,
+        status: v.validation_status,
+        messages: v.validation_messages || [],
+        data: {
+          employee_code: v.employee_code,
+          date: v.date,
+          start_time: v.start_time,
+          end_time: v.end_time,
+          pause_minutes: v.pause_minutes,
+          notes: v.notes,
+          site_code: v.site_code,
+          project_code: v.project_code,
+          source_row_index: v.row_number + 1
+        },
+        employee_name: v.employee_name,
+        calculated_hours: v.calculated_hours
+      }));
+      
+      setValidationResults(results);
+      
+      // Calculate stats
+      const newStats = {
+        total: results.length,
+        valid: results.filter(r => r.status === 'valid').length,
+        warnings: results.filter(r => r.status === 'warning').length,
+        errors: results.filter(r => r.status === 'error').length
+      };
+      setStats(newStats);
+      
+    } catch (error) {
+      console.error('Validation error:', error);
+      toast({
+        title: "Errore validazione",
+        description: "Impossibile validare i dati",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      for (let i = 0; i < parseResult.success.length; i++) {
-        const timesheet = parseResult.success[i];
-        
-        try {
-          // Find employee by fiscal code or name
-          const employee = await findEmployeeByFiscalCode(timesheet.codice_fiscale, timesheet.employee_name);
-          
-          if (!employee) {
-            console.warn(`Dipendente non trovato per codice fiscale: ${timesheet.codice_fiscale}`);
-            importResults.errors++;
-            continue;
-          }
-
-          // Handle timesheets with multiple sessions
-          if (timesheet.sessions && timesheet.sessions.length > 0) {
-            console.log(`Creating timesheet with ${timesheet.sessions.length} sessions`);
-            
-            // Create main timesheet first
-            const { data: upsertedTimesheet, error: timesheetError } = await supabase
-              .from('timesheets')
-              .upsert({
-                user_id: employee.user_id,
-                date: timesheet.date,
-                start_time: timesheet.start_time,
-                end_time: timesheet.end_time,
-                created_by: currentUserId,
-                notes: `Importato da Excel - ${file?.name} (${timesheet.sessions.length} sessioni)`,
-              }, { 
-                onConflict: 'user_id,date', 
-                ignoreDuplicates: false 
-              })
-              .select();
-
-            if (timesheetError || !upsertedTimesheet?.[0]) {
-              console.error('Error creating main timesheet:', timesheetError);
-              importResults.errors++;
-              continue;
-            }
-
-            const timesheetId = upsertedTimesheet[0].id;
-            
-            // Delete existing sessions to recreate them
-            await supabase
-              .from('timesheet_sessions')
-              .delete()
-              .eq('timesheet_id', timesheetId);
-            
-            // Create all sessions
-            const sessionsToInsert = timesheet.sessions.map(session => ({
-              timesheet_id: timesheetId,
-              session_order: session.session_order,
-              session_type: session.session_type,
-              start_time: session.start_time,
-              end_time: session.end_time,
-              start_location_lat: session.start_location_lat,
-              start_location_lng: session.start_location_lng,
-              end_location_lat: session.end_location_lat,
-              end_location_lng: session.end_location_lng,
-              notes: `Sessione ${session.session_order} importata da Excel`
-            }));
-
-            const { error: sessionsError } = await supabase
-              .from('timesheet_sessions')
-              .insert(sessionsToInsert);
-
-            if (sessionsError) {
-              console.error('Error creating sessions:', sessionsError);
-              importResults.errors++;
-              continue;
-            }
-
-            console.log(`Successfully imported timesheet ${timesheetId} with ${timesheet.sessions.length} sessions`);
-            
-          } else {
-            // Handle simple timesheets without sessions
-            const { error } = await supabase.from('timesheets').upsert({
-              user_id: employee.user_id,
-              date: timesheet.date,
-              start_time: timesheet.start_time,
-              end_time: timesheet.end_time,
-              start_location_lat: timesheet.start_location_lat,
-              start_location_lng: timesheet.start_location_lng,
-              end_location_lat: timesheet.end_location_lat,
-              end_location_lng: timesheet.end_location_lng,
-              lunch_start_time: timesheet.lunch_start_time,
-              lunch_end_time: timesheet.lunch_end_time,
-              created_by: currentUserId,
-              notes: `Importato da Excel - ${file?.name}`,
-              total_hours: timesheet.total_hours
-            }, { 
-              onConflict: 'user_id,date', 
-              ignoreDuplicates: false 
-            });
-
-            if (error) {
-              console.error('Error importing single timesheet:', error);
-              importResults.errors++;
-              continue;
-            }
-          }
-          
-          importResults.imported++;
-          
-        } catch (error) {
-          console.error('Error during import:', error);
-          importResults.errors++;
-        } finally {
-          setProgress(((i + 1) / total) * 100);
-        }
-      }
-
+  // =====================================================
+  // IMPORT EXECUTION
+  // =====================================================
+  const executeImport = async () => {
+    if (!batchId) return;
+    
+    setStep('importing');
+    setLoading(true);
+    setProgress(0);
+    
+    try {
+      // Call the process function
+      const { data, error } = await supabase
+        .rpc('process_import_batch', {
+          p_batch_id: batchId,
+          p_mode: importMode,
+          p_user_id: (await supabase.auth.getUser()).data.user?.id
+        });
+      
+      if (error) throw error;
+      
+      const result = data[0];
+      
       setProgress(100);
       setStep('complete');
-
+      
       toast({
-        title: "Importazione completata",
-        description: `Importate: ${importResults.imported}, Saltate: ${importResults.skipped}, Errori: ${importResults.errors}`,
+        title: "Import completato",
+        description: `Importate ${result.success_count} sessioni. ${result.error_count} errori. ${result.warning_count} avvisi.`,
+        variant: result.error_count > 0 ? "destructive" : "default"
       });
-
-      onImportComplete();
-
+      
+      if (onImportComplete) {
+        onImportComplete();
+      }
+      
     } catch (error) {
-      console.error('General error during import:', error);
+      console.error('Import error:', error);
       toast({
-        title: "Errore",
-        description: "Errore durante l'importazione",
+        title: "Errore import",
+        description: "Impossibile completare l'importazione",
         variant: "destructive"
       });
     } finally {
-      setImporting(false);
+      setLoading(false);
     }
   };
 
-  const handleClose = () => {
-    setFile(null);
-    setParseResult(null);
-    setStep('upload');
-    setProgress(0);
-    onOpenChange(false);
+  // =====================================================
+  // EXPORT FUNCTIONS
+  // =====================================================
+  const downloadTemplate = () => {
+    const template = [
+      ['employee_code', 'date', 'start_time', 'end_time', 'pause_minutes', 'notes', 'site_code', 'project_code'],
+      ['RSSMRA80A01H501Z', '2025-01-15', '08:00', '12:00', '', 'Mattina', 'SEDE_MI', ''],
+      ['RSSMRA80A01H501Z', '2025-01-15', '13:00', '17:00', '', 'Pomeriggio', 'SEDE_MI', ''],
+      ['VRDGPP75B15H501X', '2025-01-15', '07:30', '16:00', '30', 'Giornata completa', 'SEDE_BG', 'PROG001']
+    ];
+    
+    const ws = XLSX.utils.aoa_to_sheet(template);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.writeFile(wb, 'template_timbrature_row_per_session.xlsx');
   };
 
+  const downloadErrors = () => {
+    const errorRows = validationResults
+      .filter(v => v.status === 'error' || v.status === 'warning')
+      .map(v => ({
+        'Riga': v.data.source_row_index,
+        'Stato': v.status === 'error' ? 'ERRORE' : 'AVVISO',
+        'Dipendente': v.data.employee_code,
+        'Data': v.data.date,
+        'Entrata': v.data.start_time,
+        'Uscita': v.data.end_time,
+        'Messaggi': v.messages.map(m => m.message).join('; ')
+      }));
+    
+    const ws = XLSX.utils.json_to_sheet(errorRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Errori');
+    XLSX.writeFile(wb, 'errori_import_timbrature.xlsx');
+  };
+
+  // =====================================================
+  // RENDER FUNCTIONS
+  // =====================================================
   const renderUploadStep = () => (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="text-center">
-        <FileSpreadsheet className="mx-auto h-12 w-12 text-muted-foreground" />
-        <h3 className="mt-2 text-lg font-medium">Importa Timbrature da Excel</h3>
-        <p className="text-sm text-muted-foreground">
-          Carica un file Excel con le timbrature dei dipendenti
+        <FileSpreadsheet className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+        <h3 className="text-lg font-medium">Import Timbrature Excel</h3>
+        <p className="text-sm text-muted-foreground mt-2">
+          Template ufficiale: <strong>Una riga = Una sessione</strong>
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Per più sessioni nello stesso giorno, usa più righe con la stessa data
         </p>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="file">Seleziona file Excel (.xlsx)</Label>
-        <Input
-          id="file"
-          type="file"
-          accept=".xlsx,.xls"
-          onChange={handleFileSelect}
-        />
+      <div className="space-y-4">
+        <div>
+          <Label htmlFor="file">Seleziona file Excel (.xlsx)</Label>
+          <Input
+            id="file"
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleFileSelect}
+            className="mt-2"
+          />
+        </div>
+
+        <Button 
+          onClick={downloadTemplate}
+          variant="outline" 
+          className="w-full"
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Scarica Template Excel
+        </Button>
+
+        {file && (
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Upload className="h-4 w-4" />
+                  <span className="text-sm font-medium">{file.name}</span>
+                </div>
+                <Badge variant="outline">
+                  {(file.size / 1024).toFixed(1)} KB
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderMappingStep = () => (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-lg font-medium mb-2">Mappatura Colonne</h3>
+        <p className="text-sm text-muted-foreground">
+          Associa le colonne del tuo file ai campi richiesti
+        </p>
       </div>
 
-      {file && (
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center space-x-2">
-              <Upload className="h-4 w-4" />
-              <span className="text-sm font-medium">{file.name}</span>
-              <Badge variant="outline">{(file.size / 1024 / 1024).toFixed(2)} MB</Badge>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <ScrollArea className="h-[400px]">
+        <div className="space-y-3">
+          {Object.entries(columnMapping).map(([field, value]) => {
+            const isRequired = ['employee_code', 'date', 'start_time', 'end_time'].includes(field);
+            const fieldLabels: Record<string, string> = {
+              employee_code: 'Codice Dipendente (CF/Email)',
+              date: 'Data',
+              start_time: 'Ora Entrata',
+              end_time: 'Ora Uscita',
+              pause_minutes: 'Pausa (minuti)',
+              notes: 'Note',
+              site_code: 'Codice Sede',
+              project_code: 'Codice Progetto'
+            };
+
+            return (
+              <div key={field} className="grid grid-cols-2 gap-2 items-center">
+                <Label className="flex items-center">
+                  {fieldLabels[field]}
+                  {isRequired && <span className="text-red-500 ml-1">*</span>}
+                </Label>
+                <select
+                  value={value}
+                  onChange={(e) => setColumnMapping(prev => ({
+                    ...prev,
+                    [field]: e.target.value
+                  }))}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">-- Seleziona colonna --</option>
+                  {rawData.length > 0 && Object.keys(rawData[0]).map(col => (
+                    <option key={col} value={col}>{col}</option>
+                  ))}
+                </select>
+              </div>
+            );
+          })}
+        </div>
+      </ScrollArea>
 
       <div className="flex space-x-2">
-        <Button variant="outline" onClick={handleClose} className="flex-1">
-          Annulla
-        </Button>
-        <Button 
-          onClick={handleParse} 
-          disabled={!file || parsing}
+        <Button
+          onClick={() => setStep('upload')}
+          variant="outline"
           className="flex-1"
         >
-          {parsing ? 'Analisi...' : 'Analizza File'}
+          Indietro
+        </Button>
+        <Button
+          onClick={applyMapping}
+          className="flex-1"
+          disabled={!validateMapping()}
+        >
+          Continua
         </Button>
       </div>
     </div>
   );
 
-  const renderPreviewStep = () => {
-    if (!parseResult) return null;
-
-    return (
-      <div className="space-y-4">
-        <div className="grid grid-cols-3 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center">
-                <CheckCircle className="h-4 w-4 mr-1 text-green-500" />
-                Da Importare
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{parseResult.success.length}</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center">
-                <AlertTriangle className="h-4 w-4 mr-1 text-yellow-500" />
-                Errori
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{parseResult.errors.length}</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center">
-                <Users className="h-4 w-4 mr-1 text-blue-500" />
-                Dipendenti
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">
-                {new Set(parseResult.success.map(t => t.codice_fiscale)).size}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {parseResult.errors.length > 0 && (
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              Sono stati trovati {parseResult.errors.length} errori che impediranno l'importazione di alcune righe.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <div className="max-h-40 overflow-y-auto">
-          <h4 className="text-sm font-medium mb-2">Anteprima timbrature da importare:</h4>
-          <div className="space-y-2">
-            {parseResult.success.slice(0, 10).map((timesheet, index) => (
-              <div key={index} className="flex items-center justify-between p-2 bg-muted rounded text-sm">
-                <span>{timesheet.employee_name}</span>
-                <span>{timesheet.date}</span>
-                <span>{timesheet.total_hours}h</span>
-              </div>
-            ))}
-            {parseResult.success.length > 10 && (
-              <p className="text-xs text-muted-foreground">
-                ... e altri {parseResult.success.length - 10} record
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="flex space-x-2">
-          <Button variant="outline" onClick={() => setStep('upload')} className="flex-1">
-            Indietro
-          </Button>
-          <Button 
-            onClick={handleImport} 
-            disabled={parseResult.success.length === 0}
-            className="flex-1"
-          >
-            Importa {parseResult.success.length} Timbrature
-          </Button>
+  const renderPreviewStep = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-medium">Anteprima Validazione</h3>
+        <div className="flex gap-2">
+          <Badge variant={stats.errors > 0 ? "destructive" : "default"}>
+            {stats.total} righe
+          </Badge>
+          {stats.valid > 0 && (
+            <Badge variant="outline" className="border-green-500 text-green-600">
+              <CheckCircle className="mr-1 h-3 w-3" />
+              {stats.valid} valide
+            </Badge>
+          )}
+          {stats.warnings > 0 && (
+            <Badge variant="outline" className="border-yellow-500 text-yellow-600">
+              <AlertTriangle className="mr-1 h-3 w-3" />
+              {stats.warnings} avvisi
+            </Badge>
+          )}
+          {stats.errors > 0 && (
+            <Badge variant="outline" className="border-red-500 text-red-600">
+              <XCircle className="mr-1 h-3 w-3" />
+              {stats.errors} errori
+            </Badge>
+          )}
         </div>
       </div>
-    );
-  };
+
+      {stats.errors > 0 && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Errori trovati</AlertTitle>
+          <AlertDescription>
+            Ci sono {stats.errors} errori da correggere prima di procedere.
+            {importMode === 'all_or_nothing' && ' In modalità "Tutto o Niente", l\'import verrà annullato.'}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="space-y-2">
+        <Label>Modalità Import</Label>
+        <RadioGroup value={importMode} onValueChange={(v) => setImportMode(v as any)}>
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="all_or_nothing" id="all" />
+            <Label htmlFor="all" className="cursor-pointer">
+              Tutto o Niente (consigliato)
+              <p className="text-xs text-muted-foreground">
+                Importa solo se tutte le righe sono valide
+              </p>
+            </Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="partial" id="partial" />
+            <Label htmlFor="partial" className="cursor-pointer">
+              Parziale
+              <p className="text-xs text-muted-foreground">
+                Importa solo le righe valide, scarta quelle con errori
+              </p>
+            </Label>
+          </div>
+        </RadioGroup>
+      </div>
+
+      <ScrollArea className="h-[300px]">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-12">Riga</TableHead>
+              <TableHead>Dipendente</TableHead>
+              <TableHead>Data</TableHead>
+              <TableHead>Orario</TableHead>
+              <TableHead>Ore</TableHead>
+              <TableHead>Stato</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {validationResults.map((result) => (
+              <TableRow 
+                key={result.row_number}
+                className={
+                  result.status === 'error' ? 'bg-red-50' :
+                  result.status === 'warning' ? 'bg-yellow-50' :
+                  'bg-green-50'
+                }
+              >
+                <TableCell>{result.data.source_row_index}</TableCell>
+                <TableCell>
+                  <div>
+                    <div className="font-medium">{result.employee_name || 'NON TROVATO'}</div>
+                    <div className="text-xs text-muted-foreground">{result.data.employee_code}</div>
+                  </div>
+                </TableCell>
+                <TableCell>{result.data.date}</TableCell>
+                <TableCell>{result.data.start_time} - {result.data.end_time}</TableCell>
+                <TableCell>{result.calculated_hours?.toFixed(2) || '-'}</TableCell>
+                <TableCell>
+                  {result.status === 'valid' && <CheckCircle className="h-4 w-4 text-green-600" />}
+                  {result.status === 'warning' && <AlertTriangle className="h-4 w-4 text-yellow-600" />}
+                  {result.status === 'error' && (
+                    <div className="flex items-center gap-1">
+                      <XCircle className="h-4 w-4 text-red-600" />
+                      <span className="text-xs text-red-600">
+                        {result.messages[0]?.message}
+                      </span>
+                    </div>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </ScrollArea>
+
+      <div className="flex space-x-2">
+        {(stats.errors > 0 || stats.warnings > 0) && (
+          <Button
+            onClick={downloadErrors}
+            variant="outline"
+            size="sm"
+          >
+            <FileDown className="mr-2 h-4 w-4" />
+            Scarica Errori
+          </Button>
+        )}
+        
+        <div className="flex-1" />
+        
+        <Button
+          onClick={() => setStep('mapping')}
+          variant="outline"
+        >
+          Indietro
+        </Button>
+        
+        <Button
+          onClick={executeImport}
+          disabled={loading || (importMode === 'all_or_nothing' && stats.errors > 0)}
+        >
+          {loading ? (
+            <>
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              Importazione...
+            </>
+          ) : (
+            `Importa ${importMode === 'partial' && stats.errors > 0 ? stats.valid : stats.total} Sessioni`
+          )}
+        </Button>
+      </div>
+    </div>
+  );
 
   const renderImportingStep = () => (
-    <div className="space-y-4 text-center">
-      <Clock className="mx-auto h-12 w-12 text-blue-500" />
-      <h3 className="text-lg font-medium">Importazione in corso...</h3>
+    <div className="space-y-4">
+      <div className="text-center">
+        <RefreshCw className="mx-auto h-12 w-12 text-primary animate-spin mb-4" />
+        <h3 className="text-lg font-medium">Importazione in corso...</h3>
+        <p className="text-sm text-muted-foreground mt-2">
+          Elaborazione delle timbrature
+        </p>
+      </div>
       <Progress value={progress} className="w-full" />
-      <p className="text-sm text-muted-foreground">
-        {Math.round(progress)}% completato
-      </p>
     </div>
   );
 
   const renderCompleteStep = () => (
-    <div className="space-y-4 text-center">
-      <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
-      <h3 className="text-lg font-medium">Importazione completata!</h3>
-      <p className="text-sm text-muted-foreground">
-        Le timbrature sono state importate con successo
-      </p>
-      <Button onClick={handleClose} className="w-full">
+    <div className="space-y-4">
+      <div className="text-center">
+        <CheckCircle className="mx-auto h-12 w-12 text-green-600 mb-4" />
+        <h3 className="text-lg font-medium">Import Completato!</h3>
+        <p className="text-sm text-muted-foreground mt-2">
+          Le timbrature sono state importate correttamente
+        </p>
+      </div>
+      
+      <Card>
+        <CardContent className="pt-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Sessioni importate</p>
+              <p className="text-2xl font-bold text-green-600">{stats.valid}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Righe totali</p>
+              <p className="text-2xl font-bold">{stats.total}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Button 
+        onClick={() => onOpenChange(false)}
+        className="w-full"
+      >
         Chiudi
       </Button>
     </div>
   );
 
+  // =====================================================
+  // MAIN RENDER
+  // =====================================================
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Importa Timbrature Excel</DialogTitle>
+          <DialogTitle>Import Timbrature Excel</DialogTitle>
+          <DialogDescription>
+            Template Row-Per-Session: Una riga = Una sessione di lavoro
+          </DialogDescription>
         </DialogHeader>
-        
-        {step === 'upload' && renderUploadStep()}
-        {step === 'preview' && renderPreviewStep()}
-        {step === 'importing' && renderImportingStep()}
-        {step === 'complete' && renderCompleteStep()}
+
+        <div className="flex-1 overflow-auto">
+          {step === 'upload' && renderUploadStep()}
+          {step === 'mapping' && renderMappingStep()}
+          {step === 'preview' && renderPreviewStep()}
+          {step === 'importing' && renderImportingStep()}
+          {step === 'complete' && renderCompleteStep()}
+        </div>
       </DialogContent>
     </Dialog>
   );
