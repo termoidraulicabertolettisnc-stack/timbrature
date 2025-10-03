@@ -447,10 +447,27 @@ export default function AdminTimesheets() {
   };
 
   // Funzione per gestire l'apertura del DayEditDialog
-  const handleEditDay = (date: string, employee: any, timesheet: TimesheetWithProfile | null, sessions: any[]) => {
-    setDayEditData({ date, employee, timesheet, sessions });
-    setDayEditDialogOpen(true);
-  };
+const handleEditDay = async (date: string, employee: any, timesheet: TimesheetWithProfile | null, sessions: any[]) => {
+  // Se abbiamo un timesheet ma non le sessioni, caricale direttamente
+  if (timesheet && (!sessions || sessions.length === 0)) {
+    try {
+      const { data: sessionData, error } = await supabase
+        .from('timesheet_sessions')
+        .select('*')
+        .eq('timesheet_id', timesheet.id)
+        .order('session_order');
+      
+      if (!error && sessionData) {
+        sessions = sessionData;
+      }
+    } catch (error) {
+      console.error('Error loading sessions for edit:', error);
+    }
+  }
+  
+  setDayEditData({ date, employee, timesheet, sessions });
+  setDayEditDialogOpen(true);
+};
 
   // Stati per le impostazioni
   const [companySettings, setCompanySettings] = useState<any>(null);
@@ -850,100 +867,84 @@ export default function AdminTimesheets() {
     );
   };
 
-const loadTimesheets = async () => {
-  setLoading(true);
-  try {
-    // Usa la vista unificata che ora mantiene le sessioni separate
-    let query = supabase
-      .from('v_timesheets_unified')
-      .select('*');
+  const loadTimesheets = async () => {
+    setLoading(true);
+    try {
+      let query = supabase
+        .from('timesheets')
+        .select(`
+          *,
+          profiles!timesheets_user_id_fkey (
+            first_name,
+            last_name,
+            email
+          ),
+          projects (
+            name
+          ),
+          timesheet_sessions (
+            id,
+            session_order,
+            start_time,
+            end_time,
+            session_type,
+            notes
+          )
+        `);
 
-    // Applica filtri
-    if (selectedEmployee !== 'all') {
-      query = query.eq('user_id', selectedEmployee);
+      // Applica filtri
+      if (selectedEmployee !== 'all') {
+        query = query.eq('user_id', selectedEmployee);
+      }
+
+      if (selectedProject !== 'all') {
+        query = query.eq('project_id', selectedProject);
+      }
+
+      // Filtri per periodo
+      const baseDate = parseISO(dateFilter);
+      let startDate: Date;
+      let endDate: Date;
+
+      switch (activeView) {
+        case 'weekly':
+          startDate = startOfWeek(baseDate, { weekStartsOn: 1 });
+          endDate = endOfWeek(baseDate, { weekStartsOn: 1 });
+          break;
+        case 'monthly':
+          startDate = startOfMonth(baseDate);
+          endDate = endOfMonth(baseDate);
+          break;
+        default: // daily
+          startDate = baseDate;
+          endDate = baseDate;
+      }
+
+      query = query
+        .gte('date', format(startDate, 'yyyy-MM-dd'))
+        .lte('date', format(endDate, 'yyyy-MM-dd'))
+        .order('date', { ascending: false })
+        .order('start_time', { ascending: false });
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      setTimesheets((data as unknown as TimesheetWithProfile[]) || []);
+
+      // Carica anche le assenze per lo stesso periodo
+      await loadAbsences(startDate, endDate);
+
+    } catch (error) {
+      console.error('Error loading timesheets:', error);
+      toast({
+        title: "Errore",
+        description: "Errore nel caricamento dei timesheet",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-    
-    // Filtri per periodo
-    const baseDate = parseISO(dateFilter);
-    let startDate: Date;
-    let endDate: Date;
-    
-    switch (activeView) {
-      case 'weekly':
-        startDate = startOfWeek(baseDate, { weekStartsOn: 1 });
-        endDate = endOfWeek(baseDate, { weekStartsOn: 1 });
-        break;
-      case 'monthly':
-        startDate = startOfMonth(baseDate);
-        endDate = endOfMonth(baseDate);
-        break;
-      default: // daily
-        startDate = baseDate;
-        endDate = baseDate;
-    }
-    
-    query = query
-      .gte('date', format(startDate, 'yyyy-MM-dd'))
-      .lte('date', format(endDate, 'yyyy-MM-dd'))
-      .order('date', { ascending: false })
-      .order('session_order', { ascending: true });
-
-    const { data: unifiedData, error } = await query;
-    
-    if (error) throw error;
-
-    // Trasforma i dati mantenendo le sessioni separate
-    const transformedData = unifiedData?.map(row => {
-      // Converti gli orari nel formato corretto per il frontend
-      const startDateTime = row.effective_start_time ? 
-        new Date(`${row.date}T${row.effective_start_time}`) : null;
-      const endDateTime = row.effective_end_time ? 
-        new Date(`${row.date}T${row.effective_end_time}`) : null;
-      
-      return {
-        id: row.display_id || row.id,
-        original_timesheet_id: row.id, // ID originale del timesheet
-        date: row.date,
-        user_id: row.user_id,
-        start_time: startDateTime?.toISOString() || null,
-        end_time: endDateTime?.toISOString() || null,
-        total_hours: parseFloat(row.effective_total_hours || 0),
-        lunch_duration_minutes: row.lunch_duration_minutes,
-        overtime_hours: parseFloat(row.overtime_hours || 0),
-        night_hours: parseFloat(row.night_hours || 0),
-        is_saturday: row.is_saturday,
-        is_holiday: row.is_holiday,
-        notes: row.notes,
-        profiles: {
-          first_name: row.first_name,
-          last_name: row.last_name,
-          email: row.email
-        },
-        projects: null,
-        timesheet_sessions: [],
-        // Flag per identificare le sessioni
-        is_session: row.is_session,
-        session_order: row.session_order,
-        data_source: row.data_source
-      };
-    }) || [];
-
-    setTimesheets(transformedData as unknown as TimesheetWithProfile[]);
-    
-    // Carica anche le assenze
-    await loadAbsences(startDate, endDate);
-    
-  } catch (error) {
-    console.error('Error loading timesheets:', error);
-    toast({
-      title: "Errore",
-      description: "Errore nel caricamento dei timesheet",
-      variant: "destructive",
-    });
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const loadAbsences = async (startDate: Date, endDate: Date) => {
     try {
