@@ -850,84 +850,85 @@ export default function AdminTimesheets() {
     );
   };
 
-  const loadTimesheets = async () => {
-    setLoading(true);
-    try {
-      let query = supabase
-        .from('timesheets')
-        .select(`
-          *,
-          profiles!timesheets_user_id_fkey (
-            first_name,
-            last_name,
-            email
-          ),
-          projects (
-            name
-          ),
-          timesheet_sessions (
-            id,
-            session_order,
-            start_time,
-            end_time,
-            session_type,
-            notes
-          )
-        `);
+const loadTimesheets = async () => {
+  setLoading(true);
+  try {
+    // Torniamo alla query originale con le sessioni
+    let query = supabase
+      .from('timesheets')
+      .select(`
+        *,
+        profiles!timesheets_user_id_fkey (
+          first_name,
+          last_name,
+          email
+        ),
+        projects (
+          name
+        ),
+        timesheet_sessions (
+          id,
+          session_order,
+          start_time,
+          end_time,
+          session_type,
+          notes
+        )
+      `);
 
-      // Applica filtri
-      if (selectedEmployee !== 'all') {
-        query = query.eq('user_id', selectedEmployee);
-      }
-
-      if (selectedProject !== 'all') {
-        query = query.eq('project_id', selectedProject);
-      }
-
-      // Filtri per periodo
-      const baseDate = parseISO(dateFilter);
-      let startDate: Date;
-      let endDate: Date;
-
-      switch (activeView) {
-        case 'weekly':
-          startDate = startOfWeek(baseDate, { weekStartsOn: 1 });
-          endDate = endOfWeek(baseDate, { weekStartsOn: 1 });
-          break;
-        case 'monthly':
-          startDate = startOfMonth(baseDate);
-          endDate = endOfMonth(baseDate);
-          break;
-        default: // daily
-          startDate = baseDate;
-          endDate = baseDate;
-      }
-
-      query = query
-        .gte('date', format(startDate, 'yyyy-MM-dd'))
-        .lte('date', format(endDate, 'yyyy-MM-dd'))
-        .order('date', { ascending: false })
-        .order('start_time', { ascending: false });
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      setTimesheets((data as unknown as TimesheetWithProfile[]) || []);
-
-      // Carica anche le assenze per lo stesso periodo
-      await loadAbsences(startDate, endDate);
-
-    } catch (error) {
-      console.error('Error loading timesheets:', error);
-      toast({
-        title: "Errore",
-        description: "Errore nel caricamento dei timesheet",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+    // Applica filtri
+    if (selectedEmployee !== 'all') {
+      query = query.eq('user_id', selectedEmployee);
     }
-  };
+    if (selectedProject !== 'all') {
+      query = query.eq('project_id', selectedProject);
+    }
+
+    // Filtri per periodo
+    const baseDate = parseISO(dateFilter);
+    let startDate: Date;
+    let endDate: Date;
+    
+    switch (activeView) {
+      case 'weekly':
+        startDate = startOfWeek(baseDate, { weekStartsOn: 1 });
+        endDate = endOfWeek(baseDate, { weekStartsOn: 1 });
+        break;
+      case 'monthly':
+        startDate = startOfMonth(baseDate);
+        endDate = endOfMonth(baseDate);
+        break;
+      default:
+        startDate = baseDate;
+        endDate = baseDate;
+    }
+    
+    query = query
+      .gte('date', format(startDate, 'yyyy-MM-dd'))
+      .lte('date', format(endDate, 'yyyy-MM-dd'))
+      .order('date', { ascending: false })
+      .order('start_time', { ascending: false });
+
+    const { data, error } = await query;
+    
+    if (error) throw error;
+    
+    setTimesheets((data as unknown as TimesheetWithProfile[]) || []);
+    
+    // Carica anche le assenze
+    await loadAbsences(startDate, endDate);
+    
+  } catch (error) {
+    console.error('Error loading timesheets:', error);
+    toast({
+      title: "Errore",
+      description: "Errore nel caricamento dei timesheet",
+      variant: "destructive",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   const loadAbsences = async (startDate: Date, endDate: Date) => {
     try {
