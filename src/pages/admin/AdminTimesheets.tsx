@@ -850,30 +850,111 @@ export default function AdminTimesheets() {
     );
   };
 
-  const loadTimesheets = async () => {
-    setLoading(true);
-    try {
-      let query = supabase
-        .from('timesheets')
-        .select(`
-          *,
-          profiles!timesheets_user_id_fkey (
-            first_name,
-            last_name,
-            email
-          ),
-          projects (
-            name
-          ),
-          timesheet_sessions (
-            id,
-            session_order,
-            start_time,
-            end_time,
-            session_type,
-            notes
-          )
-        `);
+const loadTimesheets = async () => {
+  setLoading(true);
+  try {
+    // Usa la vista unificata che gestisce automaticamente le sessioni
+    let query = supabase
+      .from('v_timesheets_unified')
+      .select('*');
+
+    // Applica i filtri esistenti
+    if (selectedEmployee !== 'all') {
+      query = query.eq('user_id', selectedEmployee);
+    }
+
+    // Filtri per data in base alla vista attiva
+    let startDate, endDate;
+    const currentDate = parseISO(dateFilter);
+    
+    switch (activeView) {
+      case 'weekly':
+        startDate = startOfWeek(currentDate, { weekStartsOn: 1 });
+        endDate = endOfWeek(currentDate, { weekStartsOn: 1 });
+        break;
+      case 'monthly':
+        startDate = startOfMonth(currentDate);
+        endDate = endOfMonth(currentDate);
+        break;
+      default: // daily
+        startDate = currentDate;
+        endDate = currentDate;
+    }
+
+    query = query
+      .gte('date', format(startDate, 'yyyy-MM-dd'))
+      .lte('date', format(endDate, 'yyyy-MM-dd'))
+      .order('date', { ascending: false });
+
+    const { data: unifiedData, error } = await query;
+
+    if (error) throw error;
+
+    // Trasforma i dati dalla vista per mantenere compatibilità con il resto del codice
+    const transformedData = unifiedData?.map(row => ({
+      id: row.id,
+      date: row.date,
+      user_id: row.user_id,
+      // Ricostruisci i timestamp completi dagli orari
+      start_time: row.effective_start_time ? 
+        `${row.date}T${row.effective_start_time}Z` : null,
+      end_time: row.effective_end_time ? 
+        `${row.date}T${row.effective_end_time}Z` : null,
+      total_hours: parseFloat(row.effective_total_hours || 0),
+      lunch_duration_minutes: row.lunch_duration_minutes,
+      overtime_hours: parseFloat(row.overtime_hours || 0),
+      night_hours: parseFloat(row.night_hours || 0),
+      is_saturday: row.is_saturday,
+      is_holiday: row.is_holiday,
+      notes: row.notes,
+      // Info profilo
+      profiles: {
+        first_name: row.first_name,
+        last_name: row.last_name,
+        email: row.email
+      },
+      // Info sessioni (per compatibilità)
+      timesheet_sessions: row.session_count > 0 ? 
+        // Crea array fittizio di sessioni per visualizzazione
+        [{
+          id: row.id + '_session',
+          session_details: row.session_times,
+          session_count: row.session_count
+        }] : [],
+      // Flag aggiuntivi
+      has_multiple_sessions: row.data_source === 'SESSIONI_MULTIPLE',
+      session_display_text: row.session_times
+    })) || [];
+
+    setTimesheets(transformedData);
+    
+    // Carica anche le assenze come prima
+    const { data: absencesData } = await supabase
+      .from('employee_absences')
+      .select(`
+        *,
+        profiles!employee_absences_user_id_fkey (
+          first_name,
+          last_name,
+          email
+        )
+      `)
+      .gte('date', format(startDate, 'yyyy-MM-dd'))
+      .lte('date', format(endDate, 'yyyy-MM-dd'));
+
+    setAbsences(absencesData || []);
+
+  } catch (error) {
+    console.error('Error loading timesheets:', error);
+    toast({
+      title: "Errore",
+      description: "Impossibile caricare i timesheets",
+      variant: "destructive",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
       // Applica filtri
       if (selectedEmployee !== 'all') {
