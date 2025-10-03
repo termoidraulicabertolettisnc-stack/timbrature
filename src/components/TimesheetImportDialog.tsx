@@ -176,15 +176,27 @@ export function TimesheetImportDialog({
     
     // Mapping rules for common Italian field names
     const mappingRules: Record<string, string[]> = {
-      employee_code: ['codice_fiscale', 'cf', 'employee_code', 'codice_dipendente', 'matricola'],
-      date: ['data', 'date', 'giorno'],
-      start_time: ['ora_entrata', 'entrata', 'start_time', 'inizio', 'ora_inizio'],
-      end_time: ['ora_uscita', 'uscita', 'end_time', 'fine', 'ora_fine'],
+      employee_code: ['codice_fiscale', 'codice fiscale', 'cf', 'employee_code', 'codice_dipendente', 'matricola'],
+      date: ['data ingresso', 'data_ingresso', 'data', 'date', 'giorno'],
+      start_time: ['ora_entrata', 'entrata', 'start_time', 'inizio', 'ora_inizio', 'ora entrata', 'orario_entrata', 'orario entrata'],
+      end_time: ['data uscita', 'data_uscita', 'ora_uscita', 'uscita', 'end_time', 'fine', 'ora_fine', 'ora uscita', 'orario_uscita', 'orario uscita'],
       pause_minutes: ['pausa', 'pausa_minuti', 'pause_minutes', 'minuti_pausa'],
       notes: ['note', 'notes', 'descrizione', 'commento'],
-      site_code: ['sede', 'site_code', 'codice_sede', 'location'],
+      site_code: ['sede', 'site_code', 'codice_sede', 'location', 'luogo di lavoro'],
       project_code: ['progetto', 'project_code', 'commessa', 'codice_progetto']
     };
+    
+    Object.entries(mappingRules).forEach(([field, patterns]) => {
+      const header = headers.find(h => 
+        patterns.some(p => h.toLowerCase().includes(p.toLowerCase()))
+      );
+      if (header) {
+        mapping[field] = header;
+      }
+    });
+    
+    setColumnMapping(mapping);
+  };
     
     Object.entries(mappingRules).forEach(([field, patterns]) => {
       const header = headers.find(h => 
@@ -208,29 +220,68 @@ export function TimesheetImportDialog({
       return;
     }
 
-    const mapped = rawData.map((row, index) => ({
-      employee_code: row[columnMapping.employee_code] || '',
-      date: row[columnMapping.date] || '',
-      start_time: row[columnMapping.start_time] || '',
-      end_time: row[columnMapping.end_time] || '',
-      pause_minutes: row[columnMapping.pause_minutes] ? parseInt(row[columnMapping.pause_minutes]) : undefined,
-      notes: row[columnMapping.notes] || '',
-      site_code: row[columnMapping.site_code] || '',
-      project_code: row[columnMapping.project_code] || '',
-      source_row_index: index + 2
-    }));
+    const mapped = rawData.map((row, index) => {
+      // Gestione date e ore
+      let date = '';
+      let start_time = '';
+      let end_time = '';
+      
+      // Se la colonna data contiene data+ora (formato: "2025-08-01 07:17:51")
+      const dataIngresso = row[columnMapping.date];
+      const dataUscita = row[columnMapping.end_time];
+      
+      if (dataIngresso && dataIngresso.includes(' ')) {
+        // Formato con data e ora insieme
+        const [datePart, timePart] = dataIngresso.split(' ');
+        date = datePart;
+        start_time = timePart ? timePart.substring(0, 5) : ''; // Prendi solo HH:MM
+      } else if (dataIngresso) {
+        // Solo data
+        date = dataIngresso;
+        start_time = row[columnMapping.start_time] || '';
+      }
+      
+      if (dataUscita && dataUscita.includes(' ')) {
+        // Formato con data e ora insieme per l'uscita
+        const [, timePart] = dataUscita.split(' ');
+        end_time = timePart ? timePart.substring(0, 5) : ''; // Prendi solo HH:MM
+      } else {
+        // Solo ora
+        end_time = row[columnMapping.end_time] || dataUscita || '';
+      }
+      
+      // Gestione codice fiscale/matricola
+      const employeeCode = row[columnMapping.employee_code] || '';
+      
+      return {
+        employee_code: employeeCode.trim(),
+        date: date,
+        start_time: start_time,
+        end_time: end_time,
+        pause_minutes: row[columnMapping.pause_minutes] ? parseInt(row[columnMapping.pause_minutes]) : undefined,
+        notes: row[columnMapping.notes] || '',
+        site_code: row[columnMapping.site_code] || '',
+        project_code: row[columnMapping.project_code] || '',
+        source_row_index: index + 2
+      };
+    }).filter(row => row.employee_code && row.date); // Filtra righe vuote
     
     setMappedData(mapped);
     validateData(mapped);
   };
 
   const validateMapping = (): boolean => {
-    return !!(
+    // Per il formato con data+ora insieme, basta mappare date e end_time
+    const hasDateTimeFormat = !!(columnMapping.date && columnMapping.end_time);
+    // Per il formato con colonne separate
+    const hasSeparateFormat = !!(
       columnMapping.employee_code &&
       columnMapping.date &&
       columnMapping.start_time &&
       columnMapping.end_time
     );
+    
+    return !!(columnMapping.employee_code && (hasDateTimeFormat || hasSeparateFormat));
   };
 
   // =====================================================
