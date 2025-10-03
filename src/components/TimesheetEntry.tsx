@@ -277,24 +277,25 @@ const TimesheetEntry = () => {
       const location = await getCurrentLocation();
       const now = new Date().toISOString();
 
-      // Trova la sessione aperta più recente
-      const { data: openSession, error: fetchError } = await supabase
+      // Trova TUTTE le sessioni aperte dell'utente (cerca tramite timesheets)
+      const { data: allOpenSessions, error: fetchError } = await supabase
         .from('timesheet_sessions')
-        .select('*')
-        .eq('timesheet_id', currentSession.id)
+        .select('*, timesheets!inner(user_id)')
         .is('end_time', null)
         .eq('session_type', 'work')
-        .order('session_order', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .eq('timesheets.user_id', user?.id)
+        .order('start_time', { ascending: true })
+        .limit(10);
 
       if (fetchError) throw fetchError;
 
-      if (!openSession) {
+      if (!allOpenSessions || allOpenSessions.length === 0) {
         throw new Error('Nessuna sessione di lavoro aperta trovata');
       }
 
-      // Chiudi la sessione più recente
+      // Chiudi la sessione più vecchia (la prima nell'array)
+      const oldestSession = allOpenSessions[0];
+      
       const { error: sessionError } = await supabase
         .from('timesheet_sessions')
         .update({
@@ -303,13 +304,21 @@ const TimesheetEntry = () => {
           end_location_lng: location.lng,
           notes: notes || null,
         })
-        .eq('id', openSession.id);
+        .eq('id', oldestSession.id);
 
       if (sessionError) throw sessionError;
 
+      // Se la sessione chiusa era vecchia, avvisa l'utente
+      const sessionDate = new Date(oldestSession.start_time);
+      const today = new Date();
+      const isOldSession = sessionDate.toDateString() !== today.toDateString();
+
       toast({
         title: "Uscita registrata!",
-        description: `Ore ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} - Sessione ${openSession.session_order}`,
+        description: isOldSession 
+          ? `Sessione del ${sessionDate.toLocaleDateString('it-IT')} chiusa alle ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`
+          : `Ore ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} - Sessione ${oldestSession.session_order}`,
+        variant: isOldSession ? "default" : "default"
       });
 
       loadTodayTimesheet();
