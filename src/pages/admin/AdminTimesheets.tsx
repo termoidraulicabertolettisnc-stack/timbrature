@@ -912,19 +912,19 @@ const loadTimesheets = async () => {
     const { data, error } = await query;
     
     if (error) throw error;
+
+     // DEBUG: Verifica cosa arriva per Lorenzo
+    console.log('DEBUG Timesheets Lorenzo:', 
+      data?.filter(t => t.profiles?.first_name === 'Lorenzo')
+    );
     
     setTimesheets((data as unknown as TimesheetWithProfile[]) || []);
-    
+       
     // Carica anche le assenze
     await loadAbsences(startDate, endDate);
     
   } catch (error) {
     console.error('Error loading timesheets:', error);
-    toast({
-      title: "Errore",
-      description: "Errore nel caricamento dei timesheet",
-      variant: "destructive",
-    });
   } finally {
     setLoading(false);
   }
