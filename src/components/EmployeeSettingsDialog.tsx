@@ -62,7 +62,7 @@ interface CompanySettings {
   standard_weekly_hours: any;
   lunch_break_type: '0_minuti' | '15_minuti' | '30_minuti' | '45_minuti' | '60_minuti' | '90_minuti' | '120_minuti' | 'libera';
   lunch_break_min_hours: number;
-  saturday_handling: 'trasferta' | 'straordinario';
+  saturday_handling: 'normale' | 'trasferta' | 'straordinario';
   meal_voucher_policy: 'oltre_6_ore' | 'sempre_parttime' | 'conteggio_giorni' | 'disabilitato';
   night_shift_start: string;
   night_shift_end: string;

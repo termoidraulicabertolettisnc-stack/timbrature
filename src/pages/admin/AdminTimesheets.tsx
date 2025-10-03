@@ -1041,15 +1041,15 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
     employee.timesheets.push(timesheet);
     
     // Aggrega solo una volta per ogni timesheet_id (non per sessione)
-    const timesheetId = timesheet.original_timesheet_id || timesheet.id;
-    if (!timesheet.is_session || timesheet.session_order === 1) {
+    const timesheetId = (timesheet as ExtendedTimesheetWithProfile).original_timesheet_id || timesheet.id;
+    if (!(timesheet as ExtendedTimesheetWithProfile).is_session || (timesheet as ExtendedTimesheetWithProfile).session_order === 1) {
       // Conta straordinari e notturne solo una volta per giornata
-      employee.overtime_hours += parseFloat(timesheet.overtime_hours || 0);
-      employee.night_hours += parseFloat(timesheet.night_hours || 0);
+      employee.overtime_hours += parseFloat(String(timesheet.overtime_hours || 0));
+      employee.night_hours += parseFloat(String(timesheet.night_hours || 0));
     }
     
     // Le ore totali vanno sommate per ogni sessione
-    const hours = parseFloat(timesheet.total_hours || 0);
+    const hours = parseFloat(String(timesheet.total_hours || 0));
     employee.total_hours += hours;
   });
   
@@ -1060,7 +1060,7 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
     const uniqueDays = new Set(employee.timesheets.map(t => t.date));
     uniqueDays.forEach(date => {
       const dayTimesheets = employee.timesheets.filter(t => t.date === date);
-      const dayHours = dayTimesheets.reduce((sum, t) => sum + parseFloat(t.total_hours || 0), 0);
+      const dayHours = dayTimesheets.reduce((sum, t) => sum + parseFloat(String(t.total_hours || 0)), 0);
       if (dayHours >= 6) {
         employee.meal_vouchers++;
       }
@@ -1222,7 +1222,7 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
           <DailySummaryViewFixed 
             timesheets={filteredTimesheets}
             absences={absences}
-            aggregateTimesheetsByEmployee={aggregateTimesheetsByEmployeeFixed}
+            aggregateTimesheetsByEmployee={aggregateTimesheetsByEmployee}
             employeeSettings={employeeSettings}
             companySettings={companySettings}
             onEditTimesheet={(timesheet) => {

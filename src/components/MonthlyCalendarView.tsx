@@ -118,8 +118,8 @@ export function MonthlyCalendarView({
           const startTime = new Date(`2000-01-01T${session.start_time}`);
           const endTime = new Date(`2000-01-01T${session.end_time}`);
           const hours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
-          const netHours = hours - (session.pause_minutes || 0) / 60;
-          dayTotalHours += netHours;
+          // Sessions don't have pause_minutes, ignore it
+          dayTotalHours += hours;
         });
         
         employee.days[date].total_hours = dayTotalHours;
@@ -129,12 +129,12 @@ export function MonthlyCalendarView({
       } else if (timesheet.total_hours) {
         // Fallback: usa le ore dal timesheet principale se non ci sono sessioni
         employee.days[date].total_hours = timesheet.total_hours;
-        employee.days[date].regular_hours = timesheet.regular_hours || Math.min(timesheet.total_hours, 8);
+        employee.days[date].regular_hours = Math.min(timesheet.total_hours, 8);
         employee.days[date].overtime_hours = timesheet.overtime_hours || Math.max(0, timesheet.total_hours - 8);
       }
       
       employee.days[date].night_hours = timesheet.night_hours || 0;
-      employee.days[date].meal_vouchers = timesheet.meal_vouchers || 0;
+      employee.days[date].meal_vouchers = timesheet.meal_voucher_earned ? 1 : 0;
 
       // Aggiorna i totali
       employee.totals.regular_hours += employee.days[date].regular_hours;
