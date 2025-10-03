@@ -13,9 +13,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -34,10 +33,10 @@ import {
   CheckCircle,
   XCircle,
   Download,
-  Eye,
   AlertTriangle,
   RefreshCw,
   FileDown,
+  Zap
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -84,7 +83,7 @@ interface TimesheetImportDialogProps {
 }
 
 // =====================================================
-// MAIN COMPONENT
+// MAIN COMPONENT - AUTOMATIZZATO PER BERTOLETTI
 // =====================================================
 export function TimesheetImportDialog({
   open,
@@ -94,9 +93,8 @@ export function TimesheetImportDialog({
   const { toast } = useToast();
   
   // State management
-  const [step, setStep] = useState<'upload' | 'mapping' | 'preview' | 'importing' | 'complete'>('upload');
+  const [step, setStep] = useState<'upload' | 'preview' | 'importing' | 'complete'>('upload');
   const [file, setFile] = useState<File | null>(null);
-  const [rawData, setRawData] = useState<any[]>([]);
   const [mappedData, setMappedData] = useState<ImportRow[]>([]);
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [importMode, setImportMode] = useState<'all_or_nothing' | 'partial'>('all_or_nothing');
@@ -104,187 +102,115 @@ export function TimesheetImportDialog({
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [stats, setStats] = useState<ImportStats>({ total: 0, valid: 0, warnings: 0, errors: 0 });
-  
-  // Column mapping state
-  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({
-    employee_code: '',
-    date: '',
-    start_time: '',
-    end_time: '',
-    pause_minutes: '',
-    notes: '',
-    site_code: '',
-    project_code: ''
-  });
 
   // =====================================================
-  // FILE HANDLING
+  // FILE HANDLING - AUTOMATIZZATO
   // =====================================================
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
-      parseExcelFile(selectedFile);
+      // Processo automatico diretto
+      processExcelFile(selectedFile);
     }
   };
 
-  const parseExcelFile = async (file: File) => {
+  const processExcelFile = async (file: File) => {
     try {
       setLoading(true);
+      
+      toast({
+        title: "⚡ Elaborazione automatica",
+        description: "Riconoscimento formato Bertoletti in corso...",
+      });
+
       const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array' });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
-        header: 1,
-        raw: false,
-        dateNF: 'yyyy-mm-dd'
+      const workbook = XLSX.read(buffer, { 
+        type: 'array',
+        cellDates: true,
+        dateNF: 'yyyy-mm-dd hh:mm:ss'
       });
       
-      if (jsonData.length > 0) {
-        const headers = jsonData[0] as string[];
-        const rows = jsonData.slice(1).map((row: any, index) => {
-          const obj: any = { source_row_index: index + 2 }; // +2 because Excel is 1-indexed and we skip header
-          headers.forEach((header, i) => {
-            obj[header] = row[i];
-          });
-          return obj;
-        });
-        
-        setRawData(rows);
-        autoDetectColumns(headers);
-        setStep('mapping');
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      
+      if (jsonData.length === 0) {
+        throw new Error('File vuoto');
       }
+
+      // MAPPATURA AUTOMATICA PER FILE BERTOLETTI
+      const mappedData = jsonData.map((row: any, index) => {
+        // Estrai data e ore dal formato Bertoletti
+        let date = '';
+        let start_time = '';
+        let end_time = '';
+        
+        // Gestione "Data ingresso" (formato: "2025-08-01 07:17:51")
+        const dataIngresso = row['Data ingresso'] || row['data ingresso'];
+        if (dataIngresso) {
+          if (typeof dataIngresso === 'string' && dataIngresso.includes(' ')) {
+            const [datePart, timePart] = dataIngresso.split(' ');
+            date = datePart;
+            start_time = timePart ? timePart.substring(0, 5) : '';
+          } else if (dataIngresso instanceof Date) {
+            date = format(dataIngresso, 'yyyy-MM-dd');
+            start_time = format(dataIngresso, 'HH:mm');
+          } else {
+            date = dataIngresso.toString();
+          }
+        }
+        
+        // Gestione "Data uscita" (formato: "2025-08-01 12:37:13")
+        const dataUscita = row['Data uscita'] || row['data uscita'];
+        if (dataUscita) {
+          if (typeof dataUscita === 'string' && dataUscita.includes(' ')) {
+            const [, timePart] = dataUscita.split(' ');
+            end_time = timePart ? timePart.substring(0, 5) : '';
+          } else if (dataUscita instanceof Date) {
+            end_time = format(dataUscita, 'HH:mm');
+          } else {
+            end_time = dataUscita.toString().substring(0, 5);
+          }
+        }
+        
+        // Codice fiscale
+        const codiceFiscale = row['Codice fiscale'] || row['codice fiscale'] || row['CF'] || '';
+        
+        // Sede (se presente)
+        const sede = row['Luogo di lavoro'] || row['Sede'] || '';
+        
+        return {
+          employee_code: codiceFiscale.trim(),
+          date: date,
+          start_time: start_time,
+          end_time: end_time,
+          pause_minutes: undefined, // Gestito automaticamente dal sistema
+          notes: row['Note'] || '',
+          site_code: sede,
+          project_code: row['Progetto'] || '',
+          source_row_index: index + 2
+        };
+      }).filter((row: ImportRow) => row.employee_code && row.date && row.start_time && row.end_time);
+
+      setMappedData(mappedData);
+      
+      // Vai direttamente alla validazione
+      await validateData(mappedData);
+      
     } catch (error) {
-      console.error('Error parsing file:', error);
+      console.error('Error processing file:', error);
       toast({
         title: "Errore",
-        description: "Impossibile leggere il file Excel",
+        description: "Impossibile elaborare il file Excel",
         variant: "destructive"
       });
-    } finally {
       setLoading(false);
     }
   };
 
   // =====================================================
-  // COLUMN MAPPING
-  // =====================================================
-  const autoDetectColumns = (headers: string[]) => {
-    const mapping: Record<string, string> = {};
-    
-    // Mapping rules for common Italian field names
-    const mappingRules: Record<string, string[]> = {
-      employee_code: ['codice_fiscale', 'codice fiscale', 'cf', 'employee_code', 'codice_dipendente', 'matricola'],
-      date: ['data ingresso', 'data_ingresso', 'data', 'date', 'giorno'],
-      start_time: ['ora_entrata', 'entrata', 'start_time', 'inizio', 'ora_inizio', 'ora entrata', 'orario_entrata', 'orario entrata'],
-      end_time: ['data uscita', 'data_uscita', 'ora_uscita', 'uscita', 'end_time', 'fine', 'ora_fine', 'ora uscita', 'orario_uscita', 'orario uscita'],
-      pause_minutes: ['pausa', 'pausa_minuti', 'pause_minutes', 'minuti_pausa'],
-      notes: ['note', 'notes', 'descrizione', 'commento'],
-      site_code: ['sede', 'site_code', 'codice_sede', 'location', 'luogo di lavoro'],
-      project_code: ['progetto', 'project_code', 'commessa', 'codice_progetto']
-    };
-    
-    Object.entries(mappingRules).forEach(([field, patterns]) => {
-      const header = headers.find(h => 
-        patterns.some(p => h.toLowerCase().includes(p.toLowerCase()))
-      );
-      if (header) {
-        mapping[field] = header;
-      }
-    });
-    
-    setColumnMapping(mapping);
-  };
-    
-    Object.entries(mappingRules).forEach(([field, patterns]) => {
-      const header = headers.find(h => 
-        patterns.some(p => h.toLowerCase().includes(p.toLowerCase()))
-      );
-      if (header) {
-        mapping[field] = header;
-      }
-    });
-    
-    setColumnMapping(mapping);
-  };
-
-  const applyMapping = () => {
-    if (!validateMapping()) {
-      toast({
-        title: "Mappatura incompleta",
-        description: "Mappa almeno i campi obbligatori: Codice Dipendente, Data, Ora Entrata, Ora Uscita",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const mapped = rawData.map((row, index) => {
-      // Gestione date e ore
-      let date = '';
-      let start_time = '';
-      let end_time = '';
-      
-      // Se la colonna data contiene data+ora (formato: "2025-08-01 07:17:51")
-      const dataIngresso = row[columnMapping.date];
-      const dataUscita = row[columnMapping.end_time];
-      
-      if (dataIngresso && dataIngresso.includes(' ')) {
-        // Formato con data e ora insieme
-        const [datePart, timePart] = dataIngresso.split(' ');
-        date = datePart;
-        start_time = timePart ? timePart.substring(0, 5) : ''; // Prendi solo HH:MM
-      } else if (dataIngresso) {
-        // Solo data
-        date = dataIngresso;
-        start_time = row[columnMapping.start_time] || '';
-      }
-      
-      if (dataUscita && dataUscita.includes(' ')) {
-        // Formato con data e ora insieme per l'uscita
-        const [, timePart] = dataUscita.split(' ');
-        end_time = timePart ? timePart.substring(0, 5) : ''; // Prendi solo HH:MM
-      } else {
-        // Solo ora
-        end_time = row[columnMapping.end_time] || dataUscita || '';
-      }
-      
-      // Gestione codice fiscale/matricola
-      const employeeCode = row[columnMapping.employee_code] || '';
-      
-      return {
-        employee_code: employeeCode.trim(),
-        date: date,
-        start_time: start_time,
-        end_time: end_time,
-        pause_minutes: row[columnMapping.pause_minutes] ? parseInt(row[columnMapping.pause_minutes]) : undefined,
-        notes: row[columnMapping.notes] || '',
-        site_code: row[columnMapping.site_code] || '',
-        project_code: row[columnMapping.project_code] || '',
-        source_row_index: index + 2
-      };
-    }).filter(row => row.employee_code && row.date); // Filtra righe vuote
-    
-    setMappedData(mapped);
-    validateData(mapped);
-  };
-
-  const validateMapping = (): boolean => {
-    // Per il formato con data+ora insieme, basta mappare date e end_time
-    const hasDateTimeFormat = !!(columnMapping.date && columnMapping.end_time);
-    // Per il formato con colonne separate
-    const hasSeparateFormat = !!(
-      columnMapping.employee_code &&
-      columnMapping.date &&
-      columnMapping.start_time &&
-      columnMapping.end_time
-    );
-    
-    return !!(columnMapping.employee_code && (hasDateTimeFormat || hasSeparateFormat));
-  };
-
-  // =====================================================
-  // VALIDATION
+  // VALIDATION - UGUALE MA AUTOMATICA
   // =====================================================
   const validateData = async (data: ImportRow[]) => {
     setLoading(true);
@@ -295,7 +221,7 @@ export function TimesheetImportDialog({
       const newBatchId = crypto.randomUUID();
       setBatchId(newBatchId);
       
-      // Get current user first
+      // Get current user
       const { data: userData } = await supabase.auth.getUser();
       const currentUserId = userData?.user?.id;
       
@@ -353,6 +279,20 @@ export function TimesheetImportDialog({
       };
       setStats(newStats);
       
+      // Notifica automatica
+      if (newStats.errors === 0 && newStats.valid > 0) {
+        toast({
+          title: "✅ File pronto per l'import",
+          description: `${newStats.valid} sessioni valide trovate`,
+        });
+      } else if (newStats.errors > 0) {
+        toast({
+          title: "⚠️ Attenzione",
+          description: `Trovati ${newStats.errors} errori da correggere`,
+          variant: "destructive"
+        });
+      }
+      
     } catch (error) {
       console.error('Validation error:', error);
       toast({
@@ -376,9 +316,13 @@ export function TimesheetImportDialog({
     setProgress(0);
     
     try {
-      // Get current user first
       const { data: userData } = await supabase.auth.getUser();
       const currentUserId = userData?.user?.id;
+      
+      // Simula progresso
+      const interval = setInterval(() => {
+        setProgress(prev => Math.min(prev + 10, 90));
+      }, 200);
       
       // Call the process function
       const { data, error } = await supabase
@@ -388,6 +332,8 @@ export function TimesheetImportDialog({
           p_user_id: currentUserId
         });
       
+      clearInterval(interval);
+      
       if (error) throw error;
       
       const result = data[0];
@@ -396,9 +342,8 @@ export function TimesheetImportDialog({
       setStep('complete');
       
       toast({
-        title: "Import completato",
-        description: `Importate ${result.success_count} sessioni. ${result.error_count} errori. ${result.warning_count} avvisi.`,
-        variant: result.error_count > 0 ? "destructive" : "default"
+        title: "🎉 Import completato!",
+        description: `Importate ${result.success_count} sessioni con successo`,
       });
       
       if (onImportComplete) {
@@ -412,26 +357,27 @@ export function TimesheetImportDialog({
         description: "Impossibile completare l'importazione",
         variant: "destructive"
       });
+      setStep('preview'); // Torna alla preview in caso di errore
     } finally {
       setLoading(false);
     }
   };
 
   // =====================================================
-  // EXPORT FUNCTIONS
+  // UTILITY FUNCTIONS
   // =====================================================
   const downloadTemplate = () => {
     const template = [
-      ['employee_code', 'date', 'start_time', 'end_time', 'pause_minutes', 'notes', 'site_code', 'project_code'],
-      ['RSSMRA80A01H501Z', '2025-01-15', '08:00', '12:00', '', 'Mattina', 'SEDE_MI', ''],
-      ['RSSMRA80A01H501Z', '2025-01-15', '13:00', '17:00', '', 'Pomeriggio', 'SEDE_MI', ''],
-      ['VRDGPP75B15H501X', '2025-01-15', '07:30', '16:00', '30', 'Giornata completa', 'SEDE_BG', 'PROG001']
+      ['Codice fiscale', 'Data ingresso', 'Data uscita', 'Note'],
+      ['RSSMRA80A01H501Z', '2025-01-15 08:00:00', '2025-01-15 12:00:00', 'Mattina'],
+      ['RSSMRA80A01H501Z', '2025-01-15 13:00:00', '2025-01-15 17:00:00', 'Pomeriggio'],
+      ['VRDGPP75B15H501X', '2025-01-15 07:30:00', '2025-01-15 16:00:00', 'Giornata completa']
     ];
     
     const ws = XLSX.utils.aoa_to_sheet(template);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Template');
-    XLSX.writeFile(wb, 'template_timbrature_row_per_session.xlsx');
+    XLSX.writeFile(wb, 'template_timbrature_bertoletti.xlsx');
   };
 
   const downloadErrors = () => {
@@ -440,7 +386,7 @@ export function TimesheetImportDialog({
       .map(v => ({
         'Riga': v.data.source_row_index,
         'Stato': v.status === 'error' ? 'ERRORE' : 'AVVISO',
-        'Dipendente': v.data.employee_code,
+        'Codice Fiscale': v.data.employee_code,
         'Data': v.data.date,
         'Entrata': v.data.start_time,
         'Uscita': v.data.end_time,
@@ -450,7 +396,17 @@ export function TimesheetImportDialog({
     const ws = XLSX.utils.json_to_sheet(errorRows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Errori');
-    XLSX.writeFile(wb, 'errori_import_timbrature.xlsx');
+    XLSX.writeFile(wb, `errori_import_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.xlsx`);
+  };
+
+  const resetImport = () => {
+    setFile(null);
+    setMappedData([]);
+    setValidationResults([]);
+    setBatchId(null);
+    setProgress(0);
+    setStats({ total: 0, valid: 0, warnings: 0, errors: 0 });
+    setStep('upload');
   };
 
   // =====================================================
@@ -459,26 +415,34 @@ export function TimesheetImportDialog({
   const renderUploadStep = () => (
     <div className="space-y-6">
       <div className="text-center">
-        <FileSpreadsheet className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-        <h3 className="text-lg font-medium">Import Timbrature Excel</h3>
+        <div className="mx-auto h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+          <Zap className="h-8 w-8 text-primary" />
+        </div>
+        <h3 className="text-lg font-medium">Import Automatico Timbrature</h3>
         <p className="text-sm text-muted-foreground mt-2">
-          Template ufficiale: <strong>Una riga = Una sessione</strong>
+          Sistema ottimizzato per <strong>Termoidraulica Bertoletti</strong>
         </p>
-        <p className="text-xs text-muted-foreground mt-1">
-          Per più sessioni nello stesso giorno, usa più righe con la stessa data
-        </p>
+        <Badge variant="outline" className="mt-2">
+          Riconoscimento automatico colonne attivo
+        </Badge>
       </div>
 
       <div className="space-y-4">
-        <div>
-          <Label htmlFor="file">Seleziona file Excel (.xlsx)</Label>
-          <Input
-            id="file"
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleFileSelect}
-            className="mt-2"
-          />
+        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-primary transition-colors">
+          <Label htmlFor="file" className="cursor-pointer">
+            <div className="flex flex-col items-center">
+              <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+              <span className="text-sm font-medium">Clicca per selezionare il file Excel</span>
+              <span className="text-xs text-muted-foreground mt-1">o trascina qui il file</span>
+            </div>
+            <Input
+              id="file"
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+          </Label>
         </div>
 
         <Button 
@@ -487,21 +451,24 @@ export function TimesheetImportDialog({
           className="w-full"
         >
           <Download className="mr-2 h-4 w-4" />
-          Scarica Template Excel
+          Scarica Template Bertoletti
         </Button>
 
         {file && (
-          <Card>
+          <Card className="bg-green-50 border-green-200">
             <CardContent className="pt-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <Upload className="h-4 w-4" />
+                  <CheckCircle className="h-4 w-4 text-green-600" />
                   <span className="text-sm font-medium">{file.name}</span>
                 </div>
-                <Badge variant="outline">
+                <Badge variant="outline" className="bg-white">
                   {(file.size / 1024).toFixed(1)} KB
                 </Badge>
               </div>
+              <p className="text-xs text-green-600 mt-2">
+                Elaborazione automatica in corso...
+              </p>
             </CardContent>
           </Card>
         )}
@@ -509,78 +476,15 @@ export function TimesheetImportDialog({
     </div>
   );
 
-  const renderMappingStep = () => (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-lg font-medium mb-2">Mappatura Colonne</h3>
-        <p className="text-sm text-muted-foreground">
-          Associa le colonne del tuo file ai campi richiesti
-        </p>
-      </div>
-
-      <ScrollArea className="h-[400px]">
-        <div className="space-y-3">
-          {Object.entries(columnMapping).map(([field, value]) => {
-            const isRequired = ['employee_code', 'date', 'start_time', 'end_time'].includes(field);
-            const fieldLabels: Record<string, string> = {
-              employee_code: 'Codice Dipendente (CF/Email)',
-              date: 'Data',
-              start_time: 'Ora Entrata',
-              end_time: 'Ora Uscita',
-              pause_minutes: 'Pausa (minuti)',
-              notes: 'Note',
-              site_code: 'Codice Sede',
-              project_code: 'Codice Progetto'
-            };
-
-            return (
-              <div key={field} className="grid grid-cols-2 gap-2 items-center">
-                <Label className="flex items-center">
-                  {fieldLabels[field]}
-                  {isRequired && <span className="text-red-500 ml-1">*</span>}
-                </Label>
-                <select
-                  value={value}
-                  onChange={(e) => setColumnMapping(prev => ({
-                    ...prev,
-                    [field]: e.target.value
-                  }))}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="">-- Seleziona colonna --</option>
-                  {rawData.length > 0 && Object.keys(rawData[0]).map(col => (
-                    <option key={col} value={col}>{col}</option>
-                  ))}
-                </select>
-              </div>
-            );
-          })}
-        </div>
-      </ScrollArea>
-
-      <div className="flex space-x-2">
-        <Button
-          onClick={() => setStep('upload')}
-          variant="outline"
-          className="flex-1"
-        >
-          Indietro
-        </Button>
-        <Button
-          onClick={applyMapping}
-          className="flex-1"
-          disabled={!validateMapping()}
-        >
-          Continua
-        </Button>
-      </div>
-    </div>
-  );
-
   const renderPreviewStep = () => (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium">Anteprima Validazione</h3>
+        <div>
+          <h3 className="text-lg font-medium">Anteprima Import</h3>
+          <p className="text-sm text-muted-foreground">
+            Rilevamento automatico formato Bertoletti completato
+          </p>
+        </div>
         <div className="flex gap-2">
           <Badge variant={stats.errors > 0 ? "destructive" : "default"}>
             {stats.total} righe
@@ -588,19 +492,19 @@ export function TimesheetImportDialog({
           {stats.valid > 0 && (
             <Badge variant="outline" className="border-green-500 text-green-600">
               <CheckCircle className="mr-1 h-3 w-3" />
-              {stats.valid} valide
+              {stats.valid}
             </Badge>
           )}
           {stats.warnings > 0 && (
             <Badge variant="outline" className="border-yellow-500 text-yellow-600">
               <AlertTriangle className="mr-1 h-3 w-3" />
-              {stats.warnings} avvisi
+              {stats.warnings}
             </Badge>
           )}
           {stats.errors > 0 && (
             <Badge variant="outline" className="border-red-500 text-red-600">
               <XCircle className="mr-1 h-3 w-3" />
-              {stats.errors} errori
+              {stats.errors}
             </Badge>
           )}
         </div>
@@ -611,8 +515,8 @@ export function TimesheetImportDialog({
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Errori trovati</AlertTitle>
           <AlertDescription>
-            Ci sono {stats.errors} errori da correggere prima di procedere.
-            {importMode === 'all_or_nothing' && ' In modalità "Tutto o Niente", l\'import verrà annullato.'}
+            {stats.errors} righe con errori. 
+            {importMode === 'all_or_nothing' && ' In modalità "Tutto o Niente", correggi gli errori prima di importare.'}
           </AlertDescription>
         </Alert>
       )}
@@ -620,37 +524,37 @@ export function TimesheetImportDialog({
       <div className="space-y-2">
         <Label>Modalità Import</Label>
         <RadioGroup value={importMode} onValueChange={(v) => setImportMode(v as any)}>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 p-3 border rounded-lg">
             <RadioGroupItem value="all_or_nothing" id="all" />
-            <Label htmlFor="all" className="cursor-pointer">
-              Tutto o Niente (consigliato)
+            <Label htmlFor="all" className="cursor-pointer flex-1">
+              <div>Tutto o Niente (consigliato)</div>
               <p className="text-xs text-muted-foreground">
                 Importa solo se tutte le righe sono valide
               </p>
             </Label>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 p-3 border rounded-lg">
             <RadioGroupItem value="partial" id="partial" />
-            <Label htmlFor="partial" className="cursor-pointer">
-              Parziale
+            <Label htmlFor="partial" className="cursor-pointer flex-1">
+              <div>Importazione Parziale</div>
               <p className="text-xs text-muted-foreground">
-                Importa solo le righe valide, scarta quelle con errori
+                Importa solo le righe valide, scarta gli errori
               </p>
             </Label>
           </div>
         </RadioGroup>
       </div>
 
-      <ScrollArea className="h-[300px]">
+      <ScrollArea className="h-[350px] border rounded-lg">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 bg-white">
             <TableRow>
-              <TableHead className="w-12">Riga</TableHead>
+              <TableHead className="w-12">#</TableHead>
               <TableHead>Dipendente</TableHead>
               <TableHead>Data</TableHead>
               <TableHead>Orario</TableHead>
-              <TableHead>Ore</TableHead>
-              <TableHead>Stato</TableHead>
+              <TableHead className="text-right">Ore</TableHead>
+              <TableHead className="w-24">Stato</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -658,32 +562,52 @@ export function TimesheetImportDialog({
               <TableRow 
                 key={result.row_number}
                 className={
-                  result.status === 'error' ? 'bg-red-50' :
-                  result.status === 'warning' ? 'bg-yellow-50' :
-                  'bg-green-50'
+                  result.status === 'error' ? 'bg-red-50 hover:bg-red-100' :
+                  result.status === 'warning' ? 'bg-yellow-50 hover:bg-yellow-100' :
+                  'hover:bg-gray-50'
                 }
               >
-                <TableCell>{result.data.source_row_index}</TableCell>
+                <TableCell className="font-mono text-xs">
+                  {result.data.source_row_index}
+                </TableCell>
                 <TableCell>
                   <div>
-                    <div className="font-medium">{result.employee_name || 'NON TROVATO'}</div>
-                    <div className="text-xs text-muted-foreground">{result.data.employee_code}</div>
+                    <div className="font-medium text-sm">
+                      {result.employee_name || 'Non trovato'}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {result.data.employee_code}
+                    </div>
                   </div>
                 </TableCell>
-                <TableCell>{result.data.date}</TableCell>
-                <TableCell>{result.data.start_time} - {result.data.end_time}</TableCell>
-                <TableCell>{result.calculated_hours?.toFixed(2) || '-'}</TableCell>
                 <TableCell>
-                  {result.status === 'valid' && <CheckCircle className="h-4 w-4 text-green-600" />}
-                  {result.status === 'warning' && <AlertTriangle className="h-4 w-4 text-yellow-600" />}
-                  {result.status === 'error' && (
-                    <div className="flex items-center gap-1">
+                  {format(new Date(result.data.date), 'dd/MM/yyyy', { locale: it })}
+                </TableCell>
+                <TableCell>
+                  <span className="font-mono text-sm">
+                    {result.data.start_time} - {result.data.end_time}
+                  </span>
+                </TableCell>
+                <TableCell className="text-right font-mono">
+                  {result.calculated_hours?.toFixed(2) || '-'}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    {result.status === 'valid' && (
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    )}
+                    {result.status === 'warning' && (
+                      <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                    )}
+                    {result.status === 'error' && (
                       <XCircle className="h-4 w-4 text-red-600" />
-                      <span className="text-xs text-red-600">
+                    )}
+                    {result.messages.length > 0 && (
+                      <span className="text-xs">
                         {result.messages[0]?.message}
                       </span>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -691,88 +615,114 @@ export function TimesheetImportDialog({
         </Table>
       </ScrollArea>
 
-      <div className="flex space-x-2">
-        {(stats.errors > 0 || stats.warnings > 0) && (
-          <Button
-            onClick={downloadErrors}
-            variant="outline"
-            size="sm"
-          >
-            <FileDown className="mr-2 h-4 w-4" />
-            Scarica Errori
-          </Button>
-        )}
-        
-        <div className="flex-1" />
-        
-        <Button
-          onClick={() => setStep('mapping')}
-          variant="outline"
-        >
-          Indietro
-        </Button>
-        
-        <Button
-          onClick={executeImport}
-          disabled={loading || (importMode === 'all_or_nothing' && stats.errors > 0)}
-        >
-          {loading ? (
-            <>
-              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-              Importazione...
-            </>
-          ) : (
-            `Importa ${importMode === 'partial' && stats.errors > 0 ? stats.valid : stats.total} Sessioni`
+      <div className="flex items-center justify-between pt-2">
+        <div className="flex gap-2">
+          {(stats.errors > 0 || stats.warnings > 0) && (
+            <Button
+              onClick={downloadErrors}
+              variant="outline"
+              size="sm"
+            >
+              <FileDown className="mr-2 h-4 w-4" />
+              Scarica Report Errori
+            </Button>
           )}
-        </Button>
+        </div>
+        
+        <div className="flex gap-2">
+          <Button
+            onClick={resetImport}
+            variant="outline"
+          >
+            Annulla
+          </Button>
+          
+          <Button
+            onClick={executeImport}
+            disabled={loading || (importMode === 'all_or_nothing' && stats.errors > 0)}
+          >
+            {loading ? (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                Importazione...
+              </>
+            ) : (
+              <>
+                <Upload className="mr-2 h-4 w-4" />
+                Importa {importMode === 'partial' && stats.errors > 0 ? stats.valid : stats.total} Sessioni
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );
 
   const renderImportingStep = () => (
-    <div className="space-y-4">
+    <div className="space-y-6 py-8">
       <div className="text-center">
-        <RefreshCw className="mx-auto h-12 w-12 text-primary animate-spin mb-4" />
-        <h3 className="text-lg font-medium">Importazione in corso...</h3>
+        <div className="mx-auto h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mb-4 animate-pulse">
+          <RefreshCw className="h-8 w-8 text-primary animate-spin" />
+        </div>
+        <h3 className="text-lg font-medium">Importazione in corso</h3>
         <p className="text-sm text-muted-foreground mt-2">
-          Elaborazione delle timbrature
+          Elaborazione delle {stats.total} sessioni...
         </p>
       </div>
-      <Progress value={progress} className="w-full" />
+      <div className="space-y-2">
+        <Progress value={progress} className="w-full h-2" />
+        <p className="text-center text-sm text-muted-foreground">
+          {progress}% completato
+        </p>
+      </div>
     </div>
   );
 
   const renderCompleteStep = () => (
-    <div className="space-y-4">
+    <div className="space-y-6 py-8">
       <div className="text-center">
-        <CheckCircle className="mx-auto h-12 w-12 text-green-600 mb-4" />
+        <div className="mx-auto h-16 w-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+          <CheckCircle className="h-8 w-8 text-green-600" />
+        </div>
         <h3 className="text-lg font-medium">Import Completato!</h3>
         <p className="text-sm text-muted-foreground mt-2">
-          Le timbrature sono state importate correttamente
+          Le timbrature sono state importate con successo
         </p>
       </div>
       
-      <Card>
-        <CardContent className="pt-4">
-          <div className="grid grid-cols-2 gap-4">
+      <Card className="border-green-200 bg-green-50">
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-2 gap-6 text-center">
             <div>
               <p className="text-sm text-muted-foreground">Sessioni importate</p>
-              <p className="text-2xl font-bold text-green-600">{stats.valid}</p>
+              <p className="text-3xl font-bold text-green-600">{stats.valid}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Righe totali</p>
-              <p className="text-2xl font-bold">{stats.total}</p>
+              <p className="text-sm text-muted-foreground">Tempo totale</p>
+              <p className="text-3xl font-bold">
+                {Math.round((Date.now() - (progress * 100)) / 1000)}s
+              </p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Button 
-        onClick={() => onOpenChange(false)}
-        className="w-full"
-      >
-        Chiudi
-      </Button>
+      <div className="flex gap-2">
+        <Button 
+          onClick={resetImport}
+          variant="outline"
+          className="flex-1"
+        >
+          <Upload className="mr-2 h-4 w-4" />
+          Importa Altri File
+        </Button>
+        <Button 
+          onClick={() => onOpenChange(false)}
+          className="flex-1"
+        >
+          Chiudi
+        </Button>
+      </div>
     </div>
   );
 
@@ -783,15 +733,20 @@ export function TimesheetImportDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Import Timbrature Excel</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            Import Timbrature Excel
+            <Badge variant="secondary">
+              <Zap className="mr-1 h-3 w-3" />
+              Automatico
+            </Badge>
+          </DialogTitle>
           <DialogDescription>
-            Template Row-Per-Session: Una riga = Una sessione di lavoro
+            Sistema ottimizzato per file Termoidraulica Bertoletti - Riconoscimento automatico colonne
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-auto">
           {step === 'upload' && renderUploadStep()}
-          {step === 'mapping' && renderMappingStep()}
           {step === 'preview' && renderPreviewStep()}
           {step === 'importing' && renderImportingStep()}
           {step === 'complete' && renderCompleteStep()}
