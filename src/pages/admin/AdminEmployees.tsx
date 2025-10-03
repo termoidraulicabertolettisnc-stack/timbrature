@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Users, UserPlus, Edit, Trash2, Search, Shield, User, Settings } from 'lucide-react';
+import { Users, UserPlus, Edit, Trash2, Search, Shield, User, Settings, CreditCard } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -22,6 +22,7 @@ interface Employee {
   email: string;
   first_name: string;
   last_name: string;
+  codice_fiscale?: string; // AGGIUNTO
   role: 'dipendente' | 'amministratore';
   is_active: boolean;
   created_at: string;
@@ -33,6 +34,7 @@ interface EmployeeFormData {
   email: string;
   first_name: string;
   last_name: string;
+  codice_fiscale: string; // AGGIUNTO
   role: 'dipendente' | 'amministratore';
   is_active: boolean;
 }
@@ -53,6 +55,7 @@ export default function AdminEmployees() {
     email: '',
     first_name: '',
     last_name: '',
+    codice_fiscale: '', // AGGIUNTO
     role: 'dipendente',
     is_active: true,
   });
@@ -108,7 +111,7 @@ export default function AdminEmployees() {
     }
 
     try {
-      // Call secure edge function to create employee
+      // Prima creiamo l'utente con la funzione edge
       const response = await supabase.functions.invoke('create-employee', {
         body: {
           email: formData.email,
@@ -126,6 +129,18 @@ export default function AdminEmployees() {
       const result = response.data;
       if (!result.success) {
         throw new Error(result.error || 'Errore sconosciuto');
+      }
+
+      // Se il codice fiscale è stato fornito, aggiorniamolo
+      if (formData.codice_fiscale) {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ codice_fiscale: formData.codice_fiscale.toUpperCase() })
+          .eq('email', formData.email);
+
+        if (updateError) {
+          console.error('Errore aggiornamento codice fiscale:', updateError);
+        }
       }
 
       toast({
@@ -151,14 +166,21 @@ export default function AdminEmployees() {
     if (!selectedEmployee) return;
 
     try {
+      const updateData: any = {
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        role: formData.role,
+        is_active: formData.is_active,
+      };
+
+      // Aggiungi codice fiscale solo se fornito
+      if (formData.codice_fiscale) {
+        updateData.codice_fiscale = formData.codice_fiscale.toUpperCase();
+      }
+
       const { error } = await supabase
         .from('profiles')
-        .update({
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          role: formData.role,
-          is_active: formData.is_active,
-        })
+        .update(updateData)
         .eq('user_id', selectedEmployee.user_id);
 
       if (error) throw error;
@@ -225,6 +247,7 @@ export default function AdminEmployees() {
       email: employee.email,
       first_name: employee.first_name,
       last_name: employee.last_name,
+      codice_fiscale: employee.codice_fiscale || '', // AGGIUNTO
       role: employee.role,
       is_active: employee.is_active,
     });
@@ -241,6 +264,7 @@ export default function AdminEmployees() {
       email: '',
       first_name: '',
       last_name: '',
+      codice_fiscale: '', // AGGIUNTO
       role: 'dipendente',
       is_active: true,
     });
@@ -252,7 +276,8 @@ export default function AdminEmployees() {
     const matchesSearch = 
       safe(employee.first_name).includes(safe(searchTerm)) ||
       safe(employee.last_name).includes(safe(searchTerm)) ||
-      safe(employee.email).includes(safe(searchTerm));
+      safe(employee.email).includes(safe(searchTerm)) ||
+      safe(employee.codice_fiscale).includes(safe(searchTerm)); // AGGIUNTO
     
     const matchesRole = roleFilter === 'all' || employee.role === roleFilter;
     const matchesStatus = statusFilter === 'all' || 
@@ -264,6 +289,12 @@ export default function AdminEmployees() {
 
   const activeEmployees = employees.filter(emp => emp.is_active).length;
   const adminEmployees = employees.filter(emp => emp.role === 'amministratore').length;
+
+  // Formatta il codice fiscale per la visualizzazione
+  const formatCodiceFiscale = (cf?: string) => {
+    if (!cf) return '—';
+    return cf.toUpperCase();
+  };
 
   return (
     <div className="space-y-6">
@@ -281,7 +312,7 @@ export default function AdminEmployees() {
               Aggiungi Dipendente
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Aggiungi Nuovo Dipendente</DialogTitle>
               <DialogDescription>
@@ -291,30 +322,51 @@ export default function AdminEmployees() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="first_name">Nome</Label>
+                  <Label htmlFor="first_name">Nome *</Label>
                   <Input
                     id="first_name"
                     value={formData.first_name}
                     onChange={(e) => setFormData(prev => ({ ...prev, first_name: e.target.value }))}
+                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="last_name">Cognome</Label>
+                  <Label htmlFor="last_name">Cognome *</Label>
                   <Input
                     id="last_name"
                     value={formData.last_name}
                     onChange={(e) => setFormData(prev => ({ ...prev, last_name: e.target.value }))}
+                    required
                   />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Email *</Label>
                 <Input
                   id="email"
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                  required
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="codice_fiscale">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-4 w-4" />
+                    Codice Fiscale
+                  </div>
+                </Label>
+                <Input
+                  id="codice_fiscale"
+                  value={formData.codice_fiscale}
+                  onChange={(e) => setFormData(prev => ({ ...prev, codice_fiscale: e.target.value.toUpperCase() }))}
+                  placeholder="Es: RSSMRA80A01H501Z"
+                  maxLength={16}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Necessario per l'import Excel delle timbrature
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="role">Ruolo</Label>
@@ -353,7 +405,9 @@ export default function AdminEmployees() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Dipendenti Totali</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Dipendenti Totali
+            </CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -363,57 +417,54 @@ export default function AdminEmployees() {
             </p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Amministratori</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Amministratori
+            </CardTitle>
             <Shield className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{adminEmployees}</div>
             <p className="text-xs text-muted-foreground">
-              Con permessi admin
+              Con accesso completo
             </p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Dipendenti Standard</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Dipendenti Standard
+            </CardTitle>
             <User className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{employees.length - adminEmployees}</div>
             <p className="text-xs text-muted-foreground">
-              Ruolo dipendente
+              Accesso limitato
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filtri */}
+      {/* Filters */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Search className="h-5 w-5" />
-            Filtri e Ricerca
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
-            <div className="space-y-2">
-              <Label>Ricerca</Label>
-              <Input
-                placeholder="Nome, cognome o email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Ruolo</Label>
+          <div className="flex items-center justify-between">
+            <CardTitle>Lista Dipendenti</CardTitle>
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Cerca per nome, email o CF..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8 w-[300px]"
+                />
+              </div>
               <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger>
-                  <SelectValue />
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="Filtra ruolo" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tutti i ruoli</SelectItem>
@@ -421,12 +472,9 @@ export default function AdminEmployees() {
                   <SelectItem value="amministratore">Amministratori</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Stato</Label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue />
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="Stato" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tutti</SelectItem>
@@ -435,46 +483,34 @@ export default function AdminEmployees() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-end">
-              <Button variant="outline" onClick={loadEmployees} className="w-full">
-                Aggiorna
-              </Button>
-            </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Tabella Dipendenti */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Elenco Dipendenti ({filteredEmployees.length})</CardTitle>
-          <CardDescription>
-            Gestisci i dipendenti della tua azienda
-          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Codice Fiscale</TableHead>
                   <TableHead>Ruolo</TableHead>
                   <TableHead>Stato</TableHead>
-                  <TableHead>Data Creazione</TableHead>
-                  <TableHead>Azioni</TableHead>
+                  <TableHead>Creato il</TableHead>
+                  <TableHead className="text-right">Azioni</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8">
-                      Caricamento dipendenti...
+                    <TableCell colSpan={7} className="text-center py-8">
+                      <div className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : filteredEmployees.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                       Nessun dipendente trovato
                     </TableCell>
                   </TableRow>
@@ -485,6 +521,11 @@ export default function AdminEmployees() {
                         {employee.first_name} {employee.last_name}
                       </TableCell>
                       <TableCell>{employee.email}</TableCell>
+                      <TableCell>
+                        <code className="text-xs bg-muted px-2 py-1 rounded">
+                          {formatCodiceFiscale(employee.codice_fiscale)}
+                        </code>
+                      </TableCell>
                       <TableCell>
                         <Badge variant={employee.role === 'amministratore' ? 'default' : 'secondary'}>
                           {employee.role === 'amministratore' ? 'Admin' : 'Dipendente'}
@@ -500,33 +541,33 @@ export default function AdminEmployees() {
                           ? format(parseISO(employee.created_at), 'dd/MM/yyyy', { locale: it })
                           : '—'}
                       </TableCell>
-                       <TableCell>
-                         <div className="flex gap-2">
-                           <Button
-                             variant="ghost"
-                             size="sm"
-                             onClick={() => openSettingsDialog(employee)}
-                             title={`Configura impostazioni per ${employee.first_name} ${employee.last_name}`}
-                           >
-                             <Settings className="h-4 w-4" />
-                           </Button>
-                           <Button
-                             variant="ghost"
-                             size="sm"
-                             onClick={() => openEditDialog(employee)}
-                           >
-                             <Edit className="h-4 w-4" />
-                           </Button>
-                           <Button
-                             variant="ghost"
-                             size="sm"
-                             onClick={() => handleDeleteEmployee(employee)}
-                             className="text-destructive hover:text-destructive"
-                           >
-                             <Trash2 className="h-4 w-4" />
-                           </Button>
-                         </div>
-                       </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openSettingsDialog(employee)}
+                            title={`Configura impostazioni per ${employee.first_name} ${employee.last_name}`}
+                          >
+                            <Settings className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditDialog(employee)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteEmployee(employee)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -538,7 +579,7 @@ export default function AdminEmployees() {
 
       {/* Dialog Modifica Dipendente */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Modifica Dipendente</DialogTitle>
             <DialogDescription>
@@ -574,6 +615,24 @@ export default function AdminEmployees() {
                 className="bg-muted"
               />
               <p className="text-xs text-muted-foreground">L'email non può essere modificata</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit_codice_fiscale">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4" />
+                  Codice Fiscale
+                </div>
+              </Label>
+              <Input
+                id="edit_codice_fiscale"
+                value={formData.codice_fiscale}
+                onChange={(e) => setFormData(prev => ({ ...prev, codice_fiscale: e.target.value.toUpperCase() }))}
+                placeholder="Es: RSSMRA80A01H501Z"
+                maxLength={16}
+              />
+              <p className="text-xs text-muted-foreground">
+                Necessario per l'import Excel delle timbrature
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit_role">Ruolo</Label>
