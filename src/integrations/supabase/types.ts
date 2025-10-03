@@ -1863,7 +1863,7 @@ export type Database = {
         | "disabilitato"
       overtime_type: "dopo_8_ore" | "sempre"
       saturday_handling: "straordinario" | "trasferta" | "normale"
-      saturday_type: "trasferta" | "straordinario"
+      saturday_type: "normale" | "trasferta" | "straordinario"
       user_role: "dipendente" | "amministratore"
     }
     CompositeTypes: {

@@ -457,8 +457,9 @@ export default function AdminSettings() {
                     <SelectValue placeholder="Seleziona trattamento" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="trasferta">Conteggio Separato (Trasferta)</SelectItem>
-                    <SelectItem value="straordinario">Come Straordinario</SelectItem>
+                      <SelectItem value="normale">Normale (ore standard configurate)</SelectItem>
+                      <SelectItem value="trasferta">Trasferta (tariffa speciale)</SelectItem>
+                      <SelectItem value="straordinario">Straordinario (tutto extra)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
