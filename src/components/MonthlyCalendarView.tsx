@@ -1,14 +1,11 @@
-import React, { useMemo, useState } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, parseISO, isSameDay, addMonths, subMonths } from 'date-fns';
-import { it } from 'date-fns/locale';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import React, { useMemo } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clock, Plus } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Plus, UtensilsCrossed } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, parseISO } from 'date-fns';
+import { it } from 'date-fns/locale';
 import { TimesheetWithProfile } from '@/types/timesheet';
-import { BenefitsService } from '@/services/BenefitsService';
-import { AbsenceIndicator } from '@/components/AbsenceIndicator';
-import { sessionsForDay, utcToLocal } from '@/utils/timeSegments';
+import { AbsenceIndicator } from './AbsenceIndicator';
 
 interface MonthlyCalendarViewProps {
   timesheets: TimesheetWithProfile[];
@@ -29,10 +26,12 @@ interface MonthlyCalendarViewProps {
 interface DayData {
   date: string;
   timesheets: TimesheetWithProfile[];
+  sessions: any[];
   absences: any[];
   regular_hours: number;
   overtime_hours: number;
   night_hours: number;
+  total_hours: number;
   meal_vouchers: number;
 }
 
@@ -72,250 +71,10 @@ export function MonthlyCalendarView({
   const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
   const employeeData = useMemo(() => {
-    console.log('🔍 MonthlyCalendarView - Processing data:', {
-      timesheets_count: timesheets.length,
-      absences_count: absences.length,
-      dateFilter,
-      currentMonth: format(currentMonth, 'yyyy-MM-dd'),
-      monthStart: format(monthStart, 'yyyy-MM-dd'),
-      monthEnd: format(monthEnd, 'yyyy-MM-dd'),
-      sample_absence: absences[0]
-    });
-    
-    console.log('🔍 MonthlyCalendarView - All absences:', absences);
-
     const employeesMap = new Map<string, EmployeeMonthData>();
 
-    // Process timesheets using the new session utility
-    const distributeTimesheetHours = (timesheet: TimesheetWithProfile, employee: EmployeeMonthData) => {
-      console.log(`🔍 MonthlyCalendarView - Processing timesheet ${timesheet.id}`);
-
-      // Get all calendar days for this month and process sessions for each day
-      calendarDays.forEach(day => {
-        const dayISO = format(day, 'yyyy-MM-dd');
-        const segments = sessionsForDay(timesheet, dayISO);
-        
-        if (segments.length === 0) return;
-
-        segments.forEach((segment, segmentIndex) => {
-          const localStart = utcToLocal(segment.startUtc);
-          const localEnd = utcToLocal(segment.endUtc);
-          const sessionHours = timesheet.total_hours || ((localEnd.getTime() - localStart.getTime()) / (1000 * 60 * 60));
-
-          // Calculate meal benefits only for the first segment of each day
-          let mealBenefits = { mealVoucher: false, dailyAllowance: false };
-          if (segmentIndex === 0) {
-            const employeeSettingsForUser = employeeSettings[timesheet.user_id];
-            BenefitsService.validateTemporalUsage('MonthlyCalendarView.getMealBenefits');
-            mealBenefits = BenefitsService.calculateMealBenefitsSync(
-              timesheet, 
-              employeeSettingsForUser, 
-              companySettings
-            );
-          }
-
-          // Initialize day data if needed
-          if (!employee.days[dayISO]) {
-            employee.days[dayISO] = {
-              date: dayISO,
-              timesheets: [],
-              absences: [],
-              regular_hours: 0,
-              overtime_hours: 0,
-              night_hours: 0,
-              meal_vouchers: 0
-            };
-          }
-
-          // Add timesheet entry for this segment
-          const segmentTimesheet = {
-            ...timesheet,
-            id: `${timesheet.id}-${segment.sessionId || 'legacy'}-${segmentIndex}`,
-            total_hours: sessionHours
-          };
-
-          employee.days[dayISO].timesheets.push(segmentTimesheet);
-          
-          const regularHours = Math.min(sessionHours, 8);
-          const overtimeHours = Math.max(0, sessionHours - 8);
-
-          employee.days[dayISO].regular_hours += regularHours;
-          employee.days[dayISO].overtime_hours += overtimeHours;
-          employee.days[dayISO].night_hours += (timesheet.night_hours || 0) * (sessionHours / (timesheet.total_hours || sessionHours));
-
-          if (mealBenefits.mealVoucher) {
-            employee.days[dayISO].meal_vouchers += 1;
-          }
-
-          // Update totals (avoid double counting for multiple segments of same timesheet)
-          if (segmentIndex === 0) {
-            employee.totals.regular_hours += regularHours;
-            employee.totals.overtime_hours += overtimeHours;
-            employee.totals.total_hours += sessionHours;
-          }
-        });
-      });
-    };
-
-    // Funzione helper per distribuire le ore di una singola sessione
-    const distributeSessionHours = (
-      session: any, 
-      sessionHours: number, 
-      startDate: string, 
-      endDate: string, 
-      isNightShift: boolean, 
-      employee: EmployeeMonthData, 
-      mealBenefits: any,
-      sessionIndex: number
-    ) => {
-
-      if (!isNightShift) {
-        // Sessione normale nello stesso giorno
-        if (!employee.days[startDate]) {
-          employee.days[startDate] = {
-            date: startDate,
-            timesheets: [],
-            absences: [],
-            regular_hours: 0,
-            overtime_hours: 0,
-            night_hours: 0,
-            meal_vouchers: 0
-          };
-        }
-
-        // Crea un identificativo unico per questa sessione
-        const sessionTimesheet = {
-          ...session,
-          id: `${session.id || 'session'}_${sessionIndex + 1}`,
-          total_hours: sessionHours
-        };
-
-        employee.days[startDate].timesheets.push(sessionTimesheet);
-        
-        const regularHours = Math.min(sessionHours, 8);
-        const overtimeHours = Math.max(0, sessionHours - 8);
-
-        employee.days[startDate].regular_hours += regularHours;
-        employee.days[startDate].overtime_hours += overtimeHours;
-        employee.days[startDate].night_hours += (session.night_hours || 0);
-
-        if (mealBenefits.mealVoucher) {
-          employee.days[startDate].meal_vouchers += 1;
-        }
-
-        console.log(`🔍 Added session to ${startDate}:`, {
-          sessionHours: sessionHours.toFixed(2),
-          regularHours: regularHours.toFixed(2),
-          overtimeHours: overtimeHours.toFixed(2)
-        });
-      } else {
-        // Sessione notturna - distribuisci ore tra due giorni
-        const sessionStart = new Date(session.start_time || session.date);
-        const sessionEnd = new Date(session.end_time || endDate);
-        
-        // Calcola ore per ogni giorno considerando il fuso orario locale
-        const startHour = sessionStart.getHours() + sessionStart.getMinutes() / 60;
-        const endHour = sessionEnd.getHours() + sessionEnd.getMinutes() / 60;
-        
-        // Calcola ore per il primo giorno (fino a mezzanotte)
-        const firstDayHours = Math.max(0, 24 - startHour);
-        const secondDayHours = Math.max(0, endHour);
-        
-        // Usa proporzione basata sulle ore effettive se disponibili, altrimenti usa il calcolo temporale
-        let firstDayProportion = 0.5; // Default fallback
-        if (firstDayHours > 0 && secondDayHours > 0) {
-          firstDayProportion = firstDayHours / (firstDayHours + secondDayHours);
-        }
-        
-        const adjustedFirstDayHours = sessionHours * firstDayProportion;
-        const adjustedSecondDayHours = sessionHours * (1 - firstDayProportion);
-
-        console.log(`🔍 Night shift distribution:`, {
-          totalHours: sessionHours.toFixed(2),
-          firstDay: adjustedFirstDayHours.toFixed(2),
-          secondDay: adjustedSecondDayHours.toFixed(2),
-          proportion: firstDayProportion.toFixed(2)
-        });
-
-        // Primo giorno
-        if (!employee.days[startDate]) {
-          employee.days[startDate] = {
-            date: startDate,
-            timesheets: [],
-            absences: [],
-            regular_hours: 0,
-            overtime_hours: 0,
-            night_hours: 0,
-            meal_vouchers: 0
-          };
-        }
-
-        employee.days[startDate].timesheets.push({
-          ...session,
-          id: `${session.id || 'session'}_${sessionIndex + 1}_day1`,
-          total_hours: adjustedFirstDayHours
-        });
-
-        const firstDayRegular = Math.min(adjustedFirstDayHours, 8);
-        const firstDayOvertime = Math.max(0, adjustedFirstDayHours - 8);
-
-        employee.days[startDate].regular_hours += firstDayRegular;
-        employee.days[startDate].overtime_hours += firstDayOvertime;
-        employee.days[startDate].night_hours += (session.night_hours || 0) * firstDayProportion;
-
-        if (mealBenefits.mealVoucher) {
-          employee.days[startDate].meal_vouchers += 1;
-        }
-
-        // Secondo giorno
-        if (!employee.days[endDate]) {
-          employee.days[endDate] = {
-            date: endDate,
-            timesheets: [],
-            absences: [],
-            regular_hours: 0,
-            overtime_hours: 0,
-            night_hours: 0,
-            meal_vouchers: 0
-          };
-        }
-
-        employee.days[endDate].timesheets.push({
-          ...session,
-          id: `${session.id || 'session'}_${sessionIndex + 1}_day2`,
-          total_hours: adjustedSecondDayHours
-        });
-
-        // Per il secondo giorno, considera che potrebbero essere ore "continuative"
-        const remainingRegularCapacity = Math.max(0, 8 - firstDayRegular);
-        const secondDayRegular = Math.min(adjustedSecondDayHours, remainingRegularCapacity);
-        const secondDayOvertime = Math.max(0, adjustedSecondDayHours - secondDayRegular);
-
-        employee.days[endDate].regular_hours += secondDayRegular;
-        employee.days[endDate].overtime_hours += secondDayOvertime;
-        employee.days[endDate].night_hours += (session.night_hours || 0) * (1 - firstDayProportion);
-      }
-
-      // Aggiorna i totali per ogni sessione (non duplicare per turni notturni)
-      if (sessionIndex === 0 || !isNightShift) {
-        const regularHours = Math.min(sessionHours, 8);
-        const overtimeHours = Math.max(0, sessionHours - 8);
-        employee.totals.regular_hours += regularHours;
-        employee.totals.overtime_hours += overtimeHours;
-        employee.totals.total_hours += sessionHours;
-      }
-    };
-
-    // Inizializza i dipendenti dai timesheet
+    // Processa i timesheets CON le loro sessioni
     timesheets.forEach(timesheet => {
-      console.log('📋 Processing timesheet:', {
-        date: timesheet.date,
-        end_date: timesheet.end_date,
-        user: timesheet.profiles?.first_name,
-        start_time: timesheet.start_time,
-        night_hours: timesheet.night_hours
-      });
-      
       if (!timesheet.profiles) return;
 
       const key = timesheet.user_id;
@@ -331,21 +90,63 @@ export function MonthlyCalendarView({
       }
 
       const employee = employeesMap.get(key)!;
-      distributeTimesheetHours(timesheet, employee);
-    });
+      const date = timesheet.date;
 
-    // Aggiungi assenze
-    console.log('🔍 MonthlyCalendarView - Adding absences, count:', absences.length);
-    absences.forEach((absence, index) => {
-      console.log(`🔍 MonthlyCalendarView - Processing absence ${index}:`, absence);
-      
-      if (!absence.profiles) {
-        console.log('🔍 MonthlyCalendarView - No profiles in absence, skipping');
-        return;
+      if (!employee.days[date]) {
+        employee.days[date] = {
+          date,
+          timesheets: [],
+          sessions: [],
+          absences: [],
+          regular_hours: 0,
+          overtime_hours: 0,
+          night_hours: 0,
+          total_hours: 0,
+          meal_vouchers: 0
+        };
       }
 
+      employee.days[date].timesheets.push(timesheet);
+      
+      // IMPORTANTE: Aggiungi le sessioni se esistono
+      if (timesheet.timesheet_sessions && timesheet.timesheet_sessions.length > 0) {
+        employee.days[date].sessions = timesheet.timesheet_sessions;
+        
+        // Calcola le ore dalle sessioni
+        let dayTotalHours = 0;
+        timesheet.timesheet_sessions.forEach(session => {
+          const startTime = new Date(`2000-01-01T${session.start_time}`);
+          const endTime = new Date(`2000-01-01T${session.end_time}`);
+          const hours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+          const netHours = hours - (session.pause_minutes || 0) / 60;
+          dayTotalHours += netHours;
+        });
+        
+        employee.days[date].total_hours = dayTotalHours;
+        employee.days[date].regular_hours = Math.min(dayTotalHours, 8);
+        employee.days[date].overtime_hours = Math.max(0, dayTotalHours - 8);
+        
+      } else if (timesheet.total_hours) {
+        // Fallback: usa le ore dal timesheet principale se non ci sono sessioni
+        employee.days[date].total_hours = timesheet.total_hours;
+        employee.days[date].regular_hours = timesheet.regular_hours || Math.min(timesheet.total_hours, 8);
+        employee.days[date].overtime_hours = timesheet.overtime_hours || Math.max(0, timesheet.total_hours - 8);
+      }
+      
+      employee.days[date].night_hours = timesheet.night_hours || 0;
+      employee.days[date].meal_vouchers = timesheet.meal_vouchers || 0;
+
+      // Aggiorna i totali
+      employee.totals.regular_hours += employee.days[date].regular_hours;
+      employee.totals.overtime_hours += employee.days[date].overtime_hours;
+      employee.totals.total_hours += employee.days[date].total_hours;
+    });
+
+    // Aggiungi le assenze
+    absences.forEach(absence => {
+      if (!absence.profiles) return;
+
       const key = absence.user_id;
-      console.log('🔍 MonthlyCalendarView - Employee key:', key);
       if (!employeesMap.has(key)) {
         employeesMap.set(key, {
           user_id: absence.user_id,
@@ -359,28 +160,26 @@ export function MonthlyCalendarView({
 
       const employee = employeesMap.get(key)!;
       const date = absence.date;
-      console.log('🔍 MonthlyCalendarView - Adding absence to date:', date);
 
       if (!employee.days[date]) {
-        console.log('🔍 MonthlyCalendarView - Creating day entry for:', date);
         employee.days[date] = {
           date,
           timesheets: [],
+          sessions: [],
           absences: [],
           regular_hours: 0,
           overtime_hours: 0,
           night_hours: 0,
+          total_hours: 0,
           meal_vouchers: 0
         };
       }
 
-      console.log('🔍 MonthlyCalendarView - Adding absence to employee day');
       employee.days[date].absences.push(absence);
     });
 
-    console.log('📊 Final employee data:', Array.from(employeesMap.values()));
     return Array.from(employeesMap.values());
-  }, [timesheets, absences, employeeSettings, companySettings, currentMonth]);
+  }, [timesheets, absences]);
 
   const getWeeks = () => {
     const weeks = [];
@@ -398,60 +197,60 @@ export function MonthlyCalendarView({
     if (!dayData || !isCurrentMonth) {
       return (
         <div className={`min-h-[60px] p-1 ${!isCurrentMonth ? 'opacity-30' : ''}`}>
-          <div className="text-xs text-muted-foreground">{format(day, 'd')}</div>
-        </div>
-      );
-    }
-
-    const hasAbsence = dayData.absences.length > 0;
-    const absence = dayData.absences[0];
-
-    return (
-      <div className="min-h-[60px] p-1 space-y-1 group">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium">{format(day, 'd')}</span>
-          {dayData.timesheets.length > 0 && (
-            <div className="flex gap-1">
+          {isCurrentMonth && (
+            <div className="flex gap-1 mt-1">
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-4 w-4 p-0"
-                onClick={() => {
-                  if (onEditDay) {
-                    const employee = {
-                      user_id: dayData.timesheets[0].user_id,
-                      first_name: dayData.timesheets[0].profiles?.first_name || '',
-                      last_name: dayData.timesheets[0].profiles?.last_name || '',
-                      email: dayData.timesheets[0].profiles?.email || '',
-                    };
-                    const sessions = dayData.timesheets[0]?.timesheet_sessions || [];
-                    onEditDay(format(day, 'yyyy-MM-dd'), employee, dayData.timesheets[0], sessions);
-                  } else {
-                    onEditTimesheet(dayData.timesheets[0]);
-                  }
-                }}
+                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => onAddTimesheet(dateStr, employee.user_id)}
+                title="Aggiungi timbratura"
               >
-                <Edit className="h-3 w-3" />
+                <Clock className="h-3 w-3" />
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-4 w-4 p-0 text-red-600"
-                onClick={() => onDeleteTimesheet(dayData.timesheets[0].id)}
+                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => onAddAbsence(dateStr, employee.user_id)}
+                title="Aggiungi assenza"
               >
-                <Trash2 className="h-3 w-3" />
+                <Plus className="h-3 w-3" />
               </Button>
             </div>
           )}
         </div>
+      );
+    }
 
-        {hasAbsence ? (
+    return (
+      <div className={`min-h-[60px] p-1 ${!isCurrentMonth ? 'opacity-30' : ''}`}>
+        {dayData.absences.length > 0 ? (
           <div className="space-y-1">
             <AbsenceIndicator absences={dayData.absences} />
           </div>
-        ) : dayData.timesheets.length > 0 ? (
-          <div className="space-y-1">
+        ) : dayData.total_hours > 0 ? (
+          <div 
+            className="space-y-1 cursor-pointer hover:bg-gray-50 rounded p-1"
+            onClick={() => {
+              if (onEditDay && dayData.timesheets.length > 0) {
+                const mainTimesheet = dayData.timesheets[0];
+                const employee = {
+                  user_id: mainTimesheet.user_id,
+                  first_name: mainTimesheet.profiles?.first_name || '',
+                  last_name: mainTimesheet.profiles?.last_name || '',
+                  email: mainTimesheet.profiles?.email || '',
+                };
+                onEditDay(dateStr, employee, mainTimesheet, dayData.sessions);
+              }
+            }}
+          >
             <div className="text-xs">
+              {dayData.sessions.length > 0 && (
+                <div className="text-gray-500 mb-1">
+                  {dayData.sessions.length} {dayData.sessions.length === 1 ? 'sessione' : 'sessioni'}
+                </div>
+              )}
               <div className="text-blue-600">O: {dayData.regular_hours.toFixed(1)}h</div>
               {dayData.overtime_hours > 0 && (
                 <div className="text-orange-600">S: {dayData.overtime_hours.toFixed(1)}h</div>
@@ -462,9 +261,7 @@ export function MonthlyCalendarView({
             </div>
             
             <div className="text-xs font-medium flex items-center gap-1">
-              {dayData.regular_hours + dayData.overtime_hours > 0 && 
-                `${(dayData.regular_hours + dayData.overtime_hours).toFixed(1)}h`
-              }
+              Totale: {dayData.total_hours.toFixed(1)}h
               {dayData.night_hours > 0 && (
                 <div className="w-2 h-2 bg-purple-600 rounded-full" title="Turno notturno" />
               )}
@@ -475,7 +272,6 @@ export function MonthlyCalendarView({
             )}
           </div>
         ) : (
-          // Pulsanti per giorni vuoti
           <div className="flex gap-1 mt-1">
             <Button
               variant="ghost"
@@ -528,57 +324,47 @@ export function MonthlyCalendarView({
       <CardContent>
         {employeeData.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            Nessun timesheet trovato per questo mese
+            Nessuna timbratura trovata per questo mese
           </div>
         ) : (
-          <div className="space-y-8">
-            {employeeData.map(employee => (
-              <div key={employee.user_id} className="space-y-4">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <div>
-                    <h3 className="font-semibold text-lg">
-                      {employee.first_name} {employee.last_name}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">{employee.email}</p>
+          <div className="space-y-6">
+            {employeeData.map((employee) => (
+              <div key={employee.user_id}>
+                <h3 className="font-medium mb-2">
+                  {employee.first_name} {employee.last_name}
+                  <span className="text-sm text-muted-foreground ml-2">
+                    ({employee.email})
+                  </span>
+                  <span className="text-sm font-normal ml-4">
+                    Ordinarie: {employee.totals.regular_hours.toFixed(1)}h | 
+                    Straordinarie: {employee.totals.overtime_hours.toFixed(1)}h | 
+                    Totale: {employee.totals.total_hours.toFixed(1)}h
+                  </span>
+                </h3>
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="grid grid-cols-7 bg-gray-50 text-xs font-medium">
+                    {['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map((day) => (
+                      <div key={day} className="p-2 text-center border-r last:border-r-0">
+                        {day}
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex items-center gap-4 text-sm">
-                    <span className="text-blue-600 font-medium">
-                      {employee.totals.regular_hours.toFixed(1)}h
-                    </span>
-                    <span className="text-orange-600 font-medium">
-                      {employee.totals.overtime_hours.toFixed(1)}h
-                    </span>
-                    <span className="font-semibold">
-                      {employee.totals.total_hours.toFixed(1)}h
-                    </span>
-                  </div>
-                </div>
-
-                {getWeeks().map((week, weekIndex) => (
-                  <div key={weekIndex} className="space-y-2">
-                    <div className="text-sm text-muted-foreground">
-                      Settimana {format(week[0], 'dd/MM', { locale: it })} - {format(week[6], 'dd/MM', { locale: it })}
-                    </div>
-                    <div className="grid grid-cols-7 border rounded-lg overflow-hidden">
-                      {week.map((day, dayIndex) => {
-                        const dayNames = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
-                        return (
-                          <div key={dayIndex} className="border-r last:border-r-0">
-                            <div className="bg-muted/50 p-2 text-center">
-                              <div className="text-xs font-medium">{dayNames[dayIndex]}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {format(day, 'dd', { locale: it })}
-                              </div>
-                            </div>
-                            <div className="border-t">
-                              {renderDayContent(day, employee)}
-                            </div>
+                  {getWeeks().map((week, weekIndex) => (
+                    <div key={weekIndex} className="grid grid-cols-7">
+                      {week.map((day) => (
+                        <div
+                          key={day.toISOString()}
+                          className="border-r border-b last:border-r-0 group"
+                        >
+                          <div className="text-xs text-gray-500 p-1">
+                            {format(day, 'd')}
                           </div>
-                        );
-                      })}
+                          {renderDayContent(day, employee)}
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             ))}
           </div>
