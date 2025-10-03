@@ -447,27 +447,10 @@ export default function AdminTimesheets() {
   };
 
   // Funzione per gestire l'apertura del DayEditDialog
-const handleEditDay = async (date: string, employee: any, timesheet: TimesheetWithProfile | null, sessions: any[]) => {
-  // Se abbiamo un timesheet ma non le sessioni, caricale direttamente
-  if (timesheet && (!sessions || sessions.length === 0)) {
-    try {
-      const { data: sessionData, error } = await supabase
-        .from('timesheet_sessions')
-        .select('*')
-        .eq('timesheet_id', timesheet.id)
-        .order('session_order');
-      
-      if (!error && sessionData) {
-        sessions = sessionData;
-      }
-    } catch (error) {
-      console.error('Error loading sessions for edit:', error);
-    }
-  }
-  
-  setDayEditData({ date, employee, timesheet, sessions });
-  setDayEditDialogOpen(true);
-};
+  const handleEditDay = (date: string, employee: any, timesheet: TimesheetWithProfile | null, sessions: any[]) => {
+    setDayEditData({ date, employee, timesheet, sessions });
+    setDayEditDialogOpen(true);
+  };
 
   // Stati per le impostazioni
   const [companySettings, setCompanySettings] = useState<any>(null);
@@ -1031,44 +1014,60 @@ const handleEditDay = async (date: string, employee: any, timesheet: TimesheetWi
   });
 
   // CORREZIONE: Aggregazione corretta delle sessioni multiple per dipendente
-const aggregateTimesheetsByEmployeeFixed = (): EmployeeSummary[] => {
-  const employeesMap = new Map<string, EmployeeSummary>();
-
-  filteredTimesheets.forEach(timesheet => {
-    if (!timesheet.profiles) return;
-
-    const key = timesheet.user_id;
-    if (!employeesMap.has(key)) {
-      employeesMap.set(key, {
-        user_id: timesheet.user_id,
-        first_name: timesheet.profiles.first_name,
-        last_name: timesheet.profiles.last_name,
-        email: timesheet.profiles.email,
-        timesheets: [],
+const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
+  const employeeMap = new Map<string, EmployeeSummary>();
+  
+  filteredTimesheets.forEach((timesheet) => {
+    const userId = timesheet.user_id;
+    
+    if (!employeeMap.has(userId)) {
+      employeeMap.set(userId, {
+        user_id: userId,
+        first_name: timesheet.profiles?.first_name || '',
+        last_name: timesheet.profiles?.last_name || '',
+        email: timesheet.profiles?.email || '',
         total_hours: 0,
         overtime_hours: 0,
         night_hours: 0,
         regular_hours: 0,
-        meal_vouchers: 0
+        meal_vouchers: 0,
+        timesheets: []
       });
     }
-
-    const employee = employeesMap.get(key)!;
-    employee.timesheets.push(timesheet);
-
-    // SOLO lettura dal database
-    employee.total_hours += timesheet.total_hours || 0;
-    employee.overtime_hours += timesheet.overtime_hours || 0;
-    employee.night_hours += timesheet.night_hours || 0;
-    employee.regular_hours += Math.max(0, (timesheet.total_hours || 0) - (timesheet.overtime_hours || 0));
     
-    // USA il campo già calcolato dal database
-    if (timesheet.meal_voucher_earned) {
-      employee.meal_vouchers += 1;
+    const employee = employeeMap.get(userId)!;
+    
+    // Aggiungi il timesheet alla lista
+    employee.timesheets.push(timesheet);
+    
+    // Aggrega solo una volta per ogni timesheet_id (non per sessione)
+    const timesheetId = timesheet.original_timesheet_id || timesheet.id;
+    if (!timesheet.is_session || timesheet.session_order === 1) {
+      // Conta straordinari e notturne solo una volta per giornata
+      employee.overtime_hours += parseFloat(timesheet.overtime_hours || 0);
+      employee.night_hours += parseFloat(timesheet.night_hours || 0);
     }
+    
+    // Le ore totali vanno sommate per ogni sessione
+    const hours = parseFloat(timesheet.total_hours || 0);
+    employee.total_hours += hours;
   });
-
-  return Array.from(employeesMap.values());
+  
+  // Calcola ore regolari per ogni dipendente
+  employeeMap.forEach((employee) => {
+    employee.regular_hours = Math.max(0, employee.total_hours - employee.overtime_hours);
+    // Calcola buoni pasto (1 per giorno con più di 6 ore)
+    const uniqueDays = new Set(employee.timesheets.map(t => t.date));
+    uniqueDays.forEach(date => {
+      const dayTimesheets = employee.timesheets.filter(t => t.date === date);
+      const dayHours = dayTimesheets.reduce((sum, t) => sum + parseFloat(t.total_hours || 0), 0);
+      if (dayHours >= 6) {
+        employee.meal_vouchers++;
+      }
+    });
+  });
+  
+  return Array.from(employeeMap.values());
 };
 
   if (loading) {
