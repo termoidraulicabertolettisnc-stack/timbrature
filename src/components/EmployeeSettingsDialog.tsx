@@ -618,9 +618,10 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                       <SelectValue placeholder={companySettings ? `Default: ${companySettings.saturday_handling}` : 'Seleziona gestione'} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="company_default">Usa Default Aziendale</SelectItem>
-                      <SelectItem value="trasferta">Trasferta</SelectItem>
-                      <SelectItem value="straordinario">Straordinario</SelectItem>
+                        <SelectItem value="company_default">Usa Default Aziendale</SelectItem>
+                        <SelectItem value="normale">Normale (ore standard)</SelectItem>
+                        <SelectItem value="trasferta">Trasferta (tariffa speciale)</SelectItem>
+                        <SelectItem value="straordinario">Straordinario (tutto extra)</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
