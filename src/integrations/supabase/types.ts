@@ -282,37 +282,25 @@ export type Database = {
       }
       companies: {
         Row: {
-          address: string | null
-          city: string
-          created_at: string
-          formatted_address: string | null
+          created_at: string | null
           id: string
-          latitude: number | null
-          longitude: number | null
           name: string
-          updated_at: string
+          updated_at: string | null
+          vat_number: string | null
         }
         Insert: {
-          address?: string | null
-          city?: string
-          created_at?: string
-          formatted_address?: string | null
+          created_at?: string | null
           id?: string
-          latitude?: number | null
-          longitude?: number | null
           name: string
-          updated_at?: string
+          updated_at?: string | null
+          vat_number?: string | null
         }
         Update: {
-          address?: string | null
-          city?: string
-          created_at?: string
-          formatted_address?: string | null
+          created_at?: string | null
           id?: string
-          latitude?: number | null
-          longitude?: number | null
           name?: string
-          updated_at?: string
+          updated_at?: string | null
+          vat_number?: string | null
         }
         Relationships: []
       }
@@ -461,11 +449,59 @@ export type Database = {
           standard_weekly_hours?: Json | null
           updated_at?: string
         }
+        Relationships: []
+      }
+      company_sites: {
+        Row: {
+          address_line: string | null
+          city: string | null
+          company_id: string | null
+          country: string | null
+          created_at: string | null
+          id: string
+          lat: number | null
+          lon: number | null
+          name: string
+          postal_code: string | null
+          province: string | null
+          site_code: string
+          updated_at: string | null
+        }
+        Insert: {
+          address_line?: string | null
+          city?: string | null
+          company_id?: string | null
+          country?: string | null
+          created_at?: string | null
+          id?: string
+          lat?: number | null
+          lon?: number | null
+          name: string
+          postal_code?: string | null
+          province?: string | null
+          site_code: string
+          updated_at?: string | null
+        }
+        Update: {
+          address_line?: string | null
+          city?: string | null
+          company_id?: string | null
+          country?: string | null
+          created_at?: string | null
+          id?: string
+          lat?: number | null
+          lon?: number | null
+          name?: string
+          postal_code?: string | null
+          province?: string | null
+          site_code?: string
+          updated_at?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: "company_settings_company_id_fkey"
+            foreignKeyName: "company_sites_company_id_fkey"
             columns: ["company_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "companies"
             referencedColumns: ["id"]
           },
@@ -960,15 +996,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "fk_profiles_company"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       projects: {
         Row: {
@@ -998,15 +1026,7 @@ export type Database = {
           name?: string
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "projects_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       resolved_configurations: {
         Row: {
