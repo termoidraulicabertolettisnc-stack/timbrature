@@ -14,15 +14,39 @@ export type Seg = {
  * Clamps a time segment to the bounds of a specific day in the given timezone
  */
 export function splitAtMidnight(seg: Seg, dayISO: string, tz = TZ): Seg | null {
+  // Validate inputs
+  if (!seg.startUtc || !seg.endUtc || !dayISO) {
+    console.warn('splitAtMidnight: Invalid input', { seg, dayISO });
+    return null;
+  }
+
   const dayStart = startOfDay(new Date(dayISO + 'T00:00:00'));
   const dayEnd = endOfDay(new Date(dayISO + 'T00:00:00'));
+  
+  // Validate day dates
+  if (isNaN(dayStart.getTime()) || isNaN(dayEnd.getTime())) {
+    console.warn('splitAtMidnight: Invalid day dates', { dayISO, dayStart, dayEnd });
+    return null;
+  }
   
   // Convert day bounds to UTC
   const dayStartUtc = fromZonedTime(dayStart, tz);
   const dayEndUtc = fromZonedTime(dayEnd, tz);
   
+  // Validate UTC conversion
+  if (isNaN(dayStartUtc.getTime()) || isNaN(dayEndUtc.getTime())) {
+    console.warn('splitAtMidnight: Invalid UTC conversion', { dayStartUtc, dayEndUtc });
+    return null;
+  }
+  
   const segStartUtc = new Date(seg.startUtc);
   const segEndUtc = new Date(seg.endUtc);
+  
+  // Validate segment dates
+  if (isNaN(segStartUtc.getTime()) || isNaN(segEndUtc.getTime())) {
+    console.warn('splitAtMidnight: Invalid segment dates', { seg });
+    return null;
+  }
   
   // Check if segment intersects with the day
   if (segEndUtc <= dayStartUtc || segStartUtc >= dayEndUtc) {
