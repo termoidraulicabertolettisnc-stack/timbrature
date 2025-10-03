@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Coffee, Zap, Moon, UtensilsCrossed } from "lucide-react";
-import { format } from "date-fns";
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
