@@ -853,49 +853,54 @@ export default function AdminTimesheets() {
 const loadTimesheets = async () => {
   setLoading(true);
   try {
-    // Usa la vista unificata che gestisce automaticamente le sessioni
+    // Usa la vista unificata
     let query = supabase
       .from('v_timesheets_unified')
       .select('*');
 
-    // Applica i filtri esistenti
+    // Applica filtri
     if (selectedEmployee !== 'all') {
       query = query.eq('user_id', selectedEmployee);
     }
-
-    // Filtri per data in base alla vista attiva
-    let startDate, endDate;
-    const currentDate = parseISO(dateFilter);
+    
+    // Nota: selectedProject potrebbe non funzionare con la vista, da verificare
+    // if (selectedProject !== 'all') {
+    //   query = query.eq('project_id', selectedProject);
+    // }
+    
+    // Filtri per periodo
+    const baseDate = parseISO(dateFilter);
+    let startDate: Date;
+    let endDate: Date;
     
     switch (activeView) {
       case 'weekly':
-        startDate = startOfWeek(currentDate, { weekStartsOn: 1 });
-        endDate = endOfWeek(currentDate, { weekStartsOn: 1 });
+        startDate = startOfWeek(baseDate, { weekStartsOn: 1 });
+        endDate = endOfWeek(baseDate, { weekStartsOn: 1 });
         break;
       case 'monthly':
-        startDate = startOfMonth(currentDate);
-        endDate = endOfMonth(currentDate);
+        startDate = startOfMonth(baseDate);
+        endDate = endOfMonth(baseDate);
         break;
       default: // daily
-        startDate = currentDate;
-        endDate = currentDate;
+        startDate = baseDate;
+        endDate = baseDate;
     }
-
+    
     query = query
       .gte('date', format(startDate, 'yyyy-MM-dd'))
       .lte('date', format(endDate, 'yyyy-MM-dd'))
       .order('date', { ascending: false });
 
     const { data: unifiedData, error } = await query;
-
+    
     if (error) throw error;
 
-    // Trasforma i dati dalla vista per mantenere compatibilità con il resto del codice
+    // Trasforma i dati dalla vista
     const transformedData = unifiedData?.map(row => ({
       id: row.id,
       date: row.date,
       user_id: row.user_id,
-      // Ricostruisci i timestamp completi dagli orari
       start_time: row.effective_start_time ? 
         `${row.date}T${row.effective_start_time}Z` : null,
       end_time: row.effective_end_time ? 
@@ -907,108 +912,37 @@ const loadTimesheets = async () => {
       is_saturday: row.is_saturday,
       is_holiday: row.is_holiday,
       notes: row.notes,
-      // Info profilo
       profiles: {
         first_name: row.first_name,
         last_name: row.last_name,
         email: row.email
       },
-      // Info sessioni (per compatibilità)
-      timesheet_sessions: row.session_count > 0 ? 
-        // Crea array fittizio di sessioni per visualizzazione
-        [{
-          id: row.id + '_session',
-          session_details: row.session_times,
-          session_count: row.session_count
-        }] : [],
-      // Flag aggiuntivi
+      projects: null, // Da gestire separatamente se necessario
+      timesheet_sessions: row.session_count > 0 ? [{
+        id: row.id + '_session',
+        session_details: row.session_times,
+        session_count: row.session_count
+      }] : [],
       has_multiple_sessions: row.data_source === 'SESSIONI_MULTIPLE',
       session_display_text: row.session_times
     })) || [];
 
-    setTimesheets(transformedData);
+    setTimesheets(transformedData as unknown as TimesheetWithProfile[]);
     
-    // Carica anche le assenze come prima
-    const { data: absencesData } = await supabase
-      .from('employee_absences')
-      .select(`
-        *,
-        profiles!employee_absences_user_id_fkey (
-          first_name,
-          last_name,
-          email
-        )
-      `)
-      .gte('date', format(startDate, 'yyyy-MM-dd'))
-      .lte('date', format(endDate, 'yyyy-MM-dd'));
-
-    setAbsences(absencesData || []);
-
+    // Carica anche le assenze per lo stesso periodo
+    await loadAbsences(startDate, endDate);
+    
   } catch (error) {
     console.error('Error loading timesheets:', error);
     toast({
       title: "Errore",
-      description: "Impossibile caricare i timesheets",
+      description: "Errore nel caricamento dei timesheet",
       variant: "destructive",
     });
   } finally {
     setLoading(false);
   }
 };
-
-      // Applica filtri
-      if (selectedEmployee !== 'all') {
-        query = query.eq('user_id', selectedEmployee);
-      }
-
-      if (selectedProject !== 'all') {
-        query = query.eq('project_id', selectedProject);
-      }
-
-      // Filtri per periodo
-      const baseDate = parseISO(dateFilter);
-      let startDate: Date;
-      let endDate: Date;
-
-      switch (activeView) {
-        case 'weekly':
-          startDate = startOfWeek(baseDate, { weekStartsOn: 1 });
-          endDate = endOfWeek(baseDate, { weekStartsOn: 1 });
-          break;
-        case 'monthly':
-          startDate = startOfMonth(baseDate);
-          endDate = endOfMonth(baseDate);
-          break;
-        default: // daily
-          startDate = baseDate;
-          endDate = baseDate;
-      }
-
-      query = query
-        .gte('date', format(startDate, 'yyyy-MM-dd'))
-        .lte('date', format(endDate, 'yyyy-MM-dd'))
-        .order('date', { ascending: false })
-        .order('start_time', { ascending: false });
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      setTimesheets((data as unknown as TimesheetWithProfile[]) || []);
-
-      // Carica anche le assenze per lo stesso periodo
-      await loadAbsences(startDate, endDate);
-
-    } catch (error) {
-      console.error('Error loading timesheets:', error);
-      toast({
-        title: "Errore",
-        description: "Errore nel caricamento dei timesheet",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadAbsences = async (startDate: Date, endDate: Date) => {
     try {
