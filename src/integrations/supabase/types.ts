@@ -944,8 +944,8 @@ export type Database = {
             foreignKeyName: "fk_location_pings_timesheet"
             columns: ["timesheet_id"]
             isOneToOne: false
-            referencedRelation: "v_timesheet_day_edit"
-            referencedColumns: ["timesheet_id"]
+            referencedRelation: "v_sessions_with_timesheets"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "fk_location_pings_timesheet"
@@ -1264,49 +1264,40 @@ export type Database = {
       }
       timesheet_sessions: {
         Row: {
-          created_at: string
-          end_location_lat: number | null
-          end_location_lng: number | null
-          end_time: string | null
+          created_at: string | null
+          end_time: string
           id: string
           notes: string | null
-          session_order: number
-          session_type: string
-          start_location_lat: number | null
-          start_location_lng: number | null
+          pause_minutes: number | null
+          session_order: number | null
+          session_type: string | null
           start_time: string
-          timesheet_id: string
-          updated_at: string
+          timesheet_id: string | null
+          updated_at: string | null
         }
         Insert: {
-          created_at?: string
-          end_location_lat?: number | null
-          end_location_lng?: number | null
-          end_time?: string | null
+          created_at?: string | null
+          end_time: string
           id?: string
           notes?: string | null
-          session_order?: number
-          session_type?: string
-          start_location_lat?: number | null
-          start_location_lng?: number | null
+          pause_minutes?: number | null
+          session_order?: number | null
+          session_type?: string | null
           start_time: string
-          timesheet_id: string
-          updated_at?: string
+          timesheet_id?: string | null
+          updated_at?: string | null
         }
         Update: {
-          created_at?: string
-          end_location_lat?: number | null
-          end_location_lng?: number | null
-          end_time?: string | null
+          created_at?: string | null
+          end_time?: string
           id?: string
           notes?: string | null
-          session_order?: number
-          session_type?: string
-          start_location_lat?: number | null
-          start_location_lng?: number | null
+          pause_minutes?: number | null
+          session_order?: number | null
+          session_type?: string | null
           start_time?: string
-          timesheet_id?: string
-          updated_at?: string
+          timesheet_id?: string | null
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -1320,8 +1311,8 @@ export type Database = {
             foreignKeyName: "timesheet_sessions_timesheet_id_fkey"
             columns: ["timesheet_id"]
             isOneToOne: false
-            referencedRelation: "v_timesheet_day_edit"
-            referencedColumns: ["timesheet_id"]
+            referencedRelation: "v_sessions_with_timesheets"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "timesheet_sessions_timesheet_id_fkey"
@@ -1331,6 +1322,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      timesheet_sessions_backup_temp: {
+        Row: {
+          created_at: string | null
+          end_time: string | null
+          id: string | null
+          notes: string | null
+          pause_minutes: number | null
+          session_order: number | null
+          session_type: string | null
+          start_time: string | null
+          timesheet_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          end_time?: string | null
+          id?: string | null
+          notes?: string | null
+          pause_minutes?: number | null
+          session_order?: number | null
+          session_type?: string | null
+          start_time?: string | null
+          timesheet_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          end_time?: string | null
+          id?: string | null
+          notes?: string | null
+          pause_minutes?: number | null
+          session_order?: number | null
+          session_type?: string | null
+          start_time?: string | null
+          timesheet_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       timesheets: {
         Row: {
@@ -1593,27 +1623,97 @@ export type Database = {
         }
         Relationships: []
       }
-      v_timesheet_day_edit: {
+      v_sessions_with_timesheets: {
         Row: {
+          absence_type: Database["public"]["Enums"]["absence_type"] | null
+          client_id: string | null
+          created_at: string | null
+          created_by: string | null
           date: string | null
+          email: string | null
+          end_date: string | null
+          end_location_lat: number | null
+          end_location_lng: number | null
+          end_time: string | null
+          first_name: string | null
+          id: string | null
           is_absence: boolean | null
-          lunch_config_type: string | null
-          lunch_minutes_calculated: number | null
-          lunch_minutes_effective: number | null
-          lunch_minutes_override: number | null
+          is_holiday: boolean | null
+          is_saturday: boolean | null
+          last_name: string | null
+          lunch_duration_minutes: number | null
+          lunch_end_time: string | null
+          lunch_override_minutes: number | null
+          lunch_start_time: string | null
+          meal_voucher_earned: boolean | null
+          night_hours: number | null
+          notes: string | null
           overtime_hours: number | null
-          sessions: Json | null
+          project_id: string | null
+          session_end_time: string | null
+          session_id: string | null
+          session_notes: string | null
+          session_order: number | null
+          session_start_time: string | null
+          session_type: string | null
+          start_location_lat: number | null
+          start_location_lng: number | null
+          start_time: string | null
           timesheet_id: string | null
           total_hours: number | null
+          updated_at: string | null
+          updated_by: string | null
           user_id: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_timesheets_created_by"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "fk_timesheets_updated_by"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
           {
             foreignKeyName: "fk_timesheets_user"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "timesheet_sessions_timesheet_id_fkey"
+            columns: ["timesheet_id"]
+            isOneToOne: false
+            referencedRelation: "timesheets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timesheet_sessions_timesheet_id_fkey"
+            columns: ["timesheet_id"]
+            isOneToOne: false
+            referencedRelation: "v_sessions_with_timesheets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timesheet_sessions_timesheet_id_fkey"
+            columns: ["timesheet_id"]
+            isOneToOne: false
+            referencedRelation: "v_timesheet_discrepancies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timesheets_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "timesheets_user_id_fkey"
@@ -1863,7 +1963,7 @@ export type Database = {
         | "disabilitato"
       overtime_type: "dopo_8_ore" | "sempre"
       saturday_handling: "straordinario" | "trasferta" | "normale"
-      saturday_type: "normale" | "trasferta" | "straordinario"
+      saturday_type: "trasferta" | "straordinario" | "normale"
       user_role: "dipendente" | "amministratore"
     }
     CompositeTypes: {
@@ -2018,7 +2118,7 @@ export const Constants = {
       ],
       overtime_type: ["dopo_8_ore", "sempre"],
       saturday_handling: ["straordinario", "trasferta", "normale"],
-      saturday_type: ["trasferta", "straordinario"],
+      saturday_type: ["trasferta", "straordinario", "normale"],
       user_role: ["dipendente", "amministratore"],
     },
   },
