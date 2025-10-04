@@ -856,33 +856,8 @@ const loadTimesheets = async () => {
   try {
     console.log('🚀 DEBUG - Inizio caricamento timesheets...');
     
-    // Query principale MODIFICATA per forzare il caricamento delle sessioni
+    // Query senza le sessioni (le caricheremo separatamente)
     let query = supabase
-      .from('timesheets')
-      .select(`
-        *,
-        profiles!timesheets_user_id_fkey (
-          first_name,
-          last_name,
-          email
-        ),
-        projects (
-          name
-        ),
-        timesheet_sessions!inner (
-          id,
-          session_order,
-          start_time,
-          end_time,
-          session_type,
-          notes,
-          pause_minutes
-        )
-      `);
-
-    // IMPORTANTE: Rimuovi !inner se vuoi anche timesheets senza sessioni
-    // Cambia in:
-    let queryFixed = supabase
       .from('timesheets')
       .select(`
         *,
@@ -898,10 +873,11 @@ const loadTimesheets = async () => {
 
     // Applica filtri
     if (selectedEmployee !== 'all') {
-      queryFixed = queryFixed.eq('user_id', selectedEmployee);
+      query = query.eq('user_id', selectedEmployee);
+      console.log('🔍 DEBUG - Filtro dipendente:', selectedEmployee);
     }
     if (selectedProject !== 'all') {
-      queryFixed = queryFixed.eq('project_id', selectedProject);
+      query = query.eq('project_id', selectedProject);
     }
 
     // Filtri per periodo
@@ -929,34 +905,37 @@ const loadTimesheets = async () => {
       data_fine: format(endDate, 'yyyy-MM-dd')
     });
     
-    queryFixed = queryFixed
+    query = query
       .gte('date', format(startDate, 'yyyy-MM-dd'))
       .lte('date', format(endDate, 'yyyy-MM-dd'))
       .order('date', { ascending: false });
 
-    const { data: timesheetsData, error } = await queryFixed;
+    const { data: timesheetsData, error } = await query;
     
     if (error) {
       console.error('❌ DEBUG - Errore query:', error);
       throw error;
     }
     
-    // NUOVO: Carica le sessioni separatamente per ogni timesheet
+    console.log('📋 Timesheets caricati:', timesheetsData?.length || 0);
+    
+    // NUOVO: Carica le sessioni per ogni timesheet separatamente
     let enrichedData = [];
-    if (timesheetsData) {
+    if (timesheetsData && timesheetsData.length > 0) {
       for (const timesheet of timesheetsData) {
-        // Carica le sessioni per questo timesheet
+        // Query separata per le sessioni
         const { data: sessions, error: sessError } = await supabase
           .from('timesheet_sessions')
           .select('*')
           .eq('timesheet_id', timesheet.id)
           .order('session_order');
         
-        if (!sessError) {
-          timesheet.timesheet_sessions = sessions || [];
-        } else {
-          console.error('Errore caricamento sessioni per', timesheet.id, sessError);
+        if (sessError) {
+          console.error(`❌ Errore caricamento sessioni per timesheet ${timesheet.id}:`, sessError);
           timesheet.timesheet_sessions = [];
+        } else {
+          timesheet.timesheet_sessions = sessions || [];
+          console.log(`✅ Sessioni caricate per ${timesheet.id}:`, sessions?.length || 0);
         }
         
         enrichedData.push(timesheet);
