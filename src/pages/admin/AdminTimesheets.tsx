@@ -856,7 +856,7 @@ const loadTimesheets = async () => {
   try {
     console.log('🚀 DEBUG - Inizio caricamento timesheets...');
     
-    // Query principale per i timesheets CON le sessioni
+    // Query principale MODIFICATA per forzare il caricamento delle sessioni
     let query = supabase
       .from('timesheets')
       .select(`
@@ -869,7 +869,7 @@ const loadTimesheets = async () => {
         projects (
           name
         ),
-        timesheet_sessions (
+        timesheet_sessions!inner (
           id,
           session_order,
           start_time,
@@ -880,16 +880,31 @@ const loadTimesheets = async () => {
         )
       `);
 
+    // IMPORTANTE: Rimuovi !inner se vuoi anche timesheets senza sessioni
+    // Cambia in:
+    let queryFixed = supabase
+      .from('timesheets')
+      .select(`
+        *,
+        profiles!timesheets_user_id_fkey (
+          first_name,
+          last_name,
+          email
+        ),
+        projects (
+          name
+        )
+      `);
+
     // Applica filtri
     if (selectedEmployee !== 'all') {
-      query = query.eq('user_id', selectedEmployee);
-      console.log('🔍 DEBUG - Filtro dipendente:', selectedEmployee);
+      queryFixed = queryFixed.eq('user_id', selectedEmployee);
     }
     if (selectedProject !== 'all') {
-      query = query.eq('project_id', selectedProject);
+      queryFixed = queryFixed.eq('project_id', selectedProject);
     }
 
-    // Filtri per periodo in base alla vista attiva
+    // Filtri per periodo
     const baseDate = parseISO(dateFilter);
     let startDate: Date;
     let endDate: Date;
@@ -914,27 +929,49 @@ const loadTimesheets = async () => {
       data_fine: format(endDate, 'yyyy-MM-dd')
     });
     
-    query = query
+    queryFixed = queryFixed
       .gte('date', format(startDate, 'yyyy-MM-dd'))
       .lte('date', format(endDate, 'yyyy-MM-dd'))
       .order('date', { ascending: false });
 
-    const { data, error } = await query;
+    const { data: timesheetsData, error } = await queryFixed;
     
     if (error) {
       console.error('❌ DEBUG - Errore query:', error);
       throw error;
     }
     
-    // DEBUG DETTAGLIATO
+    // NUOVO: Carica le sessioni separatamente per ogni timesheet
+    let enrichedData = [];
+    if (timesheetsData) {
+      for (const timesheet of timesheetsData) {
+        // Carica le sessioni per questo timesheet
+        const { data: sessions, error: sessError } = await supabase
+          .from('timesheet_sessions')
+          .select('*')
+          .eq('timesheet_id', timesheet.id)
+          .order('session_order');
+        
+        if (!sessError) {
+          timesheet.timesheet_sessions = sessions || [];
+        } else {
+          console.error('Errore caricamento sessioni per', timesheet.id, sessError);
+          timesheet.timesheet_sessions = [];
+        }
+        
+        enrichedData.push(timesheet);
+      }
+    }
+    
+    // DEBUG dettagliato
     console.log('✅ DEBUG - Dati ricevuti:', {
-      totale_record: data?.length || 0,
-      primo_record: data?.[0],
-      tutti_i_dati: data
+      totale_record: enrichedData?.length || 0,
+      primo_record: enrichedData?.[0],
+      tutti_i_dati: enrichedData
     });
     
-    // DEBUG SPECIFICO PER LORENZO
-    const lorenzoTimesheets = data?.filter(t => 
+    // DEBUG specifico per Lorenzo
+    const lorenzoTimesheets = enrichedData?.filter(t => 
       t.profiles?.first_name === 'Lorenzo' && 
       t.profiles?.last_name === 'Cibolini'
     );
@@ -951,7 +988,7 @@ const loadTimesheets = async () => {
     });
     
     // DEBUG: Controlla se ci sono timesheets con sessioni
-    const timesheetsConSessioni = data?.filter(t => 
+    const timesheetsConSessioni = enrichedData?.filter(t => 
       t.timesheet_sessions && t.timesheet_sessions.length > 0
     );
     
@@ -961,7 +998,7 @@ const loadTimesheets = async () => {
     });
     
     // Salva i dati nello stato
-    setTimesheets((data as unknown as TimesheetWithProfile[]) || []);
+    setTimesheets(enrichedData as unknown as TimesheetWithProfile[]);
     
     // Carica anche le assenze
     await loadAbsences(startDate, endDate);
