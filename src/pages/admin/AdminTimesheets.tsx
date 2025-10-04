@@ -1247,7 +1247,7 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
             {/* Filtro data */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Data</label>
-              <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+              <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen} modal={false}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
@@ -1260,7 +1260,7 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
                     {dateFilter ? format(parseISO(dateFilter), 'dd/MM/yyyy', { locale: it }) : "Seleziona data"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className="w-auto p-0" align="start" onInteractOutside={(e) => e.preventDefault()}>
                   <CalendarComponent
                     mode="single"
                     selected={dateFilter ? parseISO(dateFilter) : undefined}
