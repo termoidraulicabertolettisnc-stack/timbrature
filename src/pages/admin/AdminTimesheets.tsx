@@ -1264,6 +1264,7 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
                   <CalendarComponent
                     mode="single"
                     selected={dateFilter ? parseISO(dateFilter) : undefined}
+                    month={dateFilter ? parseISO(dateFilter) : undefined}
                     onSelect={(date) => {
                       if (date) {
                         setDateFilter(format(date, 'yyyy-MM-dd'));
@@ -1301,6 +1302,7 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
           <DailySummaryViewFixed 
             timesheets={filteredTimesheets}
             absences={absences}
+            dateFilter={dateFilter}
             aggregateTimesheetsByEmployee={aggregateTimesheetsByEmployee}
             employeeSettings={employeeSettings}
             companySettings={companySettings}
@@ -1309,6 +1311,9 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
               setEditDialogOpen(true);
             }}
             onDeleteTimesheet={handleDeleteTimesheetUnified}
+            onNavigatePrevious={navigatePrevious}
+            onNavigateNext={navigateNext}
+            onNavigateToday={navigateToToday}
           />
         </TabsContent>
 
@@ -1425,19 +1430,27 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
 function DailySummaryViewFixed({ 
   timesheets, 
   absences,
+  dateFilter,
   aggregateTimesheetsByEmployee,
   employeeSettings,
   companySettings,
   onEditTimesheet,
-  onDeleteTimesheet 
+  onDeleteTimesheet,
+  onNavigatePrevious,
+  onNavigateNext,
+  onNavigateToday
 }: {
   timesheets: TimesheetWithProfile[];
   absences: any[];
+  dateFilter: string;
   aggregateTimesheetsByEmployee: () => EmployeeSummary[];
   employeeSettings: any;
   companySettings: any;
   onEditTimesheet: (timesheet: TimesheetWithProfile) => void;
   onDeleteTimesheet: (id: string) => void;
+  onNavigatePrevious: () => void;
+  onNavigateNext: () => void;
+  onNavigateToday: () => void;
 }) {
     // ========== AGGIUNGI QUESTO BLOCCO DI DEBUG ==========
   console.log('🎯 VISTA GIORNALIERA - DEBUG COMPLETO:', {
@@ -1463,13 +1476,45 @@ function DailySummaryViewFixed({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          Riepilogo Giornaliero - Tutte le Sessioni
-        </CardTitle>
-        <CardDescription>
-          Visualizzazione aggregata per dipendente con tutte le sessioni multiple
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Riepilogo Giornaliero - Tutte le Sessioni
+            </CardTitle>
+            <CardDescription>
+              Visualizzazione aggregata per dipendente con tutte le sessioni multiple
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={onNavigatePrevious}
+              title="Giorno precedente"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              onClick={onNavigateToday}
+              className="min-w-[80px]"
+            >
+              Oggi
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={onNavigateNext}
+              title="Giorno successivo"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <div className="mt-2 text-sm text-muted-foreground">
+          {format(parseISO(dateFilter), 'dd MMMM yyyy', { locale: it })}
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
