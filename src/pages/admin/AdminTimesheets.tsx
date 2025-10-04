@@ -1501,185 +1501,163 @@ function DailySummaryViewFixed({
                       </div>
                     </div>
 
-                    <Collapsible>
-                      <CollapsibleTrigger asChild>
-                        <Button variant="ghost" className="w-full justify-between p-0 h-auto">
-                          <span className="text-sm text-muted-foreground">
-                            Dettagli sessioni ({employee.timesheets.length} voci)
-                          </span>
-                          <ChevronDown className="h-4 w-4" />
+<Collapsible>
+  <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+    <ChevronDown className="h-4 w-4" />
+    Dettagli sessioni ({employee.timesheets.length} voci)
+  </CollapsibleTrigger>
+  <CollapsibleContent>
+    <div className="mt-4 overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Data</TableHead>
+            <TableHead>Progetto</TableHead>
+            <TableHead>Orario</TableHead>
+            <TableHead>Ore</TableHead>
+            <TableHead>Tipo</TableHead>
+            <TableHead>Buoni Pasto</TableHead>
+            <TableHead>Posizione</TableHead>
+            <TableHead>Azioni</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {employee.timesheets.map((timesheet: TimesheetWithProfile) => {
+            // Gestione sessioni multiple
+            const sessions = timesheet.timesheet_sessions || [];
+            
+            if (sessions.length > 0) {
+              // Se ci sono sessioni, mostra una riga per ogni sessione
+              return sessions.map((session, sessionIndex) => (
+                <TableRow key={`${timesheet.id}_session_${session.id}`}>
+                  <TableCell>
+                    {sessionIndex === 0 ? format(parseISO(timesheet.date), 'dd/MM/yyyy') : ''}
+                  </TableCell>
+                  <TableCell>
+                    {sessionIndex === 0 ? (timesheet.projects?.name || 'N/A') : ''}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        S{sessionIndex + 1}
+                      </Badge>
+                      <span className="font-mono text-sm">
+                        {session.start_time ? session.start_time.substring(0, 5) : '--:--'} - 
+                        {session.end_time ? session.end_time.substring(0, 5) : '--:--'}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      // Calcola ore per questa sessione
+                      if (session.start_time && session.end_time) {
+                        const start = new Date(`2000-01-01T${session.start_time}`);
+                        const end = new Date(`2000-01-01T${session.end_time}`);
+                        const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+                        return hours.toFixed(2) + 'h';
+                      }
+                      return '0.00h';
+                    })()}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" className="text-xs">
+                      {session.session_type || 'work'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {sessionIndex === 0 && timesheet.meal_voucher_earned && (
+                      <Badge className="bg-green-100 text-green-800">Sì</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {session.notes || '-'}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onEditTimesheet(timesheet)}
+                        title="Modifica giornata"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      {sessionIndex === 0 && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => onDeleteTimesheet(timesheet.id)}
+                          title="Elimina timesheet"
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </Button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="space-y-2 mt-4">
-                        <div className="overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Data</TableHead>
-                                <TableHead>Progetto</TableHead>
-                                <TableHead>Orario</TableHead>
-                                <TableHead>Ore</TableHead>
-                                <TableHead>Tipo</TableHead>
-                                <TableHead>Buoni Pasto</TableHead>
-                                <TableHead>Posizione</TableHead>
-                                <TableHead>Azioni</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {employee.timesheets
-                                .sort((a, b) => {
-                                  // Prima ordina per data, poi per session_order
-                                  const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime();
-                                  if (dateCompare !== 0) return dateCompare;
-                                  return (a.session_order || 0) - (b.session_order || 0);
-                                })
-                                .map((session, index) => {
-                                const mealBenefits = BenefitsService.calculateMealBenefitsSync(
-                                  session, 
-                                  employeeSettings[session.user_id], 
-                                  companySettings
-                                );
-                                
-                                // ID originale per le azioni
-                                const originalId = session.is_session ? session.original_timesheet_id : session.id;
-                                
-                                return (
-                                  <TableRow key={`${session.id}_${index}`} className={session.is_session ? 'bg-purple-50/50' : ''}>
-                                    <TableCell className="font-medium">
-                                      {format(parseISO(session.date), 'dd/MM/yyyy', { locale: it })}
-                                      {(session.is_saturday || session.is_holiday) && (
-                                        <Badge variant="outline" className="ml-2 text-xs">
-                                          {session.is_holiday ? 'Festivo' : 'Sabato'}
-                                        </Badge>
-                                      )}
-                                    </TableCell>
-                                    <TableCell>
-                                      {session.projects ? session.projects.name : 'N/A'}
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="flex flex-col gap-1">
-                                        <div className="flex items-center gap-2">
-                                          <span>{session.start_time ? formatInTimeZone(parseISO(session.start_time), 'Europe/Rome', 'HH:mm') : '-'}</span>
-                                          <span>→</span>
-                                          <span>{session.end_time ? formatInTimeZone(parseISO(session.end_time), 'Europe/Rome', 'HH:mm') : 'In corso'}</span>
-                                          {!session.end_time && (
-                                            <Badge variant="secondary" className="text-xs">ATTIVO</Badge>
-                                          )}
-                                        </div>
-                                        {session.lunch_start_time && session.lunch_end_time && (
-                                          <div className="text-xs text-muted-foreground">
-                                            Pausa: {formatInTimeZone(parseISO(session.lunch_start_time), 'Europe/Rome', 'HH:mm')} - {formatInTimeZone(parseISO(session.lunch_end_time), 'Europe/Rome', 'HH:mm')}
-                                          </div>
-                                        )}
-                                        {session.session_notes && (
-                                          <div className="text-xs text-muted-foreground italic">
-                                            {session.session_notes}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="space-y-1">
-                                         <div className="font-medium">
-                                            <HoursDisplayFixed employee={{ 
-                                              ...employee, 
-                                              total_hours: session.total_hours || 0,
-                                              regular_hours: 0,  // Non calcolare qui
-                                              overtime_hours: 0, // Non calcolare qui
-                                              night_hours: session.night_hours || 0,
-                                              meal_vouchers: 0
-                                            }} />
-                                         </div>
-                                        {session.overtime_hours && session.overtime_hours > 0 && (
-                                          <div className="text-xs text-orange-600">
-                                            +{session.overtime_hours.toFixed(1)}h straord.
-                                          </div>
-                                        )}
-                                        {session.night_hours && session.night_hours > 0 && (
-                                          <div className="text-xs text-blue-600">
-                                            {session.night_hours.toFixed(1)}h notturne
-                                          </div>
-                                        )}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="flex flex-col gap-1">
-                                        {session.is_session ? (
-                                          <Badge variant="outline" className="text-xs w-fit">
-                                            Sessione #{session.session_order || 1}
-                                          </Badge>
-                                        ) : (
-                                          <Badge variant="secondary" className="text-xs w-fit">
-                                            Standard
-                                          </Badge>
-                                        )}
-                                        {session.session_type && (
-                                          <span className="text-xs text-muted-foreground">
-                                            {session.session_type}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="flex items-center gap-1">
-                                        {mealBenefits.mealVoucher && !session.is_session && (
-                                          <Badge variant="secondary" className="text-xs">Buono</Badge>
-                                        )}
-                                        {mealBenefits.dailyAllowance && !session.is_session && (
-                                          <Badge variant="outline" className="text-xs">Indennità</Badge>
-                                        )}
-                                        {(!mealBenefits.mealVoucher && !mealBenefits.dailyAllowance) || session.is_session ? (
-                                          <span className="text-xs text-muted-foreground">-</span>
-                                        ) : null}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <LocationDisplay 
-                                        startLat={session.start_location_lat}
-                                        startLng={session.start_location_lng}
-                                        endLat={session.end_location_lat}
-                                        endLng={session.end_location_lng}
-                                      />
-                                    </TableCell>
-                                     <TableCell>
-                                       {(() => {
-                                         return (
-                                           <div className="flex gap-1">
-                                             <Button
-                                               variant="ghost"
-                                               size="sm"
-                                               className="h-6 w-6 p-0"
-                                               onClick={() => {
-                                                 const originalId = session.is_session ? session.original_timesheet_id : session.id;
-                                                 onEditTimesheet({ ...session, id: originalId });
-                                               }}
-                                             >
-                                               <Edit className="h-4 w-4" />
-                                             </Button>
-                                             <Button
-                                               variant="ghost"
-                                               size="sm"
-                                               className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
-                                               onClick={() => {
-                                                 const originalId = session.is_session ? session.original_timesheet_id : session.id;
-                                                 onDeleteTimesheet(originalId);
-                                               }}
-                                               title="Elimina timesheet"
-                                             >
-                                               <Trash2 className="h-4 w-4" />
-                                             </Button>
-                                           </div>
-                                         );
-                                       })()}
-                                     </TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                            </TableBody>
-                          </Table>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ));
+            } else {
+              // Fallback per timesheet senza sessioni
+              return (
+                <TableRow key={timesheet.id}>
+                  <TableCell>{format(parseISO(timesheet.date), 'dd/MM/yyyy')}</TableCell>
+                  <TableCell>{timesheet.projects?.name || 'N/A'}</TableCell>
+                  <TableCell>
+                    {timesheet.start_time ? format(parseISO(timesheet.start_time), 'HH:mm') : '--:--'} - 
+                    {timesheet.end_time ? format(parseISO(timesheet.end_time), 'HH:mm') : '--:--'}
+                  </TableCell>
+                  <TableCell>
+                    <div>
+                      <div>Totale: {timesheet.total_hours?.toFixed(2) || '0.00'}h</div>
+                      {timesheet.overtime_hours > 0 && (
+                        <div className="text-xs text-orange-600">
+                          Straordinario: {timesheet.overtime_hours.toFixed(2)}h
                         </div>
-                      </CollapsibleContent>
-                    </Collapsible>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {timesheet.is_absence ? (
+                      <Badge variant="outline">{timesheet.absence_type}</Badge>
+                    ) : (
+                      <Badge variant="secondary">Standard</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {timesheet.meal_voucher_earned && (
+                      <Badge className="bg-green-100 text-green-800">Sì</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {timesheet.notes || 'Nessuna posizione'}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onEditTimesheet(timesheet)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onDeleteTimesheet(timesheet.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            }
+          }).flat()} {/* Importante: .flat() per appiattire l'array di arrays */}
+        </TableBody>
+      </Table>
+    </div>
+  </CollapsibleContent>
+</Collapsible>
 
                     {/* Mostra le assenze per questo dipendente */}
                     {absences.filter(absence => absence.user_id === employee.user_id).length > 0 && (
