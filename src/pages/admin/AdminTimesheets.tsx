@@ -1628,7 +1628,11 @@ function DailySummaryViewFixed({
                     )}
                   </TableCell>
                   <TableCell>
-                    {session.notes || '-'}
+                    {sessionIndex === 0 && (timesheet.start_location_lat && timesheet.start_location_lng) ? (
+                      <span className="text-xs">
+                        {timesheet.start_location_lat.toFixed(4)}, {timesheet.start_location_lng.toFixed(4)}
+                      </span>
+                    ) : '-'}
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
@@ -1661,25 +1665,18 @@ function DailySummaryViewFixed({
                   <TableCell>{format(parseISO(timesheet.date), 'dd/MM/yyyy')}</TableCell>
                   <TableCell>{timesheet.projects?.name || 'N/A'}</TableCell>
                   <TableCell>
-                    {timesheet.start_time ? format(parseISO(timesheet.start_time), 'HH:mm') : '--:--'} - 
-                    {timesheet.end_time ? format(parseISO(timesheet.end_time), 'HH:mm') : '--:--'}
+                    <span className="font-mono text-sm">
+                      {timesheet.start_time ? format(parseISO(timesheet.start_time), 'HH:mm') : '--:--'} -
+                      {timesheet.end_time ? format(parseISO(timesheet.end_time), 'HH:mm') : '--:--'}
+                    </span>
                   </TableCell>
                   <TableCell>
-                    <div>
-                      <div>Totale: {timesheet.total_hours?.toFixed(2) || '0.00'}h</div>
-                      {timesheet.overtime_hours > 0 && (
-                        <div className="text-xs text-orange-600">
-                          Straordinario: {timesheet.overtime_hours.toFixed(2)}h
-                        </div>
-                      )}
-                    </div>
+                    {timesheet.total_hours?.toFixed(2) || '0.00'}h
                   </TableCell>
                   <TableCell>
-                    {timesheet.is_absence ? (
-                      <Badge variant="outline">{timesheet.absence_type}</Badge>
-                    ) : (
-                      <Badge variant="secondary">Standard</Badge>
-                    )}
+                    <Badge variant="secondary" className="text-xs">
+                      {timesheet.is_absence ? timesheet.absence_type : 'work'}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     {timesheet.meal_voucher_earned && (
@@ -1687,7 +1684,11 @@ function DailySummaryViewFixed({
                     )}
                   </TableCell>
                   <TableCell>
-                    {timesheet.notes || 'Nessuna posizione'}
+                    {(timesheet.start_location_lat && timesheet.start_location_lng) ? (
+                      <span className="text-xs">
+                        {timesheet.start_location_lat.toFixed(4)}, {timesheet.start_location_lng.toFixed(4)}
+                      </span>
+                    ) : '-'}
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">

@@ -237,15 +237,14 @@ const TimesheetEntry = () => {
 
       const nextSessionOrder = sessions && sessions.length > 0 ? sessions[0].session_order + 1 : 1;
 
-      const { error: sessionError } = await supabase
+      const { error: sessionError} = await supabase
         .from('timesheet_sessions')
         .insert({
           timesheet_id: timesheetId,
           session_order: nextSessionOrder,
           session_type: 'work',
           start_time: now,
-          start_location_lat: location.lat,
-          start_location_lng: location.lng,
+          end_time: null,
           notes: notes || null
         });
 
