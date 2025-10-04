@@ -1260,7 +1260,7 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
                     {dateFilter ? format(parseISO(dateFilter), 'dd/MM/yyyy', { locale: it }) : "Seleziona data"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start" onInteractOutside={(e) => e.preventDefault()}>
+                <PopoverContent className="w-auto p-0 pointer-events-auto" align="start" onInteractOutside={(e) => e.preventDefault()}>
                   <CalendarComponent
                     mode="single"
                     selected={dateFilter ? parseISO(dateFilter) : undefined}
