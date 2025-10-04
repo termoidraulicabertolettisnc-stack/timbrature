@@ -274,6 +274,7 @@ interface EmployeeSummary {
   meal_vouchers: number;
   saturday_hours?: number;
   holiday_hours?: number;
+  total_sessions?: number;
   timesheets: ExtendedTimesheetWithProfile[];
 }
 
@@ -930,15 +931,18 @@ const loadTimesheets = async () => {
           .eq('timesheet_id', timesheet.id)
           .order('session_order');
         
+        // Cast to ExtendedTimesheetWithProfile per aggiungere sessioni
+        const enrichedTimesheet = timesheet as ExtendedTimesheetWithProfile;
+        
         if (sessError) {
           console.error(`❌ Errore caricamento sessioni per timesheet ${timesheet.id}:`, sessError);
-          timesheet.timesheet_sessions = [];
+          enrichedTimesheet.timesheet_sessions = [];
         } else {
-          timesheet.timesheet_sessions = sessions || [];
+          enrichedTimesheet.timesheet_sessions = sessions || [];
           console.log(`✅ Sessioni caricate per ${timesheet.id}:`, sessions?.length || 0);
         }
         
-        enrichedData.push(timesheet);
+        enrichedData.push(enrichedTimesheet);
       }
     }
     
@@ -1097,7 +1101,8 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
         night_hours: 0,
         regular_hours: 0,
         meal_vouchers: 0,
-        timesheets: []
+        timesheets: [],
+        total_sessions: 0
       });
     }
     
@@ -1106,28 +1111,36 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
     // Aggiungi il timesheet alla lista
     employee.timesheets.push(timesheet);
     
-    // Aggrega solo una volta per ogni timesheet_id (non per sessione)
-    const timesheetId = (timesheet as ExtendedTimesheetWithProfile).original_timesheet_id || timesheet.id;
-    if (!(timesheet as ExtendedTimesheetWithProfile).is_session || (timesheet as ExtendedTimesheetWithProfile).session_order === 1) {
-      // Conta straordinari e notturne solo una volta per giornata
-      employee.overtime_hours += parseFloat(String(timesheet.overtime_hours || 0));
-      employee.night_hours += parseFloat(String(timesheet.night_hours || 0));
+    // Conta il numero di sessioni
+    const sessions = timesheet.timesheet_sessions || [];
+    if (sessions.length > 0) {
+      employee.total_sessions += sessions.length;
+      
+      // Calcola le ore totali sommando le ore di ogni sessione
+      sessions.forEach(session => {
+        if (session.start_time && session.end_time) {
+          const start = new Date(`2000-01-01T${session.start_time}`);
+          const end = new Date(`2000-01-01T${session.end_time}`);
+          const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+          employee.total_hours += hours;
+        }
+      });
+    } else {
+      employee.total_sessions += 1;
+      employee.total_hours += parseFloat(String(timesheet.total_hours || 0));
     }
     
-    // Le ore totali vanno sommate per ogni sessione
-    const hours = parseFloat(String(timesheet.total_hours || 0));
-    employee.total_hours += hours;
+    // Aggrega straordinari e notturne solo una volta per timesheet
+    employee.overtime_hours += parseFloat(String(timesheet.overtime_hours || 0));
+    employee.night_hours += parseFloat(String(timesheet.night_hours || 0));
   });
   
   // Calcola ore regolari per ogni dipendente
   employeeMap.forEach((employee) => {
     employee.regular_hours = Math.max(0, employee.total_hours - employee.overtime_hours);
-    // Calcola buoni pasto (1 per giorno con più di 6 ore)
-    const uniqueDays = new Set(employee.timesheets.map(t => t.date));
-    uniqueDays.forEach(date => {
-      const dayTimesheets = employee.timesheets.filter(t => t.date === date);
-      const dayHours = dayTimesheets.reduce((sum, t) => sum + parseFloat(String(t.total_hours || 0)), 0);
-      if (dayHours >= 6) {
+    // Calcola buoni pasto basandosi su meal_voucher_earned
+    employee.timesheets.forEach(t => {
+      if (t.meal_voucher_earned) {
         employee.meal_vouchers++;
       }
     });
@@ -1481,7 +1494,7 @@ function DailySummaryViewFixed({
                           {employee.total_hours.toFixed(1)}h totali
                         </Badge>
                         <Badge variant="outline" className="text-purple-600 border-purple-200">
-                          {employee.timesheets.length} sessioni
+                          {employee.total_sessions || employee.timesheets.length} sessioni
                         </Badge>
                         {employee.overtime_hours > 0 && (
                           <Badge variant="outline" className="text-orange-600 border-orange-200">
@@ -1504,7 +1517,7 @@ function DailySummaryViewFixed({
 <Collapsible>
   <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
     <ChevronDown className="h-4 w-4" />
-    Dettagli sessioni ({employee.timesheets.length} voci)
+    Dettagli sessioni ({employee.total_sessions || employee.timesheets.length} voci)
   </CollapsibleTrigger>
   <CollapsibleContent>
     <div className="mt-4 overflow-x-auto">
