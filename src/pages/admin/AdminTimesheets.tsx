@@ -1362,6 +1362,27 @@ function DailySummaryViewFixed({
   onEditTimesheet: (timesheet: TimesheetWithProfile) => void;
   onDeleteTimesheet: (id: string) => void;
 }) {
+    // ========== AGGIUNGI QUESTO BLOCCO DI DEBUG ==========
+  console.log('🎯 VISTA GIORNALIERA - DEBUG COMPLETO:', {
+    numero_timesheets_ricevuti: timesheets.length,
+    timesheets: timesheets,
+    primo_timesheet: timesheets[0],
+    ha_sessioni_il_primo: timesheets[0]?.timesheet_sessions,
+  });
+  
+  // Debug specifico per Lorenzo
+  const lorenzoData = timesheets.filter(t => 
+    t.profiles?.first_name === 'Lorenzo'
+  );
+  
+  console.log('🔎 VISTA GIORNALIERA - LORENZO:', {
+    trovati: lorenzoData.length,
+    dettaglio: lorenzoData.map(t => ({
+      data: t.date,
+      sessioni: t.timesheet_sessions,
+      numero_sessioni: t.timesheet_sessions?.length || 0
+    }))
+  });
   return (
     <Card>
       <CardHeader>
