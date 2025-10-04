@@ -854,7 +854,9 @@ export default function AdminTimesheets() {
 const loadTimesheets = async () => {
   setLoading(true);
   try {
-    // Torniamo alla query originale con le sessioni
+    console.log('🚀 DEBUG - Inizio caricamento timesheets...');
+    
+    // Query principale per i timesheets CON le sessioni
     let query = supabase
       .from('timesheets')
       .select(`
@@ -873,19 +875,21 @@ const loadTimesheets = async () => {
           start_time,
           end_time,
           session_type,
-          notes
+          notes,
+          pause_minutes
         )
       `);
 
     // Applica filtri
     if (selectedEmployee !== 'all') {
       query = query.eq('user_id', selectedEmployee);
+      console.log('🔍 DEBUG - Filtro dipendente:', selectedEmployee);
     }
     if (selectedProject !== 'all') {
       query = query.eq('project_id', selectedProject);
     }
 
-    // Filtri per periodo
+    // Filtri per periodo in base alla vista attiva
     const baseDate = parseISO(dateFilter);
     let startDate: Date;
     let endDate: Date;
@@ -899,35 +903,79 @@ const loadTimesheets = async () => {
         startDate = startOfMonth(baseDate);
         endDate = endOfMonth(baseDate);
         break;
-      default:
+      default: // daily
         startDate = baseDate;
         endDate = baseDate;
     }
     
+    console.log('🔍 DEBUG - Periodo query:', {
+      vista: activeView,
+      data_inizio: format(startDate, 'yyyy-MM-dd'),
+      data_fine: format(endDate, 'yyyy-MM-dd')
+    });
+    
     query = query
       .gte('date', format(startDate, 'yyyy-MM-dd'))
       .lte('date', format(endDate, 'yyyy-MM-dd'))
-      .order('date', { ascending: false })
-      .order('start_time', { ascending: false });
+      .order('date', { ascending: false });
 
     const { data, error } = await query;
     
-    if (error) throw error;
-
-     // DEBUG: Verifica cosa arriva per Lorenzo
-    console.log('DEBUG Timesheets Lorenzo:', 
-      data?.filter(t => t.profiles?.first_name === 'Lorenzo')
+    if (error) {
+      console.error('❌ DEBUG - Errore query:', error);
+      throw error;
+    }
+    
+    // DEBUG DETTAGLIATO
+    console.log('✅ DEBUG - Dati ricevuti:', {
+      totale_record: data?.length || 0,
+      primo_record: data?.[0],
+      tutti_i_dati: data
+    });
+    
+    // DEBUG SPECIFICO PER LORENZO
+    const lorenzoTimesheets = data?.filter(t => 
+      t.profiles?.first_name === 'Lorenzo' && 
+      t.profiles?.last_name === 'Cibolini'
     );
     
+    console.log('👤 DEBUG LORENZO:', {
+      record_trovati: lorenzoTimesheets?.length || 0,
+      dettaglio: lorenzoTimesheets?.map(t => ({
+        data: t.date,
+        id: t.id,
+        sessioni: t.timesheet_sessions?.length || 0,
+        dettaglio_sessioni: t.timesheet_sessions,
+        ore_totali: t.total_hours
+      }))
+    });
+    
+    // DEBUG: Controlla se ci sono timesheets con sessioni
+    const timesheetsConSessioni = data?.filter(t => 
+      t.timesheet_sessions && t.timesheet_sessions.length > 0
+    );
+    
+    console.log('📊 DEBUG SESSIONI MULTIPLE:', {
+      timesheets_con_sessioni: timesheetsConSessioni?.length || 0,
+      esempio_sessioni: timesheetsConSessioni?.[0]?.timesheet_sessions
+    });
+    
+    // Salva i dati nello stato
     setTimesheets((data as unknown as TimesheetWithProfile[]) || []);
-       
+    
     // Carica anche le assenze
     await loadAbsences(startDate, endDate);
     
   } catch (error) {
-    console.error('Error loading timesheets:', error);
+    console.error('❌ DEBUG - Errore nel caricamento:', error);
+    toast({
+      title: "Errore",
+      description: "Errore nel caricamento dei timesheet",
+      variant: "destructive",
+    });
   } finally {
     setLoading(false);
+    console.log('🏁 DEBUG - Caricamento completato');
   }
 };
 
