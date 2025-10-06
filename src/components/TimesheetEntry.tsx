@@ -10,6 +10,7 @@ import { Clock, MapPin, Play, Square, Navigation } from 'lucide-react';
 import LocationModal from './LocationModal';
 import { useAdaptiveLocationTracking } from '@/hooks/use-adaptive-location-tracking';
 import { Badge } from '@/components/ui/badge';
+import { format } from 'date-fns';
 
 interface Project {
   id: string;
@@ -237,13 +238,16 @@ const TimesheetEntry = () => {
 
       const nextSessionOrder = sessions && sessions.length > 0 ? sessions[0].session_order + 1 : 1;
 
+      // Converti timestamp ISO in formato TIME (HH:mm:ss)
+      const timeOnly = format(new Date(now), 'HH:mm:ss');
+
       const { error: sessionError} = await supabase
         .from('timesheet_sessions')
         .insert({
           timesheet_id: timesheetId,
           session_order: nextSessionOrder,
           session_type: 'work',
-          start_time: now,
+          start_time: timeOnly,
           end_time: null,
           notes: notes || null
         });
@@ -295,10 +299,13 @@ const TimesheetEntry = () => {
       // Chiudi la sessione più vecchia (la prima nell'array)
       const oldestSession = allOpenSessions[0];
       
+      // Converti timestamp ISO in formato TIME (HH:mm:ss)
+      const timeOnly = format(new Date(now), 'HH:mm:ss');
+      
       const { error: sessionError } = await supabase
         .from('timesheet_sessions')
         .update({
-          end_time: now,
+          end_time: timeOnly,
           end_location_lat: location.lat,
           end_location_lng: location.lng,
           notes: notes || null,
