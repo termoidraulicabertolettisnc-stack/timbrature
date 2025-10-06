@@ -64,7 +64,18 @@ const TestLogin = () => {
   );
 };
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minuti - dati considerati "fresh"
+      gcTime: 10 * 60 * 1000, // 10 minuti - cache mantenuta in memoria (era cacheTime)
+      refetchOnWindowFocus: false, // NON ricaricare quando torni sulla finestra
+      refetchOnMount: false, // NON ricaricare quando componente monta
+      refetchOnReconnect: true, // Ricarica solo se perdi connessione
+      retry: 1, // Riprova solo 1 volta in caso di errore
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
