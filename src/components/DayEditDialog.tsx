@@ -475,6 +475,79 @@ export function DayEditDialog({
             </CardContent>
           </Card>
 
+          {/* Lunch Break Management */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UtensilsCrossed className="h-5 w-5" />
+                Gestione Pausa Pranzo
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Configurazione attiva */}
+              <Alert>
+                <UtensilsCrossed className="h-4 w-4" />
+                <AlertDescription>
+                  Configurazione attiva: <strong>{lunchBreakData.configured_minutes} minuti</strong>
+                  {employeeSettings ? ' (da impostazioni dipendente)' : ' (da impostazioni aziendali)'}
+                </AlertDescription>
+              </Alert>
+
+              {/* Override attivo */}
+              {timesheet?.lunch_duration_minutes !== null && timesheet?.lunch_duration_minutes !== undefined && (
+                <Alert className="border-purple-500 bg-purple-50 dark:bg-purple-950">
+                  <AlertTriangle className="h-4 w-4 text-purple-600" />
+                  <AlertDescription className="text-purple-700 dark:text-purple-300">
+                    Override attivo: <strong>{timesheet.lunch_duration_minutes} minuti</strong> per questa giornata
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Switch per abilitare override */}
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <Label htmlFor="lunch-override" className="cursor-pointer">
+                  Sovrascrivi pausa solo per questa giornata
+                </Label>
+                <Switch
+                  id="lunch-override"
+                  checked={showLunchOverride}
+                  onCheckedChange={setShowLunchOverride}
+                />
+              </div>
+
+              {/* Select per override minuti */}
+              {showLunchOverride && (
+                <div className="space-y-2 p-4 border rounded-lg bg-muted/50">
+                  <Label htmlFor="override-minutes">Minuti pausa per questa giornata</Label>
+                  <Select
+                    value={lunchBreakData.override_minutes?.toString() || ''}
+                    onValueChange={(value) => {
+                      const minutes = parseInt(value);
+                      setLunchBreakData(prev => ({
+                        ...prev,
+                        override_minutes: minutes,
+                        effective_minutes: minutes,
+                      }));
+                    }}
+                  >
+                    <SelectTrigger id="override-minutes">
+                      <SelectValue placeholder="Seleziona minuti" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">0 minuti</SelectItem>
+                      <SelectItem value="15">15 minuti</SelectItem>
+                      <SelectItem value="30">30 minuti</SelectItem>
+                      <SelectItem value="45">45 minuti</SelectItem>
+                      <SelectItem value="60">60 minuti</SelectItem>
+                      <SelectItem value="90">90 minuti</SelectItem>
+                      <SelectItem value="120">120 minuti</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Sessions */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
