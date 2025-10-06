@@ -196,32 +196,52 @@ export function WeeklyTimelineView({
             );
           }
 
-          // Calcola straordinari dal totale giornaliero, non per singola sessione
+          // Calcola totale ordinarie per il giorno (max 8h)
           const dayTotalHours = timesheet.total_hours || sessionDuration;
           const dayOvertimeHours = timesheet.overtime_hours || 0;
-          const dayRegularHours = dayTotalHours - dayOvertimeHours;
+          const dayRegularHours = Math.min(dayTotalHours - dayOvertimeHours, 8);
 
-          // Distribuisci proporzionalmente questa sessione sul totale
+          // Calcola ore cumulative delle sessioni precedenti
+          let cumulativeHoursBeforeThisSession = 0;
+          for (let i = 0; i < segmentIndex; i++) {
+            const prevSegment = segments[i];
+            const prevStart = utcToLocal(prevSegment.startUtc);
+            const prevEnd = utcToLocal(prevSegment.endUtc);
+            let prevDuration: number;
+            if (timesheet.end_time && timesheet.total_hours !== null) {
+              // Per timesheet chiusi, usa proporzione
+              const totalSegments = segments.length;
+              prevDuration = (timesheet.total_hours - dayOvertimeHours) / totalSegments;
+            } else {
+              prevDuration = (prevEnd.getTime() - prevStart.getTime()) / (1000 * 60 * 60);
+            }
+            cumulativeHoursBeforeThisSession += prevDuration;
+          }
+
+          // Distribuisci ordinarie/straordinari per questa sessione
+          const remainingRegularHours = Math.max(0, dayRegularHours - cumulativeHoursBeforeThisSession);
+
           let sessionRegularHours: number;
           let sessionOvertimeHours: number;
 
-          if (dayTotalHours > 0) {
-            const sessionProportion = sessionDuration / dayTotalHours;
-            sessionRegularHours = dayRegularHours * sessionProportion;
-            sessionOvertimeHours = dayOvertimeHours * sessionProportion;
-            
-            console.log(`📊 Session overtime distribution:`, {
-              session_duration: sessionDuration.toFixed(2),
-              day_total: dayTotalHours.toFixed(2),
-              day_overtime: dayOvertimeHours.toFixed(2),
-              session_proportion: sessionProportion.toFixed(2),
-              session_regular: sessionRegularHours.toFixed(2),
-              session_overtime: sessionOvertimeHours.toFixed(2)
-            });
-          } else {
+          if (remainingRegularHours >= sessionDuration) {
             sessionRegularHours = sessionDuration;
             sessionOvertimeHours = 0;
+          } else if (remainingRegularHours > 0) {
+            sessionRegularHours = remainingRegularHours;
+            sessionOvertimeHours = sessionDuration - remainingRegularHours;
+          } else {
+            sessionRegularHours = 0;
+            sessionOvertimeHours = sessionDuration;
           }
+
+          console.log(`📊 Session ${segmentIndex} overtime:`, {
+            session_dur: sessionDuration.toFixed(2),
+            cumulative: cumulativeHoursBeforeThisSession.toFixed(2),
+            remaining_reg: remainingRegularHours.toFixed(2),
+            sess_reg: sessionRegularHours.toFixed(2),
+            sess_ovt: sessionOvertimeHours.toFixed(2)
+          });
           
           const startHour = localStart.getHours() + localStart.getMinutes() / 60;
           const endHour = localEnd.getHours() + localEnd.getMinutes() / 60;
