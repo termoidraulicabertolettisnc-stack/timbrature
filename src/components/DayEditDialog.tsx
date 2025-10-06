@@ -72,12 +72,18 @@ interface DayEditDialogProps {
 
 const TZ = 'Europe/Rome';
 
-const utcToLocalTime = (utcString: string): string => {
+const utcToLocalTime = (timeString: string): string => {
   try {
-    const localTime = toZonedTime(new Date(utcString), TZ);
+    // Se è già nel formato HH:mm o HH:mm:ss, estrailo direttamente
+    if (/^\d{2}:\d{2}(:\d{2})?$/.test(timeString)) {
+      return timeString.substring(0, 5); // Restituisce HH:mm
+    }
+    
+    // Altrimenti, converti da timestamp UTC
+    const localTime = toZonedTime(new Date(timeString), TZ);
     return format(localTime, 'HH:mm');
   } catch (error) {
-    console.error('Error converting UTC to local time:', error);
+    console.error('Error converting time:', error);
     return '';
   }
 };
