@@ -1302,11 +1302,18 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
   <DailySummaryViewFixed 
     timesheets={filteredTimesheets}
     absences={absences}
-    aggregateTimesheetsByEmployee={aggregateTimesheetsByEmployeeFixed}
+    dateFilter={dateFilter}
+    aggregateTimesheetsByEmployee={aggregateTimesheetsByEmployee}
     employeeSettings={employeeSettings}
     companySettings={companySettings}
-    onEditDay={handleEditDay}
+    onEditTimesheet={(timesheet) => {
+      setEditingTimesheet(timesheet);
+      setEditDialogOpen(true);
+    }}
     onDeleteTimesheet={handleDeleteTimesheetUnified}
+    onNavigatePrevious={navigatePrevious}
+    onNavigateNext={navigateNext}
+    onNavigateToday={navigateToToday}
   />
 </TabsContent>
 
