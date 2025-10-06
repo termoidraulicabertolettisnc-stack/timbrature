@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useTimesheets } from '@/hooks/useTimesheets';
 import { Coffee, Zap, Moon, UtensilsCrossed } from "lucide-react";
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -369,11 +370,10 @@ export default function AdminTimesheets() {
   const { user } = useAuth();
   const { toast } = useToast();
   
-  const [timesheets, setTimesheets] = useState<TimesheetWithProfile[]>([]);
+  
   const [absences, setAbsences] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   
   // Stati per i filtri
@@ -382,6 +382,18 @@ export default function AdminTimesheets() {
   const [dateFilter, setDateFilter] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  // Use React Query hook for timesheets (after state declarations)
+  const { 
+    timesheets, 
+    isLoading: loading, 
+    invalidate: invalidateTimesheets 
+  } = useTimesheets({
+    dateFilter,
+    activeView,
+    selectedEmployee,
+    selectedProject,
+  });
 
   // Funzioni per navigazione date
   const navigateToToday = () => {
@@ -482,8 +494,8 @@ export default function AdminTimesheets() {
           table: 'timesheets'
         },
         () => {
-          console.log('🔄 Ricaricamento timesheets per cambio real-time');
-          loadTimesheets();
+          console.log('🔄 Cache invalidation triggered by realtime');
+          invalidateTimesheets();
         }
       )
       .subscribe();
@@ -491,14 +503,38 @@ export default function AdminTimesheets() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [invalidateTimesheets]);
 
   useEffect(() => {
     if (user) {
       loadEmployees();
       loadProjects();
       loadSettings();
-      loadTimesheets();
+    }
+  }, [user]);
+
+  // Separate useEffect for absences (triggered by same filters as timesheets hook)
+  useEffect(() => {
+    if (user) {
+      const baseDate = parseISO(dateFilter);
+      let startDate: Date;
+      let endDate: Date;
+      
+      switch (activeView) {
+        case 'weekly':
+          startDate = startOfWeek(baseDate, { weekStartsOn: 1 });
+          endDate = endOfWeek(baseDate, { weekStartsOn: 1 });
+          break;
+        case 'monthly':
+          startDate = startOfMonth(baseDate);
+          endDate = endOfMonth(baseDate);
+          break;
+        default:
+          startDate = baseDate;
+          endDate = baseDate;
+      }
+      
+      loadAbsences(startDate, endDate);
     }
   }, [user, selectedEmployee, selectedProject, dateFilter, activeView]);
 
@@ -684,8 +720,8 @@ export default function AdminTimesheets() {
           : "Timesheet eliminato con successo",
       });
 
-      // Ricarica i dati
-      loadTimesheets();
+      // Invalida cache per ricaricare
+      invalidateTimesheets();
       return true;
 
     } catch (error: any) {
@@ -852,152 +888,7 @@ export default function AdminTimesheets() {
     );
   };
 
-const loadTimesheets = async () => {
-  setLoading(true);
-  try {
-    console.log('🚀 DEBUG - Inizio caricamento timesheets...');
-    
-    // Query senza le sessioni (le caricheremo separatamente)
-    let query = supabase
-      .from('timesheets')
-      .select(`
-        *,
-        profiles!timesheets_user_id_fkey (
-          first_name,
-          last_name,
-          email
-        ),
-        projects (
-          name
-        )
-      `);
-
-    // Applica filtri
-    if (selectedEmployee !== 'all') {
-      query = query.eq('user_id', selectedEmployee);
-      console.log('🔍 DEBUG - Filtro dipendente:', selectedEmployee);
-    }
-    if (selectedProject !== 'all') {
-      query = query.eq('project_id', selectedProject);
-    }
-
-    // Filtri per periodo
-    const baseDate = parseISO(dateFilter);
-    let startDate: Date;
-    let endDate: Date;
-    
-    switch (activeView) {
-      case 'weekly':
-        startDate = startOfWeek(baseDate, { weekStartsOn: 1 });
-        endDate = endOfWeek(baseDate, { weekStartsOn: 1 });
-        break;
-      case 'monthly':
-        startDate = startOfMonth(baseDate);
-        endDate = endOfMonth(baseDate);
-        break;
-      default: // daily
-        startDate = baseDate;
-        endDate = baseDate;
-    }
-    
-    console.log('🔍 DEBUG - Periodo query:', {
-      vista: activeView,
-      data_inizio: format(startDate, 'yyyy-MM-dd'),
-      data_fine: format(endDate, 'yyyy-MM-dd')
-    });
-    
-    query = query
-      .gte('date', format(startDate, 'yyyy-MM-dd'))
-      .lte('date', format(endDate, 'yyyy-MM-dd'))
-      .order('date', { ascending: false });
-
-    const { data: timesheetsData, error } = await query;
-    
-    if (error) {
-      console.error('❌ DEBUG - Errore query:', error);
-      throw error;
-    }
-    
-    console.log('📋 Timesheets caricati:', timesheetsData?.length || 0);
-    
-    // NUOVO: Carica le sessioni per ogni timesheet separatamente
-    let enrichedData = [];
-    if (timesheetsData && timesheetsData.length > 0) {
-      for (const timesheet of timesheetsData) {
-        // Query separata per le sessioni
-        const { data: sessions, error: sessError } = await supabase
-          .from('timesheet_sessions')
-          .select('*')
-          .eq('timesheet_id', timesheet.id)
-          .order('session_order');
-        
-        // Cast to ExtendedTimesheetWithProfile per aggiungere sessioni
-        const enrichedTimesheet = timesheet as ExtendedTimesheetWithProfile;
-        
-        if (sessError) {
-          console.error(`❌ Errore caricamento sessioni per timesheet ${timesheet.id}:`, sessError);
-          enrichedTimesheet.timesheet_sessions = [];
-        } else {
-          enrichedTimesheet.timesheet_sessions = sessions || [];
-          console.log(`✅ Sessioni caricate per ${timesheet.id}:`, sessions?.length || 0);
-        }
-        
-        enrichedData.push(enrichedTimesheet);
-      }
-    }
-    
-    // DEBUG dettagliato
-    console.log('✅ DEBUG - Dati ricevuti:', {
-      totale_record: enrichedData?.length || 0,
-      primo_record: enrichedData?.[0],
-      tutti_i_dati: enrichedData
-    });
-    
-    // DEBUG specifico per Lorenzo
-    const lorenzoTimesheets = enrichedData?.filter(t => 
-      t.profiles?.first_name === 'Lorenzo' && 
-      t.profiles?.last_name === 'Cibolini'
-    );
-    
-    console.log('👤 DEBUG LORENZO:', {
-      record_trovati: lorenzoTimesheets?.length || 0,
-      dettaglio: lorenzoTimesheets?.map(t => ({
-        data: t.date,
-        id: t.id,
-        sessioni: t.timesheet_sessions?.length || 0,
-        dettaglio_sessioni: t.timesheet_sessions,
-        ore_totali: t.total_hours
-      }))
-    });
-    
-    // DEBUG: Controlla se ci sono timesheets con sessioni
-    const timesheetsConSessioni = enrichedData?.filter(t => 
-      t.timesheet_sessions && t.timesheet_sessions.length > 0
-    );
-    
-    console.log('📊 DEBUG SESSIONI MULTIPLE:', {
-      timesheets_con_sessioni: timesheetsConSessioni?.length || 0,
-      esempio_sessioni: timesheetsConSessioni?.[0]?.timesheet_sessions
-    });
-    
-    // Salva i dati nello stato
-    setTimesheets(enrichedData as unknown as TimesheetWithProfile[]);
-    
-    // Carica anche le assenze
-    await loadAbsences(startDate, endDate);
-    
-  } catch (error) {
-    console.error('❌ DEBUG - Errore nel caricamento:', error);
-    toast({
-      title: "Errore",
-      description: "Errore nel caricamento dei timesheet",
-      variant: "destructive",
-    });
-  } finally {
-    setLoading(false);
-    console.log('🏁 DEBUG - Caricamento completato');
-  }
-};
+// loadTimesheets removed - now using useTimesheets hook with React Query
 
   const loadAbsences = async (startDate: Date, endDate: Date) => {
     try {
@@ -1363,7 +1254,7 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
         onOpenChange={setEditDialogOpen}
         timesheet={editingTimesheet}
         onSuccess={() => {
-          loadTimesheets();
+          invalidateTimesheets();
           setEditDialogOpen(false);
           setEditingTimesheet(null);
         }}
@@ -1375,7 +1266,7 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
         onOpenChange={setInsertDialogOpen}
         selectedDate={selectedTimesheetDate ? parseISO(selectedTimesheetDate) : new Date()}
         onSuccess={() => {
-          loadTimesheets();
+          invalidateTimesheets();
           setInsertDialogOpen(false);
         }}
       />
@@ -1385,7 +1276,7 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
         open={absenceDialogOpen}
         onOpenChange={setAbsenceDialogOpen}
         onSuccess={() => {
-          loadTimesheets(); // Ricarica anche le assenze
+          invalidateTimesheets(); // Invalida cache timesheets e ricarica assenze
           setAbsenceDialogOpen(false);
         }}
       />
@@ -1395,7 +1286,7 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
         onImportComplete={() => {
-          loadTimesheets();
+          invalidateTimesheets();
         }}
       />
 
@@ -1411,7 +1302,7 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
           employeeSettings={employeeSettings}
           companySettings={companySettings}
           onSuccess={() => {
-            loadTimesheets();
+            invalidateTimesheets();
             setDayEditDialogOpen(false);
             setDayEditData(null);
           }}
