@@ -1306,10 +1306,7 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
     aggregateTimesheetsByEmployee={aggregateTimesheetsByEmployee}
     employeeSettings={employeeSettings}
     companySettings={companySettings}
-    onEditTimesheet={(timesheet) => {
-      setEditingTimesheet(timesheet);
-      setEditDialogOpen(true);
-    }}
+    onEditDay={handleEditDay}
     onDeleteTimesheet={handleDeleteTimesheetUnified}
     onNavigatePrevious={navigatePrevious}
     onNavigateNext={navigateNext}
@@ -1434,7 +1431,7 @@ function DailySummaryViewFixed({
   aggregateTimesheetsByEmployee,
   employeeSettings,
   companySettings,
-  onEditTimesheet,
+  onEditDay,
   onDeleteTimesheet,
   onNavigatePrevious,
   onNavigateNext,
@@ -1446,7 +1443,7 @@ function DailySummaryViewFixed({
   aggregateTimesheetsByEmployee: () => EmployeeSummary[];
   employeeSettings: any;
   companySettings: any;
-  onEditTimesheet: (timesheet: TimesheetWithProfile) => void;
+  onEditDay?: (date: string, employee: any, timesheet: TimesheetWithProfile, sessions: any[]) => void;
   onDeleteTimesheet: (id: string) => void;
   onNavigatePrevious: () => void;
   onNavigateNext: () => void;
@@ -1639,7 +1636,17 @@ function DailySummaryViewFixed({
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => onEditTimesheet(timesheet)}
+                        onClick={() => {
+                          if (onEditDay) {
+                            const employeeData = {
+                              user_id: employee.user_id,
+                              first_name: employee.first_name,
+                              last_name: employee.last_name,
+                              email: employee.email
+                            };
+                            onEditDay(timesheet.date, employeeData, timesheet, timesheet.timesheet_sessions || []);
+                          }
+                        }}
                         title="Modifica giornata"
                       >
                         <Edit className="h-4 w-4" />
@@ -1695,7 +1702,17 @@ function DailySummaryViewFixed({
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => onEditTimesheet(timesheet)}
+                        onClick={() => {
+                          if (onEditDay) {
+                            const employeeData = {
+                              user_id: employee.user_id,
+                              first_name: employee.first_name,
+                              last_name: employee.last_name,
+                              email: employee.email
+                            };
+                            onEditDay(timesheet.date, employeeData, timesheet, []);
+                          }
+                        }}
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
