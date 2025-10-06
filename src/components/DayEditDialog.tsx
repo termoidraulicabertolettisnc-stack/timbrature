@@ -340,52 +340,69 @@ export function DayEditDialog({
     ));
   };
 
-  const validateSessions = (): { hasOverlap: boolean; message: string } => {
-    if (sessions.length === 0) {
-      return { hasOverlap: false, message: '' };
-    }
+  interface ValidationResult {
+    hasErrors: boolean;
+    hasWarnings: boolean;
+    messages: {
+      type: 'error' | 'warning' | 'info';
+      message: string;
+    }[];
+  }
 
-    // Filtra solo le sessioni con start_time e end_time validi
-    const validSessions = sessions.filter(s => s.start_time && s.end_time);
-    
-    if (validSessions.length === 0) {
-      return { hasOverlap: false, message: '' };
-    }
+  const validateSessions = (): ValidationResult => {
+    const result: ValidationResult = {
+      hasErrors: false,
+      hasWarnings: false,
+      messages: []
+    };
 
-    // Ordina le sessioni per start_time
-    const sortedSessions = [...validSessions].sort((a, b) => {
-      const timeA = new Date(`${date}T${a.start_time}:00`).getTime();
-      const timeB = new Date(`${date}T${b.start_time}:00`).getTime();
-      return timeA - timeB;
+    if (sessions.length === 0) return result;
+
+    const sortedSessions = [...sessions]
+      .filter(s => s.start_time && s.end_time)
+      .sort((a, b) => {
+        const timeA = a.start_time.split(':').map(Number);
+        const timeB = b.start_time.split(':').map(Number);
+        return (timeA[0] * 60 + timeA[1]) - (timeB[0] * 60 + timeB[1]);
+      });
+
+    sortedSessions.forEach((session, index) => {
+      const startMinutes = session.start_time.split(':').map(Number);
+      const endMinutes = session.end_time.split(':').map(Number);
+      const startTotal = startMinutes[0] * 60 + startMinutes[1];
+      const endTotal = endMinutes[0] * 60 + endMinutes[1];
+
+      if (endTotal <= startTotal) {
+        result.hasErrors = true;
+        result.messages.push({
+          type: 'error',
+          message: `Sessione #${session.session_order}: l'orario di fine (${session.end_time}) è precedente o uguale all'inizio (${session.start_time})`
+        });
+      }
+
+      if (index < sortedSessions.length - 1) {
+        const nextSession = sortedSessions[index + 1];
+        const nextStartMinutes = nextSession.start_time.split(':').map(Number);
+        const nextStartTotal = nextStartMinutes[0] * 60 + nextStartMinutes[1];
+
+        if (endTotal > nextStartTotal) {
+          result.hasErrors = true;
+          result.messages.push({
+            type: 'error',
+            message: `Sovrapposizione: Sessione #${session.session_order} termina alle ${session.end_time}, ma Sessione #${nextSession.session_order} inizia alle ${nextSession.start_time}`
+          });
+        } else if (nextStartTotal - endTotal < 10) {
+          result.hasWarnings = true;
+          const pauseMinutes = nextStartTotal - endTotal;
+          result.messages.push({
+            type: 'info',
+            message: `Nota: pausa di ${pauseMinutes} minuti tra Sessione #${session.session_order} (${session.end_time}) e #${nextSession.session_order} (${nextSession.start_time}). Verifica se corretto.`
+          });
+        }
+      }
     });
 
-    // Controlla sovrapposizioni e pause minime
-    for (let i = 0; i < sortedSessions.length - 1; i++) {
-      const current = sortedSessions[i];
-      const next = sortedSessions[i + 1];
-
-      const currentEnd = new Date(`${date}T${current.end_time}:00`);
-      const nextStart = new Date(`${date}T${next.start_time}:00`);
-
-      // Controlla sovrapposizione
-      if (currentEnd > nextStart) {
-        return {
-          hasOverlap: true,
-          message: `Sovrapposizione rilevata: la sessione ${current.session_order} termina dopo l'inizio della sessione ${next.session_order}.`
-        };
-      }
-
-      // Controlla pausa minima (10 minuti = 600000 ms)
-      const breakMinutes = (nextStart.getTime() - currentEnd.getTime()) / (1000 * 60);
-      if (breakMinutes < 10) {
-        return {
-          hasOverlap: false,
-          message: `Attenzione: la pausa tra sessione ${current.session_order} e ${next.session_order} è di soli ${Math.round(breakMinutes)} minuti (minimo consigliato: 10 minuti).`
-        };
-      }
-    }
-
-    return { hasOverlap: false, message: '' };
+    return result;
   };
 
 
@@ -541,7 +558,6 @@ export function DayEditDialog({
 
 
   const totals = calculateTotals();
-  const validation = validateSessions();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -704,14 +720,6 @@ export function DayEditDialog({
               </Button>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Validation Alert */}
-              {validation.message && (
-                <Alert variant={validation.hasOverlap ? "destructive" : "default"}>
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>{validation.message}</AlertDescription>
-                </Alert>
-              )}
-
               {sessions.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Clock className="h-12 w-12 mx-auto mb-2 opacity-50" />
@@ -798,6 +806,38 @@ export function DayEditDialog({
             </CardContent>
           </Card>
 
+          {/* Validation Messages */}
+          {(() => {
+            const validation = validateSessions();
+            if (validation.messages.length === 0) return null;
+
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5" />
+                    Validazione Sessioni
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {validation.messages.map((msg, index) => (
+                    <Alert 
+                      key={index}
+                      variant={msg.type === 'error' ? 'destructive' : 'default'}
+                      className={msg.type === 'info' ? 'border-blue-200 bg-blue-50' : ''}
+                    >
+                      <AlertDescription className="text-sm">
+                        {msg.type === 'error' && '🚫 '}
+                        {msg.type === 'info' && 'ℹ️ '}
+                        {msg.message}
+                      </AlertDescription>
+                    </Alert>
+                  ))}
+                </CardContent>
+              </Card>
+            );
+          })()}
+
           {/* Summary */}
           <Card>
             <CardHeader>
@@ -878,13 +918,27 @@ export function DayEditDialog({
             >
               Annulla
             </Button>
-            <Button 
-              onClick={handleSave} 
-              disabled={loading}
-            >
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Salva Modifiche
-            </Button>
+            <div className="flex flex-col items-end gap-2">
+              <Button 
+                onClick={handleSave} 
+                disabled={loading || validateSessions().hasErrors}
+                className="w-full md:w-auto"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvataggio...
+                  </>
+                ) : (
+                  'Salva Modifiche'
+                )}
+              </Button>
+              {validateSessions().hasErrors && (
+                <p className="text-sm text-destructive text-center">
+                  Correggi gli errori nelle sessioni prima di salvare
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </DialogContent>
