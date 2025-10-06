@@ -99,6 +99,14 @@ const localTimeToUtc = (dateString: string, timeString: string): string => {
   }
 };
 
+const formatTimeForDatabase = (timeString: string): string => {
+  if (!timeString) return '';
+  if (timeString.includes(':') && timeString.split(':').length === 3) {
+    return timeString;
+  }
+  return `${timeString}:00`;
+};
+
 export function DayEditDialog({
   date,
   employee,
@@ -218,29 +226,93 @@ export function DayEditDialog({
     }
 
     setSessions(sessionData);
+    loadLunchBreakConfig();
   };
 
-   const loadLunchBreakConfig = async () => {
+  const loadLunchBreakConfig = async () => {
     if (!timesheet?.id) return;
     
     try {
-      const { data, error } = await supabase
+      const { data: timesheetData, error: timesheetError } = await supabase
         .from('timesheets')
         .select('lunch_duration_minutes')
         .eq('id', timesheet.id)
         .single();
 
-      if (data) {
-        const lunchMinutes = data.lunch_duration_minutes || 60;
-        setLunchBreakData({
-          configured_minutes: lunchMinutes,
-          override_minutes: null,
-          effective_minutes: lunchMinutes,
-        });
-        setShowLunchOverride(false);
+      if (timesheetError) throw timesheetError;
+
+      const { data: employeeData } = await supabase
+        .from('employee_settings')
+        .select('lunch_break_type, lunch_break_minutes')
+        .eq('user_id', employee.user_id)
+        .lte('valid_from', date)
+        .or(`valid_to.is.null,valid_to.gte.${date}`)
+        .order('valid_from', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('user_id', employee.user_id)
+        .single();
+
+      let companyData = null;
+      if (profileData) {
+        const { data: companySettings } = await supabase
+          .from('company_settings')
+          .select('lunch_break_type, lunch_break_minutes')
+          .eq('company_id', profileData.company_id)
+          .single();
+        companyData = companySettings;
       }
+
+      let configuredMinutes = 60;
+      let configSource = 'default';
+
+      if (employeeData?.lunch_break_type) {
+        if (employeeData.lunch_break_type === 'libera') {
+          configuredMinutes = 0;
+        } else {
+          const match = employeeData.lunch_break_type.match(/(\d+)_minuti/);
+          configuredMinutes = match ? parseInt(match[1]) : employeeData.lunch_break_minutes || 60;
+        }
+        configSource = 'dipendente';
+      } else if (companyData?.lunch_break_type) {
+        if (companyData.lunch_break_type === 'libera') {
+          configuredMinutes = 0;
+        } else {
+          const match = companyData.lunch_break_type.match(/(\d+)_minuti/);
+          configuredMinutes = match ? parseInt(match[1]) : companyData.lunch_break_minutes || 60;
+        }
+        configSource = 'azienda';
+      }
+
+      const hasOverride = timesheetData?.lunch_duration_minutes !== null && 
+                         timesheetData?.lunch_duration_minutes !== undefined;
+      
+      setLunchBreakData({
+        configured_minutes: configuredMinutes,
+        override_minutes: hasOverride ? timesheetData.lunch_duration_minutes : null,
+        effective_minutes: hasOverride ? timesheetData.lunch_duration_minutes : configuredMinutes,
+      });
+      
+      setShowLunchOverride(hasOverride);
+
+      console.log('🔧 LUNCH CONFIG LOADED:', {
+        configured: configuredMinutes,
+        source: configSource,
+        override: hasOverride ? timesheetData.lunch_duration_minutes : 'none',
+        effective: hasOverride ? timesheetData.lunch_duration_minutes : configuredMinutes
+      });
+
     } catch (error) {
       console.error('Error loading lunch config:', error);
+      setLunchBreakData({
+        configured_minutes: 60,
+        override_minutes: null,
+        effective_minutes: 60,
+      });
     }
   };
 
@@ -434,8 +506,8 @@ export function DayEditDialog({
           const sessionsToInsert = sessions.map(session => ({
             timesheet_id: timesheetId,
             session_order: session.session_order,
-            start_time: session.start_time ? localTimeToUtc(date, session.start_time) : null,
-            end_time: session.end_time ? localTimeToUtc(date, session.end_time) : null,
+            start_time: session.start_time ? formatTimeForDatabase(session.start_time) : null,
+            end_time: session.end_time ? formatTimeForDatabase(session.end_time) : null,
             session_type: session.session_type,
             notes: session.notes || null,
           }));
