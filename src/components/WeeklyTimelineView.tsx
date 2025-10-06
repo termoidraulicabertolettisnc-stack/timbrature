@@ -196,8 +196,32 @@ export function WeeklyTimelineView({
             );
           }
 
-          const sessionRegularHours = Math.min(sessionDuration, 8);
-          const sessionOvertimeHours = Math.max(0, sessionDuration - 8);
+          // Calcola straordinari dal totale giornaliero, non per singola sessione
+          const dayTotalHours = timesheet.total_hours || sessionDuration;
+          const dayOvertimeHours = timesheet.overtime_hours || 0;
+          const dayRegularHours = dayTotalHours - dayOvertimeHours;
+
+          // Distribuisci proporzionalmente questa sessione sul totale
+          let sessionRegularHours: number;
+          let sessionOvertimeHours: number;
+
+          if (dayTotalHours > 0) {
+            const sessionProportion = sessionDuration / dayTotalHours;
+            sessionRegularHours = dayRegularHours * sessionProportion;
+            sessionOvertimeHours = dayOvertimeHours * sessionProportion;
+            
+            console.log(`📊 Session overtime distribution:`, {
+              session_duration: sessionDuration.toFixed(2),
+              day_total: dayTotalHours.toFixed(2),
+              day_overtime: dayOvertimeHours.toFixed(2),
+              session_proportion: sessionProportion.toFixed(2),
+              session_regular: sessionRegularHours.toFixed(2),
+              session_overtime: sessionOvertimeHours.toFixed(2)
+            });
+          } else {
+            sessionRegularHours = sessionDuration;
+            sessionOvertimeHours = 0;
+          }
           
           const startHour = localStart.getHours() + localStart.getMinutes() / 60;
           const endHour = localEnd.getHours() + localEnd.getMinutes() / 60;
