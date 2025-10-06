@@ -9,6 +9,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,7 +31,9 @@ import {
   UtensilsCrossed,
   CalendarDays,
   User,
-  AlertTriangle
+  AlertTriangle,
+  ChevronDown,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -121,6 +128,19 @@ export function DayEditDialog({
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [metadataOpen, setMetadataOpen] = useState(false);
+  
+  // Metadata profiles state
+  const [createdByProfile, setCreatedByProfile] = useState<{
+    first_name: string;
+    last_name: string;
+    email: string;
+  } | null>(null);
+  const [updatedByProfile, setUpdatedByProfile] = useState<{
+    first_name: string;
+    last_name: string;
+    email: string;
+  } | null>(null);
   
   // Form state
   const [timesheetData, setTimesheetData] = useState({
@@ -163,7 +183,7 @@ export function DayEditDialog({
     }
   };
 
-  const initializeData = () => {
+  const initializeData = async () => {
     // Initialize timesheet data
     if (timesheet) {
       setTimesheetData({
@@ -172,6 +192,27 @@ export function DayEditDialog({
         is_saturday: timesheet.is_saturday,
         is_holiday: timesheet.is_holiday,
       });
+
+      // Load creator/updater profiles
+      if (timesheet.created_by) {
+        const { data: creatorProfile } = await supabase
+          .from('profiles')
+          .select('first_name, last_name, email')
+          .eq('user_id', timesheet.created_by)
+          .single();
+        setCreatedByProfile(creatorProfile);
+      }
+
+      if (timesheet.updated_by && timesheet.updated_by !== timesheet.created_by) {
+        const { data: updaterProfile } = await supabase
+          .from('profiles')
+          .select('first_name, last_name, email')
+          .eq('user_id', timesheet.updated_by)
+          .single();
+        setUpdatedByProfile(updaterProfile);
+      } else {
+        setUpdatedByProfile(null);
+      }
 
       // Carica l'override della pausa pranzo se esiste
       if (timesheet.lunch_duration_minutes !== null && timesheet.lunch_duration_minutes !== undefined) {
@@ -605,6 +646,89 @@ export function DayEditDialog({
             {employee.first_name} {employee.last_name} ({employee.email})
           </div>
         </DialogHeader>
+
+        {/* Excel Import Badge */}
+        {timesheetData.notes && timesheetData.notes.includes('Import Excel') && (
+          <div className="px-6 -mt-2">
+            <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700">
+              <FileSpreadsheet className="h-3 w-3 mr-1" />
+              Importato da Excel
+              {(() => {
+                const match = timesheetData.notes.match(/Import Excel - (\d{2}\/\d{2}\/\d{4} \d{2}:\d{2})/);
+                return match ? ` (${match[1]})` : '';
+              })()}
+            </Badge>
+          </div>
+        )}
+
+        {/* Metadata Collapsible Section */}
+        {timesheet && (timesheet.created_at || timesheet.updated_at) && (
+          <div className="px-6 -mt-2">
+            <Collapsible open={metadataOpen} onOpenChange={setMetadataOpen}>
+              <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <ChevronDown className={`h-4 w-4 transition-transform ${metadataOpen ? 'rotate-180' : ''}`} />
+                Informazioni Tracciamento
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2">
+                <Card className="bg-muted/30">
+                  <CardContent className="pt-4 space-y-2 text-sm">
+                    {/* Created By */}
+                    {timesheet.created_at && (
+                      <div className="flex items-start gap-2">
+                        <span className="font-medium text-muted-foreground min-w-[100px]">Creato da:</span>
+                        <div className="flex-1">
+                          {createdByProfile ? (
+                            <>
+                              <div className="font-medium">
+                                {createdByProfile.first_name} {createdByProfile.last_name}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {createdByProfile.email}
+                              </div>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">Caricamento...</span>
+                          )}
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {format(new Date(timesheet.created_at), 'dd/MM/yyyy HH:mm', { locale: it })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Updated By */}
+                    {timesheet.updated_at && (
+                      <div className="flex items-start gap-2 pt-2 border-t">
+                        <span className="font-medium text-muted-foreground min-w-[100px]">
+                          {updatedByProfile ? 'Modificato da:' : 'Ultima modifica:'}
+                        </span>
+                        <div className="flex-1">
+                          {updatedByProfile ? (
+                            <>
+                              <div className="font-medium">
+                                {updatedByProfile.first_name} {updatedByProfile.last_name}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {updatedByProfile.email}
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {format(new Date(timesheet.updated_at), 'dd/MM/yyyy HH:mm', { locale: it })}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-xs text-muted-foreground">
+                              {format(new Date(timesheet.updated_at), 'dd/MM/yyyy HH:mm', { locale: it })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+        )}
 
         <div className="space-y-6">
           {/* Timesheet General Info */}
