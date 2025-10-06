@@ -255,11 +255,13 @@ export function DayEditDialog({
   };
 
   const calculateTotals = () => {
-    let totalHours = 0;
+    let grossHours = 0; // Ore lorde (somma sessioni)
+    let totalHours = 0; // Ore nette (lorde - pausa)
     let regularHours = 0;
     let overtimeHours = 0;
     let hasMealVoucher = false;
 
+    // Calcola ore lorde (somma di tutte le sessioni)
     sessions.forEach(session => {
       if (session.start_time && session.end_time) {
         const startDate = new Date(`${date}T${session.start_time}:00`);
@@ -267,20 +269,24 @@ export function DayEditDialog({
         const duration = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
         
         if (duration > 0) {
-          totalHours += duration;
-          
-          // Simple logic for now - can be enhanced based on company settings
-          const dailyLimit = 8;
-          if (totalHours <= dailyLimit) {
-            regularHours += duration;
-          } else {
-            const regularPortion = Math.max(0, dailyLimit - (totalHours - duration));
-            regularHours += regularPortion;
-            overtimeHours += duration - regularPortion;
-          }
+          grossHours += duration;
         }
       }
     });
+
+    // Calcola ore nette (lorde - pausa pranzo)
+    const lunchHours = lunchBreakData.effective_minutes / 60;
+    totalHours = Math.max(0, grossHours - lunchHours);
+
+    // Calcola straordinari (oltre le 8h nette)
+    const dailyLimit = 8;
+    if (totalHours > dailyLimit) {
+      regularHours = dailyLimit;
+      overtimeHours = totalHours - dailyLimit;
+    } else {
+      regularHours = totalHours;
+      overtimeHours = 0;
+    }
 
     // Check meal voucher eligibility
     if (companySettings && totalHours >= (companySettings.meal_voucher_min_hours || 6)) {
@@ -288,6 +294,7 @@ export function DayEditDialog({
     }
 
     return {
+      grossHours: Math.round(grossHours * 100) / 100,
       totalHours: Math.round(totalHours * 100) / 100,
       regularHours: Math.round(regularHours * 100) / 100,
       overtimeHours: Math.round(overtimeHours * 100) / 100,
@@ -649,30 +656,66 @@ export function DayEditDialog({
             <CardHeader>
               <CardTitle>Riepilogo Giornaliero</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-primary">{totals.totalHours}h</div>
-                  <div className="text-sm text-muted-foreground">Totale</div>
+                {/* Ore Lavorate (Lorde) */}
+                <div className="text-center p-3 rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
+                  <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{totals.grossHours}h</div>
+                  <div className="text-sm font-medium text-blue-700 dark:text-blue-300">Ore Lavorate (Lorde)</div>
+                  <div className="text-xs text-blue-500 dark:text-blue-400 mt-1">Somma sessioni</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold">{totals.regularHours}h</div>
-                  <div className="text-sm text-muted-foreground">Ordinarie</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-500">{totals.overtimeHours}h</div>
-                  <div className="text-sm text-muted-foreground">Straordinari</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl">
-                    {totals.hasMealVoucher ? (
-                      <UtensilsCrossed className="h-8 w-8 text-green-500 mx-auto" />
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
+
+                {/* Pausa Pranzo */}
+                <div className="text-center p-3 rounded-lg bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800">
+                  <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                    -{(lunchBreakData.effective_minutes / 60).toFixed(2)}h
                   </div>
-                  <div className="text-sm text-muted-foreground">Buono Pasto</div>
+                  <div className="text-sm font-medium text-orange-700 dark:text-orange-300">Pausa Pranzo</div>
+                  <div className="text-xs text-orange-500 dark:text-orange-400 mt-1">
+                    {showLunchOverride ? 'Override manuale' : 'Da configurazione'}
+                  </div>
                 </div>
+
+                {/* Ore Totali (Nette) */}
+                <div className="text-center p-3 rounded-lg bg-primary/10 border border-primary/20">
+                  <div className="text-2xl font-bold text-primary">{totals.totalHours}h</div>
+                  <div className="text-sm font-medium">Ore Totali (Nette)</div>
+                  <div className="text-xs text-muted-foreground mt-1">Lorde - Pausa</div>
+                </div>
+
+                {/* Straordinari */}
+                <div className={`text-center p-3 rounded-lg border ${
+                  totals.overtimeHours > 0 
+                    ? 'bg-orange-50 dark:bg-orange-950 border-orange-200 dark:border-orange-800' 
+                    : 'bg-muted border-muted'
+                }`}>
+                  <div className={`text-2xl font-bold ${
+                    totals.overtimeHours > 0 
+                      ? 'text-orange-600 dark:text-orange-400' 
+                      : 'text-muted-foreground'
+                  }`}>
+                    {totals.overtimeHours}h
+                  </div>
+                  <div className={`text-sm font-medium ${
+                    totals.overtimeHours > 0 
+                      ? 'text-orange-700 dark:text-orange-300' 
+                      : 'text-muted-foreground'
+                  }`}>
+                    Straordinari
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {totals.overtimeHours > 0 ? 'Oltre le 8h' : 'Nessuno'}
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Formula Visiva */}
+              <div className="text-center">
+                <code className="text-sm font-mono bg-muted px-3 py-2 rounded">
+                  {totals.grossHours.toFixed(2)}h (lordo) - {(lunchBreakData.effective_minutes / 60).toFixed(2)}h (pausa) = {totals.totalHours.toFixed(2)}h (netto)
+                </code>
               </div>
             </CardContent>
           </Card>
