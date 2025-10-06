@@ -306,8 +306,6 @@ const TimesheetEntry = () => {
         .from('timesheet_sessions')
         .update({
           end_time: timeOnly,
-          end_location_lat: location.lat,
-          end_location_lng: location.lng,
           notes: notes || null,
         })
         .eq('id', oldestSession.id);
