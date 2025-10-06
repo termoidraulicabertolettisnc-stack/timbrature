@@ -520,20 +520,53 @@ export function DayEditDialog({
 
         // Insert new sessions
         if (sessions.length > 0) {
-          const sessionsToInsert = sessions.map(session => ({
+          // Riordina sessioni per orario cronologico
+          const sortedSessions = [...sessions]
+            .filter(s => s.start_time && s.end_time)
+            .sort((a, b) => {
+              const timeToMinutes = (time: string) => {
+                const [hours, minutes] = time.split(':').map(Number);
+                return hours * 60 + minutes;
+              };
+              return timeToMinutes(a.start_time) - timeToMinutes(b.start_time);
+            });
+
+          // Rinumera con session_order sequenziale
+          const sessionsToInsert = sortedSessions.map((session, index) => ({
             timesheet_id: timesheetId,
-            session_order: session.session_order,
-            start_time: session.start_time ? formatTimeForDatabase(session.start_time) : null,
-            end_time: session.end_time ? formatTimeForDatabase(session.end_time) : null,
+            session_order: index,
+            start_time: formatTimeForDatabase(session.start_time),
+            end_time: formatTimeForDatabase(session.end_time),
             session_type: session.session_type,
             notes: session.notes || null,
           }));
+
+          console.log('🔧 SESSIONS REORDERED:', {
+            original_count: sessions.length,
+            sorted_count: sortedSessions.length,
+            orders: sessionsToInsert.map(s => ({ order: s.session_order, start: s.start_time }))
+          });
 
           const { error: insertError } = await supabase
             .from('timesheet_sessions')
             .insert(sessionsToInsert);
           
           if (insertError) throw insertError;
+
+          // Pulisci campi legacy del timesheet principale quando ci sono sessioni
+          const { error: cleanupError } = await supabase
+            .from('timesheets')
+            .update({
+              start_time: null,
+              end_time: null,
+              lunch_start_time: null,
+              lunch_end_time: null
+            })
+            .eq('id', timesheetId);
+
+          if (cleanupError) {
+            console.warn('Warning: Could not cleanup main timesheet fields', cleanupError);
+          }
         }
       }
 
