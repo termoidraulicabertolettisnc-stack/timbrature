@@ -254,6 +254,55 @@ export function DayEditDialog({
     ));
   };
 
+  const validateSessions = (): { hasOverlap: boolean; message: string } => {
+    if (sessions.length === 0) {
+      return { hasOverlap: false, message: '' };
+    }
+
+    // Filtra solo le sessioni con start_time e end_time validi
+    const validSessions = sessions.filter(s => s.start_time && s.end_time);
+    
+    if (validSessions.length === 0) {
+      return { hasOverlap: false, message: '' };
+    }
+
+    // Ordina le sessioni per start_time
+    const sortedSessions = [...validSessions].sort((a, b) => {
+      const timeA = new Date(`${date}T${a.start_time}:00`).getTime();
+      const timeB = new Date(`${date}T${b.start_time}:00`).getTime();
+      return timeA - timeB;
+    });
+
+    // Controlla sovrapposizioni e pause minime
+    for (let i = 0; i < sortedSessions.length - 1; i++) {
+      const current = sortedSessions[i];
+      const next = sortedSessions[i + 1];
+
+      const currentEnd = new Date(`${date}T${current.end_time}:00`);
+      const nextStart = new Date(`${date}T${next.start_time}:00`);
+
+      // Controlla sovrapposizione
+      if (currentEnd > nextStart) {
+        return {
+          hasOverlap: true,
+          message: `Sovrapposizione rilevata: la sessione ${current.session_order} termina dopo l'inizio della sessione ${next.session_order}.`
+        };
+      }
+
+      // Controlla pausa minima (10 minuti = 600000 ms)
+      const breakMinutes = (nextStart.getTime() - currentEnd.getTime()) / (1000 * 60);
+      if (breakMinutes < 10) {
+        return {
+          hasOverlap: false,
+          message: `Attenzione: la pausa tra sessione ${current.session_order} e ${next.session_order} è di soli ${Math.round(breakMinutes)} minuti (minimo consigliato: 10 minuti).`
+        };
+      }
+    }
+
+    return { hasOverlap: false, message: '' };
+  };
+
+
   const calculateTotals = () => {
     let grossHours = 0; // Ore lorde (somma sessioni)
     let totalHours = 0; // Ore nette (lorde - pausa)
@@ -302,6 +351,7 @@ export function DayEditDialog({
     };
   };
 
+
   const handleSave = async () => {
     setLoading(true);
     
@@ -312,7 +362,7 @@ export function DayEditDialog({
       }
 
       const totals = calculateTotals();
-      
+
       // Create or update main timesheet
       const timesheetPayload = {
         user_id: employee.user_id,
@@ -402,7 +452,9 @@ export function DayEditDialog({
     }
   };
 
+
   const totals = calculateTotals();
+  const validation = validateSessions();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -565,6 +617,14 @@ export function DayEditDialog({
               </Button>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Validation Alert */}
+              {validation.message && (
+                <Alert variant={validation.hasOverlap ? "destructive" : "default"}>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>{validation.message}</AlertDescription>
+                </Alert>
+              )}
+
               {sessions.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Clock className="h-12 w-12 mx-auto mb-2 opacity-50" />
