@@ -74,9 +74,9 @@ const TZ = 'Europe/Rome';
 
 const utcToLocalTime = (timeString: string): string => {
   try {
-    // Se è già nel formato HH:mm o HH:mm:ss, estrailo direttamente
-    if (/^\d{2}:\d{2}(:\d{2})?$/.test(timeString)) {
-      return timeString.substring(0, 5); // Restituisce HH:mm
+    // Se è nel formato TIME (HH:mm, HH:mm:ss, o HH:mm:ss.SSS)
+    if (/^\d{2}:\d{2}(:\d{2})?(\.\d+)?$/.test(timeString)) {
+      return timeString.substring(0, 5); // Restituisce sempre HH:mm
     }
     
     // Altrimenti, converti da timestamp UTC
