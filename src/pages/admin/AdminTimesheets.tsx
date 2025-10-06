@@ -1298,24 +1298,17 @@ const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
           <TabsTrigger value="monthly">Vista Mensile</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="daily" className="mt-6">
-          <DailySummaryViewFixed 
-            timesheets={filteredTimesheets}
-            absences={absences}
-            dateFilter={dateFilter}
-            aggregateTimesheetsByEmployee={aggregateTimesheetsByEmployee}
-            employeeSettings={employeeSettings}
-            companySettings={companySettings}
-            onEditTimesheet={(timesheet) => {
-              setEditingTimesheet(timesheet);
-              setEditDialogOpen(true);
-            }}
-            onDeleteTimesheet={handleDeleteTimesheetUnified}
-            onNavigatePrevious={navigatePrevious}
-            onNavigateNext={navigateNext}
-            onNavigateToday={navigateToToday}
-          />
-        </TabsContent>
+<TabsContent value="daily" className="mt-6">
+  <DailySummaryViewFixed 
+    timesheets={filteredTimesheets}
+    absences={absences}
+    aggregateTimesheetsByEmployee={aggregateTimesheetsByEmployeeFixed}
+    employeeSettings={employeeSettings}
+    companySettings={companySettings}
+    onEditDay={handleEditDay}
+    onDeleteTimesheet={handleDeleteTimesheetUnified}
+  />
+</TabsContent>
 
         <TabsContent value="weekly" className="mt-6">
           <WeeklyTimelineView 
