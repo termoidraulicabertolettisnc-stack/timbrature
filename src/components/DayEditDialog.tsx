@@ -164,6 +164,19 @@ export function DayEditDialog({
         is_saturday: timesheet.is_saturday,
         is_holiday: timesheet.is_holiday,
       });
+
+      // Carica l'override della pausa pranzo se esiste
+      if (timesheet.lunch_duration_minutes !== null && timesheet.lunch_duration_minutes !== undefined) {
+        setShowLunchOverride(true);
+        setLunchBreakData(prev => ({
+          ...prev,
+          override_minutes: timesheet.lunch_duration_minutes,
+          effective_minutes: timesheet.lunch_duration_minutes
+        }));
+      } else {
+        setShowLunchOverride(false);
+        // Usa la configurazione di default (già caricata in effectiveSettings)
+      }
     } else {
       setTimesheetData({
         project_id: '',
@@ -171,6 +184,7 @@ export function DayEditDialog({
         is_saturday: false,
         is_holiday: false,
       });
+      setShowLunchOverride(false);
     }
 
     // Initialize sessions data
@@ -374,6 +388,7 @@ export function DayEditDialog({
         total_hours: totals.totalHours,
         overtime_hours: totals.overtimeHours,
         meal_voucher_earned: totals.hasMealVoucher,
+        lunch_duration_minutes: showLunchOverride ? lunchBreakData.override_minutes : null,
         updated_by: currentUserResult.data.user?.id || employee.user_id,
       };
 
