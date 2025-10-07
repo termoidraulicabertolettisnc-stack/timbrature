@@ -4,7 +4,7 @@ import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clock, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clock, UserX } from 'lucide-react';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { BenefitsService } from '@/services/BenefitsService';
 import { useWeeklyRealtimeHours } from '@/hooks/use-weekly-realtime-hours';
@@ -542,7 +542,7 @@ export function WeeklyTimelineView({
                               onClick={() => onAddAbsence(day.date, employee.user_id)}
                               title="Aggiungi assenza"
                             >
-                              <Plus className="h-3 w-3" />
+                              <UserX className="h-3 w-3" />
                             </Button>
                           </div>
                         </div>
