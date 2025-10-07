@@ -750,51 +750,6 @@ export function DayEditDialog({
               <CardTitle>Informazioni Generali</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="project">Progetto</Label>
-                  <Select
-                    value={timesheetData.project_id}
-                    onValueChange={(value) => setTimesheetData(prev => ({ ...prev, project_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleziona progetto" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nessun progetto</SelectItem>
-                      {projects.map((project) => (
-                        <SelectItem key={project.id} value={project.id}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex gap-4">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="is_saturday"
-                      checked={timesheetData.is_saturday}
-                      onChange={(e) => setTimesheetData(prev => ({ ...prev, is_saturday: e.target.checked }))}
-                      className="rounded"
-                    />
-                    <Label htmlFor="is_saturday">Sabato</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="is_holiday"
-                      checked={timesheetData.is_holiday}
-                      onChange={(e) => setTimesheetData(prev => ({ ...prev, is_holiday: e.target.checked }))}
-                      className="rounded"
-                    />
-                    <Label htmlFor="is_holiday">Festivo</Label>
-                  </div>
-                </div>
-              </div>
-
               <div className="space-y-2">
                 <Label htmlFor="notes">Note</Label>
                 <Textarea
