@@ -298,10 +298,10 @@ function OverviewDashboard() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            🏆 Top Straordinari Mese Corrente
+            🏆 Top Straordinari (Ultimi 30 Giorni)
           </CardTitle>
           <CardDescription>
-            Soglia consigliata: 1h straordinari per giorno lavorativo
+            Soglia consigliata: 22h straordinari al mese (circa 1h/giorno)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -345,7 +345,7 @@ function OverviewDashboard() {
                         }
                       />
                       <p className="text-xs text-muted-foreground">
-                        {employee.days_worked} giorni lavorati questo mese
+                        {employee.days_worked} giorni lavorati negli ultimi 30 giorni
                       </p>
                     </div>
                   </div>
