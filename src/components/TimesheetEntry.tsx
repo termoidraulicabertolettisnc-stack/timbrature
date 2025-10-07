@@ -278,71 +278,78 @@ const TimesheetEntry = () => {
     
     try {
       const location = await getCurrentLocation();
-      const now = new Date().toISOString();
+      const now = new Date();
 
-      // Trova TUTTE le sessioni aperte dell'utente (cerca tramite timesheets)
-      const { data: allOpenSessions, error: fetchError } = await supabase
+      // Trova la sessione aperta più recente
+      const { data: openSession, error: fetchError } = await supabase
         .from('timesheet_sessions')
-        .select('*, timesheets!inner(user_id, id, created_by)')
+        .select('*, timesheets!inner(date)')
+        .eq('timesheet_id', currentSession.id)
         .is('end_time', null)
         .eq('session_type', 'work')
-        .eq('timesheets.user_id', user?.id)
-        .order('start_time', { ascending: true })
-        .limit(10);
+        .order('session_order', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (fetchError) throw fetchError;
 
-      if (!allOpenSessions || allOpenSessions.length === 0) {
+      if (!openSession) {
         throw new Error('Nessuna sessione di lavoro aperta trovata');
       }
 
-      // Chiudi la sessione più vecchia (la prima nell'array)
-      const oldestSession = allOpenSessions[0];
-      
-      // Assicurati che il timesheet abbia created_by (necessario per il trigger di calcolo)
-      const timesheetData = oldestSession.timesheets as any;
-      if (timesheetData && !timesheetData.created_by) {
-        const { error: fixError } = await supabase
-          .from('timesheets')
-          .update({ 
-            created_by: user?.id,
-            updated_by: user?.id 
-          })
-          .eq('id', timesheetData.id);
+      // ✅ FIX: Controlla se la sessione attraversa la mezzanotte
+      const sessionDate = new Date(openSession.timesheets.date);
+      const currentDate = new Date();
+      const isDifferentDay = sessionDate.toDateString() !== currentDate.toDateString();
+
+      if (isDifferentDay) {
+        // Sessione che attraversa la mezzanotte: lascia che il trigger la gestisca
+        console.log('🌙 Overnight session detected, letting trigger handle split');
         
-        if (fixError) {
-          console.error('Error fixing timesheet created_by:', fixError);
+        // Usa semplicemente l'ora corrente, il trigger split_overnight farà il resto
+        const timeOnly = format(now, 'HH:mm:ss');
+        
+        const { error: sessionError } = await supabase
+          .from('timesheet_sessions')
+          .update({
+            end_time: timeOnly,
+            notes: notes || 'Sessione chiusa il giorno successivo',
+          })
+          .eq('id', openSession.id);
+
+        if (sessionError) {
+          console.error('Errore chiusura sessione overnight:', sessionError);
+          throw sessionError;
         }
+
+        toast({
+          title: "Uscita registrata!",
+          description: `Sessione divisa automaticamente tra ${sessionDate.toLocaleDateString('it-IT')} e ${currentDate.toLocaleDateString('it-IT')}`,
+          duration: 5000,
+        });
+      } else {
+        // Sessione normale dello stesso giorno
+        const timeOnly = format(now, 'HH:mm:ss');
+        
+        const { error: sessionError } = await supabase
+          .from('timesheet_sessions')
+          .update({
+            end_time: timeOnly,
+            notes: notes || null,
+          })
+          .eq('id', openSession.id);
+
+        if (sessionError) throw sessionError;
+
+        toast({
+          title: "Uscita registrata!",
+          description: `Ore ${now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`,
+        });
       }
-      
-      // Converti timestamp ISO in formato TIME (HH:mm:ss)
-      const timeOnly = format(new Date(now), 'HH:mm:ss');
-      
-      const { error: sessionError } = await supabase
-        .from('timesheet_sessions')
-        .update({
-          end_time: timeOnly,
-          notes: notes || null,
-        })
-        .eq('id', oldestSession.id);
-
-      if (sessionError) throw sessionError;
-
-      // Se la sessione chiusa era vecchia, avvisa l'utente
-      const sessionDate = new Date(oldestSession.start_time);
-      const today = new Date();
-      const isOldSession = sessionDate.toDateString() !== today.toDateString();
-
-      toast({
-        title: "Uscita registrata!",
-        description: isOldSession 
-          ? `Sessione del ${sessionDate.toLocaleDateString('it-IT')} chiusa alle ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`
-          : `Ore ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} - Sessione ${oldestSession.session_order}`,
-        variant: isOldSession ? "default" : "default"
-      });
 
       loadTodayTimesheet();
     } catch (error: any) {
+      console.error('Errore chiusura sessione:', error);
       toast({
         title: "Errore",
         description: error.message || "Impossibile registrare l'uscita",
