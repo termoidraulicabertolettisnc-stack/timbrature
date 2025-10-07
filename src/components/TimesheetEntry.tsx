@@ -283,7 +283,7 @@ const TimesheetEntry = () => {
       // Trova TUTTE le sessioni aperte dell'utente (cerca tramite timesheets)
       const { data: allOpenSessions, error: fetchError } = await supabase
         .from('timesheet_sessions')
-        .select('*, timesheets!inner(user_id)')
+        .select('*, timesheets!inner(user_id, id, created_by)')
         .is('end_time', null)
         .eq('session_type', 'work')
         .eq('timesheets.user_id', user?.id)
@@ -298,6 +298,22 @@ const TimesheetEntry = () => {
 
       // Chiudi la sessione più vecchia (la prima nell'array)
       const oldestSession = allOpenSessions[0];
+      
+      // Assicurati che il timesheet abbia created_by (necessario per il trigger di calcolo)
+      const timesheetData = oldestSession.timesheets as any;
+      if (timesheetData && !timesheetData.created_by) {
+        const { error: fixError } = await supabase
+          .from('timesheets')
+          .update({ 
+            created_by: user?.id,
+            updated_by: user?.id 
+          })
+          .eq('id', timesheetData.id);
+        
+        if (fixError) {
+          console.error('Error fixing timesheet created_by:', fixError);
+        }
+      }
       
       // Converti timestamp ISO in formato TIME (HH:mm:ss)
       const timeOnly = format(new Date(now), 'HH:mm:ss');
