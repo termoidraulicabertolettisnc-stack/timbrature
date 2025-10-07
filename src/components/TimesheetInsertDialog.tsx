@@ -181,96 +181,81 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
         corrected: projectId
       });
       
-      // Prepare insert data
+      // Prepare timesheet data (SENZA start_time/end_time - legacy)
       const insertData = {
         user_id: selectedEmployee,
         date: formData.date,
-        start_time: startTimeUTC,
-        end_time: endTimeUTC,
-        project_id: projectId, // ← FIX: null invece di stringa vuota
+        project_id: projectId,
         notes: formData.notes || null,
         lunch_duration_minutes: lunchDuration || 60,
         created_by: user.id,
         updated_by: user.id
       };
       
-      console.log('🔧 INSERT FIX - Insert data prepared:', insertData);
+      console.log('🔧 SESSION-FIRST - Timesheet data prepared (no times):', insertData);
       
-      // STRATEGIA 1: Prova a inserire come nuovo timesheet separato
-      const { data: newTimesheet, error: insertError } = await supabase
-        .from('timesheets')
-        .insert(insertData)
-        .select()
-        .single();
+      // Trova o crea il timesheet per questa data
+      let timesheetId: string;
       
-      console.log('🔧 INSERT FIX - Insert result:', {
-        data: newTimesheet,
-        error: insertError
-      });
-      
-      if (insertError) {
-        console.error('🔧 INSERT FIX - Insert error details:', {
-          message: insertError.message,
-          details: insertError.details,
-          hint: insertError.hint,
-          code: insertError.code
-        });
-        
-        // Se l'errore è per duplicato, prova strategia alternativa (sessioni)
-        if (insertError.code === '23505' || insertError.message.includes('unique')) {
-          console.log('🔧 INSERT FIX - Duplicate detected, trying session approach');
-          
-          // STRATEGIA 2: Crea come sessione del timesheet esistente
-          if (existingTimesheets && existingTimesheets.length > 0) {
-            const mainTimesheet = existingTimesheets[0];
-            
-            // Calcola session_order
-            const { data: existingSessions } = await supabase
-              .from('timesheet_sessions')
-              .select('session_order')
-              .eq('timesheet_id', mainTimesheet.id)
-              .order('session_order', { ascending: false })
-              .limit(1);
-            
-            const nextOrder = existingSessions && existingSessions.length > 0 
-              ? existingSessions[0].session_order + 1 
-              : 1;
-            
-            console.log('🔧 INSERT FIX - Creating session with order:', nextOrder);
-            
-            const sessionData = {
-              timesheet_id: mainTimesheet.id,
-              session_order: nextOrder,
-              start_time: startTimeUTC,
-              end_time: endTimeUTC,
-              session_type: 'work',
-              notes: formData.notes || null
-            };
-            
-            const { data: newSession, error: sessionError } = await supabase
-              .from('timesheet_sessions')
-              .insert(sessionData)
-              .select();
-            
-            console.log('🔧 INSERT FIX - Session insert result:', {
-              data: newSession,
-              error: sessionError
-            });
-            
-            if (sessionError) {
-              throw new Error(`Errore creazione sessione: ${sessionError.message}`);
-            }
-            
-            console.log('🔧 INSERT FIX - Session created successfully');
-          } else {
-            throw insertError;
-          }
-        } else {
-          throw insertError;
-        }
+      if (existingTimesheets && existingTimesheets.length > 0) {
+        // Usa il timesheet esistente
+        timesheetId = existingTimesheets[0].id;
+        console.log('🔧 SESSION-FIRST - Using existing timesheet:', timesheetId);
       } else {
-        console.log('🔧 INSERT FIX - New timesheet created successfully');
+        // Crea nuovo timesheet
+        const { data: newTimesheet, error: insertError } = await supabase
+          .from('timesheets')
+          .insert(insertData)
+          .select('id')
+          .single();
+        
+        if (insertError) {
+          throw new Error(`Errore creazione timesheet: ${insertError.message}`);
+        }
+        
+        timesheetId = newTimesheet.id;
+        console.log('🔧 SESSION-FIRST - Created new timesheet:', timesheetId);
       }
+      
+      // Calcola session_order
+      const { data: existingSessions } = await supabase
+        .from('timesheet_sessions')
+        .select('session_order')
+        .eq('timesheet_id', timesheetId)
+        .order('session_order', { ascending: false })
+        .limit(1);
+      
+      const nextOrder = existingSessions && existingSessions.length > 0 
+        ? existingSessions[0].session_order + 1 
+        : 0;
+      
+      console.log('🔧 SESSION-FIRST - Next session order:', nextOrder);
+      
+      // Converti UTC timestamp a time format (HH:mm:ss)
+      const startTimeOnly = format(new Date(startTimeUTC), 'HH:mm:ss');
+      const endTimeOnly = endTimeUTC ? format(new Date(endTimeUTC), 'HH:mm:ss') : null;
+      
+      // SEMPRE crea la sessione
+      const sessionData = {
+        timesheet_id: timesheetId,
+        session_order: nextOrder,
+        start_time: startTimeOnly,
+        end_time: endTimeOnly,
+        session_type: 'work',
+        notes: formData.notes || null
+      };
+      
+      console.log('🔧 SESSION-FIRST - Creating session:', sessionData);
+      
+      const { error: sessionError } = await supabase
+        .from('timesheet_sessions')
+        .insert(sessionData);
+      
+      if (sessionError) {
+        throw new Error(`Errore creazione sessione: ${sessionError.message}`);
+      }
+      
+      console.log('🔧 SESSION-FIRST - Session created successfully');
       
       toast({
         title: "Successo",
