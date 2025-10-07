@@ -239,34 +239,47 @@ export function DayEditDialog({
     // Initialize sessions data
     const sessionData: SessionData[] = [];
     
-    if (timesheet && timesheet.timesheet_sessions) {
-      // Load existing sessions
+    if (timesheet && timesheet.timesheet_sessions && timesheet.timesheet_sessions.length > 0) {
+      // 🟢 CASO 1: Timesheet con sessioni multiple (nuovo formato)
+      console.log('📊 SESSIONS - Formato nuovo: sessioni multiple trovate');
+      
       timesheet.timesheet_sessions.forEach((session, index) => {
+        // Salta sessioni con dati NULL (da LEFT JOIN vuoto)
+        if (!session.id || !session.start_time) return;
+        
         sessionData.push({
           id: session.id,
-          session_order: session.session_order,
-          start_time: session.start_time ? utcToLocalTime(session.start_time) : '',
-          end_time: session.end_time ? utcToLocalTime(session.end_time) : '',
+          session_order: session.session_order ?? index,
+          start_time: session.start_time.substring(0, 5), // HH:mm
+          end_time: session.end_time ? session.end_time.substring(0, 5) : '',
           session_type: session.session_type || 'work',
           notes: session.notes || '',
         });
       });
-      setNextSessionOrder((timesheet.timesheet_sessions?.length || 0) + 1);
-    } else if (timesheet && timesheet.start_time) {
-      // Convert legacy timesheet to session format
+    }
+    
+    // 🆕 CASO 2: Timesheet LEGACY (solo start_time/end_time principale, NO sessioni)
+    if (sessionData.length === 0 && timesheet && timesheet.start_time && timesheet.end_time) {
+      console.log('🔄 SESSIONS - Formato legacy: conversione in sessione unica');
+      
+      // Converti timesheet legacy in una sessione
+      const legacyStartTime = new Date(timesheet.start_time);
+      const legacyEndTime = new Date(timesheet.end_time);
+      
       sessionData.push({
-        session_order: 1,
-        start_time: utcToLocalTime(timesheet.start_time),
-        end_time: timesheet.end_time ? utcToLocalTime(timesheet.end_time) : '',
+        session_order: 0,
+        start_time: format(legacyStartTime, 'HH:mm'),
+        end_time: format(legacyEndTime, 'HH:mm'),
         session_type: 'work',
         notes: '',
+        isNew: true, // Marca come nuova (verrà salvata come sessione)
       });
-      setNextSessionOrder(2);
-    } else {
-      setNextSessionOrder(1);
     }
 
     setSessions(sessionData);
+    setNextSessionOrder(sessionData.length);
+    
+    console.log('✅ SESSIONS - Inizializzate:', sessionData.length, 'sessioni');
     loadLunchBreakConfig();
   };
 
