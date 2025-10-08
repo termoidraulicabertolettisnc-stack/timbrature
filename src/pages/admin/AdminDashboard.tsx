@@ -1,20 +1,24 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Clock, FolderKanban, Calendar, TrendingUp, AlertCircle, AlertTriangle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { format, subDays, startOfMonth, addDays } from "date-fns";
-import { supabase } from "@/integrations/supabase/client";
+import { Users, Clock, FolderKanban, Calendar, TrendingUp, AlertCircle, AlertTriangle } from "lucide-react";
 import PayrollDashboard from "@/components/PayrollDashboard";
 import BusinessTripsDashboard from "@/components/BusinessTripsDashboard";
+import { supabase } from '@/integrations/supabase/client';
+import { format, subDays, startOfMonth, addDays, eachDayOfInterval, isWeekend } from 'date-fns';
+
+// ============================================
+// INTERFACCE TYPESCRIPT
+// ============================================
 
 interface DashboardStats {
-  active_employees: number;
-  hours_today: number;
-  employees_working_today: number;
-  missing_timesheets_yesterday: number;
-  monthly_completion: number;
+  activeEmployees: number;
+  hoursWorkedToday: number;
+  activeEmployeesToday: number;
+  missingTimesheetsYesterday: number;
+  monthlyConsolidationPercentage: number;
 }
 
 interface TopOvertimeEmployee {
@@ -26,6 +30,10 @@ interface TopOvertimeEmployee {
   percentage: number;
   alert_level: 'ok' | 'warning' | 'danger';
 }
+
+// ============================================
+// COMPONENTE PRINCIPALE
+// ============================================
 
 export default function AdminDashboard() {
   return (
@@ -70,15 +78,18 @@ export default function AdminDashboard() {
   );
 }
 
+// ============================================
+// DASHBOARD OVERVIEW (FUNZIONALE)
+// ============================================
+
 function OverviewDashboard() {
   const [stats, setStats] = useState<DashboardStats>({
-    active_employees: 0,
-    hours_today: 0,
-    employees_working_today: 0,
-    missing_timesheets_yesterday: 0,
-    monthly_completion: 0
+    activeEmployees: 0,
+    hoursWorkedToday: 0,
+    activeEmployeesToday: 0,
+    missingTimesheetsYesterday: 0,
+    monthlyConsolidationPercentage: 0,
   });
-  
   const [topOvertime, setTopOvertime] = useState<TopOvertimeEmployee[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -89,70 +100,76 @@ function OverviewDashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      
-      // 1. Dipendenti attivi
-      const { count: activeCount } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
-      
-      // 2. Ore lavorate oggi
-      const { data: todayData } = await supabase
-        .from('timesheets')
-        .select('total_hours, user_id')
-        .eq('date', format(new Date(), 'yyyy-MM-dd'));
-      
-      const hoursToday = todayData?.reduce((sum, t) => sum + (t.total_hours || 0), 0) || 0;
-      const employeesToday = new Set(todayData?.map(t => t.user_id) || []).size;
-      
-      // 3. Timesheets mancanti ieri
-      const yesterday = format(subDays(new Date(), 1), 'yyyy-MM-dd');
-      const { data: activeProfiles } = await supabase
+
+      // 1. Dipendenti Attivi
+      const { data: activeProfiles, error: profilesError } = await supabase
         .from('profiles')
         .select('user_id')
         .eq('is_active', true);
-      
-      const { data: yesterdayTimesheets } = await supabase
+
+      if (profilesError) throw profilesError;
+      const activeEmployees = activeProfiles?.length || 0;
+
+      // 2. Ore Lavorate Oggi + Dipendenti attivi oggi
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const { data: todayTimesheets, error: todayError } = await supabase
+        .from('timesheets')
+        .select('total_hours, user_id')
+        .eq('date', today);
+
+      if (todayError) throw todayError;
+
+      const hoursWorkedToday = todayTimesheets?.reduce((sum, t) => sum + (t.total_hours || 0), 0) || 0;
+      const activeEmployeesToday = new Set(todayTimesheets?.map(t => t.user_id) || []).size;
+
+      // 3. Timesheets Mancanti Ieri
+      const yesterday = format(subDays(new Date(), 1), 'yyyy-MM-dd');
+      const { data: yesterdayTimesheets, error: yesterdayError } = await supabase
         .from('timesheets')
         .select('user_id')
         .eq('date', yesterday);
-      
-      const workersYesterday = new Set(yesterdayTimesheets?.map(t => t.user_id) || []);
-      const missingCount = (activeProfiles || []).filter(
-        p => !workersYesterday.has(p.user_id)
-      ).length;
-      
-      // 4. Consolidato mensile
-      const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
-      const today = format(new Date(), 'yyyy-MM-dd');
-      
-      // Conta giorni lavorativi (escludi weekend)
-      let workingDays = 0;
-      let currentDay = new Date(monthStart);
-      while (currentDay <= new Date()) {
-        const dayOfWeek = currentDay.getDay();
-        if (dayOfWeek !== 0 && dayOfWeek !== 6) workingDays++;
-        currentDay = addDays(currentDay, 1);
-      }
-      
-      const { data: monthTimesheets } = await supabase
+
+      if (yesterdayError) throw yesterdayError;
+
+      const timesheetsYesterday = new Set(yesterdayTimesheets?.map(t => t.user_id) || []);
+      const missingTimesheetsYesterday = activeEmployees - timesheetsYesterday.size;
+
+      // 4. Consolidato Mensile (% giorni compilati vs giorni lavorativi)
+      const startOfCurrentMonth = startOfMonth(new Date());
+      const daysInMonth = eachDayOfInterval({
+        start: startOfCurrentMonth,
+        end: new Date(),
+      });
+
+      // Conta solo giorni lavorativi (lunedì-venerdì)
+      const workingDays = daysInMonth.filter(day => !isWeekend(day)).length;
+
+      const { data: monthTimesheets, error: monthError } = await supabase
         .from('timesheets')
-        .select('date')
-        .gte('date', monthStart)
+        .select('date, user_id')
+        .gte('date', format(startOfCurrentMonth, 'yyyy-MM-dd'))
         .lte('date', today);
-      
-      const uniqueDays = new Set(monthTimesheets?.map(t => t.date) || []).size;
-      const completion = workingDays > 0 ? Math.round((uniqueDays / workingDays) * 100) : 0;
-      
-      // 5. Top 3 straordinari
+
+      if (monthError) throw monthError;
+
+      // Conta giorni unici con almeno un timesheet
+      const compiledDaysSet = new Set(monthTimesheets?.map(t => t.date) || []);
+      const compiledDays = compiledDaysSet.size;
+
+      const monthlyConsolidationPercentage = workingDays > 0 
+        ? Math.round((compiledDays / workingDays) * 100) 
+        : 0;
+
+      // 5. Top 3 Straordinari (ultimi 30 giorni)
+      const thirtyDaysAgo = format(subDays(new Date(), 30), 'yyyy-MM-dd');
       const { data: overtimeTimesheets } = await supabase
         .from('timesheets')
         .select('user_id, overtime_hours, profiles!timesheets_user_id_fkey(first_name, last_name)')
-        .gte('date', monthStart)
+        .gte('date', thirtyDaysAgo)
         .lte('date', today)
         .not('overtime_hours', 'is', null)
         .gt('overtime_hours', 0);
-      
+
       // Aggrega per dipendente
       const overtimeByEmployee = new Map<string, { 
         first_name: string, 
@@ -196,167 +213,193 @@ function OverviewDashboard() {
         })
         .sort((a, b) => b.overtime_hours - a.overtime_hours)
         .slice(0, 3);
-      
-      setStats({
-        active_employees: activeCount || 0,
-        hours_today: Math.round(hoursToday * 10) / 10,
-        employees_working_today: employeesToday,
-        missing_timesheets_yesterday: missingCount,
-        monthly_completion: completion
-      });
-      
+
       setTopOvertime(topOvertimeList);
-      
+
+      // Aggiorna stato
+      setStats({
+        activeEmployees,
+        hoursWorkedToday: Math.round(hoursWorkedToday * 10) / 10,
+        activeEmployeesToday,
+        missingTimesheetsYesterday: Math.max(0, missingTimesheetsYesterday),
+        monthlyConsolidationPercentage,
+      });
+
     } catch (error) {
-      console.error('Error loading dashboard:', error);
+      console.error('Error loading dashboard data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const getAlertBadge = (level: string) => {
-    switch(level) {
-      case 'danger':
-        return { variant: 'destructive' as const, icon: '🔴', text: 'Oltre soglia' };
-      case 'warning':
-        return { variant: 'secondary' as const, icon: '🟡', text: 'Vicino soglia' };
-      default:
-        return { variant: 'default' as const, icon: '🟢', text: 'OK' };
-    }
+  // Helper per colore progress bar
+  const getProgressColor = (percentage: number) => {
+    if (percentage >= 100) return 'bg-red-500';
+    if (percentage >= 70) return 'bg-yellow-500';
+    return 'bg-green-500';
   };
+
+  // Helper per colore badge
+  const getBadgeVariant = (alertLevel: string): "default" | "secondary" | "destructive" | "outline" => {
+    if (alertLevel === 'danger') return 'destructive';
+    if (alertLevel === 'warning') return 'secondary';
+    return 'outline';
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
+          {[1, 2, 3, 4].map(i => (
+            <Card key={i}>
+              <CardContent className="p-6">
+                <div className="h-20 animate-pulse bg-muted rounded" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
-      {/* Stats Cards */}
+      {/* ============================================
+          KPI CARDS (4 METRICHE)
+      ============================================ */}
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-        {/* Card 1: Dipendenti Attivi */}
+        {/* 1. Dipendenti Attivi */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Dipendenti Attivi</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {loading ? '...' : stats.active_employees}
-            </div>
+            <div className="text-2xl font-bold">{stats.activeEmployees}</div>
             <p className="text-xs text-muted-foreground">
               Totale dipendenti attivi
             </p>
           </CardContent>
         </Card>
 
-        {/* Card 2: Ore Lavorate Oggi */}
+        {/* 2. Ore Lavorate Oggi */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Ore Lavorate Oggi</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {loading ? '...' : `${stats.hours_today}h`}
-            </div>
+            <div className="text-2xl font-bold">{stats.hoursWorkedToday}h</div>
             <p className="text-xs text-muted-foreground">
-              {stats.employees_working_today} dipendenti al lavoro
+              Da {stats.activeEmployeesToday} dipendenti
             </p>
           </CardContent>
         </Card>
 
-        {/* Card 3: Timesheets Mancanti */}
-        <Card className={stats.missing_timesheets_yesterday > 0 ? 'border-orange-200' : ''}>
+        {/* 3. Timesheets Mancanti Ieri */}
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Timesheets Mancanti</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-orange-500" />
+            <AlertCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {loading ? '...' : stats.missing_timesheets_yesterday}
-            </div>
+            <div className="text-2xl font-bold">{stats.missingTimesheetsYesterday}</div>
             <p className="text-xs text-muted-foreground">
-              Non registrati ieri
+              {stats.missingTimesheetsYesterday > 0 ? (
+                <span className="text-orange-600 font-medium">⚠️ Compilare giorno precedente</span>
+              ) : (
+                <span className="text-green-600">✓ Tutti aggiornati</span>
+              )}
             </p>
           </CardContent>
         </Card>
 
-        {/* Card 4: Consolidato Mensile */}
+        {/* 4. Consolidato Mensile % */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Consolidato Mensile</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {loading ? '...' : `${stats.monthly_completion}%`}
-            </div>
+            <div className="text-2xl font-bold">{stats.monthlyConsolidationPercentage}%</div>
             <p className="text-xs text-muted-foreground">
-              Completamento mese corrente
+              Giorni lavorativi compilati
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Card Grande: Top 3 Straordinari */}
+      {/* ============================================
+          TOP 3 STRAORDINARI (Ultimi 30 giorni)
+      ============================================ */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            🏆 Top Straordinari (Ultimi 30 Giorni)
+            <TrendingUp className="h-5 w-5" />
+            Top 3 Dipendenti - Straordinari (Ultimi 30 Giorni)
           </CardTitle>
           <CardDescription>
-            Soglia consigliata: 22h straordinari al mese (circa 1h/giorno)
+            Soglia mensile: 22 ore (1h/giorno lavorativo)
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {loading ? (
-            <p className="text-center py-4 text-muted-foreground">Caricamento...</p>
-          ) : topOvertime.length === 0 ? (
-            <p className="text-center py-4 text-muted-foreground">
-              Nessun straordinario registrato questo mese
-            </p>
+          {topOvertime.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>Nessun dato disponibile per gli ultimi 30 giorni</p>
+            </div>
           ) : (
             <div className="space-y-4">
-              {topOvertime.map((employee, index) => {
-                const alert = getAlertBadge(employee.alert_level);
-                return (
-                  <div key={index} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">
-                          {index + 1}. {employee.first_name} {employee.last_name}
-                        </span>
-                        <Badge variant={alert.variant}>
-                          {alert.icon} {alert.text}
-                        </Badge>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {employee.overtime_hours}h / {employee.threshold}h 
-                        {employee.percentage > 100 && (
-                          <span className="text-red-600 font-medium ml-1">
-                            +{employee.percentage - 100}%
-                          </span>
-                        )}
-                      </div>
+              {topOvertime.map((employee, index) => (
+                <div key={index} className="space-y-2">
+                  {/* Header riga */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">
+                        {employee.first_name} {employee.last_name}
+                      </span>
+                      <Badge variant={getBadgeVariant(employee.alert_level)}>
+                        {employee.alert_level === 'danger' && '🔴'}
+                        {employee.alert_level === 'warning' && '🟡'}
+                        {employee.alert_level === 'ok' && '🟢'}
+                        {employee.alert_level === 'danger' ? ' Critico' : 
+                         employee.alert_level === 'warning' ? ' Attenzione' : ' OK'}
+                      </Badge>
                     </div>
-                    <div className="space-y-1">
-                      <Progress 
-                        value={Math.min(employee.percentage, 100)} 
-                        className={
-                          employee.alert_level === 'danger' ? '[&>div]:bg-destructive' :
-                          employee.alert_level === 'warning' ? '[&>div]:bg-orange-500' :
-                          '[&>div]:bg-primary'
-                        }
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        {employee.days_worked} giorni lavorati negli ultimi 30 giorni
-                      </p>
+                    <div className="text-right">
+                      <div className="text-sm font-bold">
+                        {employee.overtime_hours}h / {employee.threshold}h
+                      </div>
+                      {employee.percentage > 100 && (
+                        <div className="text-xs text-red-600 font-medium flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          +{employee.percentage - 100}% sopra soglia
+                        </div>
+                      )}
                     </div>
                   </div>
-                );
-              })}
+
+                  {/* Progress Bar */}
+                  <div className="space-y-1">
+                    <Progress 
+                      value={Math.min(employee.percentage, 100)} 
+                      className="h-2"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>{employee.days_worked} giorni lavorati</span>
+                      <span>{employee.percentage}% della soglia</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Quick Actions */}
+      {/* ============================================
+          SEZIONI STATICHE (Attività Recenti + Avvisi)
+      ============================================ */}
       <div className="grid gap-3 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -407,20 +450,26 @@ function OverviewDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <div className="flex items-start gap-2">
-                <div className="h-2 w-2 bg-destructive rounded-full mt-2"></div>
-                <div>
-                  <p className="text-sm font-medium">3 timesheets mancanti</p>
-                  <p className="text-xs text-muted-foreground">Dipendenti senza registrazioni ieri</p>
+              {stats.missingTimesheetsYesterday > 0 && (
+                <div className="flex items-start gap-2">
+                  <div className="h-2 w-2 bg-destructive rounded-full mt-2"></div>
+                  <div>
+                    <p className="text-sm font-medium">{stats.missingTimesheetsYesterday} timesheets mancanti</p>
+                    <p className="text-xs text-muted-foreground">Dipendenti senza registrazioni ieri</p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <div className="h-2 w-2 bg-yellow-500 rounded-full mt-2"></div>
-                <div>
-                  <p className="text-sm font-medium">Straordinari elevati</p>
-                  <p className="text-xs text-muted-foreground">Marco Neri: 15 ore extra questa settimana</p>
+              )}
+              {topOvertime.some(e => e.alert_level === 'danger') && (
+                <div className="flex items-start gap-2">
+                  <div className="h-2 w-2 bg-yellow-500 rounded-full mt-2"></div>
+                  <div>
+                    <p className="text-sm font-medium">Straordinari elevati</p>
+                    <p className="text-xs text-muted-foreground">
+                      {topOvertime.filter(e => e.alert_level === 'danger').length} dipendenti oltre soglia
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="flex items-start gap-2">
                 <div className="h-2 w-2 bg-blue-500 rounded-full mt-2"></div>
                 <div>
