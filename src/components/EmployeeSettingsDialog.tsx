@@ -272,28 +272,30 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
       if (applicationType === 'retroactive') {
         const recalcResult = await recalculateTimesheetsFromDate(employee.id, '1900-01-01');
         
-        if (recalcResult.success) {
-          toast.success(
-            `Ricalcolati ${recalcResult.recalculatedCount} giorni. ` +
-            `Modifiche manuali protette sono state preservate.`
-          );
+        if (!recalcResult.success) {
+          console.warn('Warning: Failed to recalculate timesheets:', recalcResult.errors);
+          toast.error('Impostazioni salvate ma ricalcolo fallito: ' + (recalcResult.errors?.[0] || 'Errore sconosciuto'));
         } else {
-          const errorMsg = recalcResult.errors?.[0] || 'Errore sconosciuto';
-          toast.error(`Errore ricalcolo: ${errorMsg}`);
+          // Messaggio dettagliato con conteggi
+          const message = `Impostazioni salvate! Ricalcolati: ${recalcResult.recalculatedCount} giorni. Modifiche manuali preservate: ${recalcResult.skippedCount}.`;
+          toast.success(message);
+          console.log('✅ Recalculation complete:', recalcResult);
         }
+        
       } else if (applicationType === 'from_date' && fromDate) {
         // For date-specific changes, recalculate from that date
         const recalcResult = await recalculateTimesheetsFromDate(employee.id, fromDate);
         
-        if (recalcResult.success) {
-          toast.success(
-            `Impostazioni salvate dal ${format(selectedDate!, 'dd/MM/yyyy', { locale: it })}. ` +
-            `Ricalcolati ${recalcResult.recalculatedCount} giorni.`
-          );
+        if (!recalcResult.success) {
+          console.warn('Warning: Failed to recalculate timesheets:', recalcResult.errors);
+          toast.error('Ricalcolo fallito: ' + (recalcResult.errors?.[0] || 'Errore sconosciuto'));
+        } else if (recalcResult.recalculatedCount > 0 || recalcResult.skippedCount > 0) {
+          const message = `Modifiche applicate dal ${format(selectedDate!, 'dd/MM/yyyy', { locale: it })}. Ricalcolati: ${recalcResult.recalculatedCount}, Protetti: ${recalcResult.skippedCount}.`;
+          toast.success(message);
         } else {
-          const errorMsg = recalcResult.errors?.[0] || 'Errore sconosciuto';
-          toast.error(`Errore ricalcolo: ${errorMsg}`);
+          toast.success('Impostazioni salvate con successo. Le modifiche si applicano dal ' + format(selectedDate!, 'dd/MM/yyyy', { locale: it }));
         }
+        
       } else {
         toast.success('Impostazioni salvate con successo. Le modifiche si applicano da oggi.');
       }
