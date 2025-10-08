@@ -22,6 +22,7 @@ import { Loader2 } from 'lucide-react';
 import LocationDisplay from './LocationDisplay';
 import LocationTrackingRoute from './LocationTrackingRoute';
 import { TimesheetWithProfile } from '@/types/timesheet';
+import { protectTimesheetManualEdit } from '@/utils/temporalEmployeeSettings';
 
 interface Project {
   id: string;
@@ -415,6 +416,20 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         }
 
         console.log('🔧 DIALOG SESSION FIX - Main timesheet updated successfully');
+
+        // 🔒 PROTEZIONE MODIFICA MANUALE
+        if (lunchBreakMode === 'duration') {
+          console.log('🔒 Applying manual lunch protection');
+          console.log('🔍 Lunch duration to protect:', lunchDuration);
+          
+          const protectResult = await protectTimesheetManualEdit(realTimesheetId, lunchDuration);
+          
+          if (protectResult.success) {
+            console.log('✅ Manual lunch protection set successfully');
+          } else {
+            console.error('❌ Failed to set protection:', protectResult.error);
+          }
+        }
       }
 
       // Check if lunch was manually modified
