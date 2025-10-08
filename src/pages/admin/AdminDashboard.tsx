@@ -152,7 +152,8 @@ function OverviewDashboard() {
       const completion = workingDays > 0 ? Math.round((uniqueDays / workingDays) * 100) : 0;
 
       // 5. Top straordinari (Vista Ibrida)
-      const { data: overtimeData } = await supabase.rpc("get_overtime_hybrid_view");
+      // TODO: Creare la funzione RPC get_overtime_hybrid_view nel database
+      // const { data: overtimeData } = await supabase.rpc("get_overtime_hybrid_view");
 
       setStats({
         active_employees: activeCount || 0,
@@ -162,7 +163,7 @@ function OverviewDashboard() {
         monthly_completion: completion,
       });
 
-      setTopOvertime(overtimeData || []);
+      setTopOvertime([]);
     } catch (error) {
       console.error("Error loading dashboard:", error);
     } finally {

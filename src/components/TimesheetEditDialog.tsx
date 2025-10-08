@@ -399,6 +399,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
           updateData.lunch_start_time = null;
           updateData.lunch_end_time = null;
           updateData.lunch_duration_minutes = lunchDuration;
+          updateData.lunch_manually_set = true;  // 🔒 PROTEZIONE
         }
 
         console.log('🔧 DIALOG SESSION FIX - Main timesheet update data:', updateData);
