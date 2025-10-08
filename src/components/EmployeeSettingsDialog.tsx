@@ -278,7 +278,8 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
             `Modifiche manuali protette sono state preservate.`
           );
         } else {
-          toast.error(`Errore ricalcolo: ${recalcResult.error}`);
+          const errorMsg = recalcResult.errors?.[0] || 'Errore sconosciuto';
+          toast.error(`Errore ricalcolo: ${errorMsg}`);
         }
       } else if (applicationType === 'from_date' && fromDate) {
         // For date-specific changes, recalculate from that date
@@ -290,7 +291,8 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
             `Ricalcolati ${recalcResult.recalculatedCount} giorni.`
           );
         } else {
-          toast.error(`Errore ricalcolo: ${recalcResult.error}`);
+          const errorMsg = recalcResult.errors?.[0] || 'Errore sconosciuto';
+          toast.error(`Errore ricalcolo: ${errorMsg}`);
         }
       } else {
         toast.success('Impostazioni salvate con successo. Le modifiche si applicano da oggi.');

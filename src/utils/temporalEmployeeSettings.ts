@@ -256,38 +256,299 @@ export async function saveTemporalEmployeeSettings(
 }
 
 /**
- * Ricalcola tutti i timesheet per un dipendente da una data specifica
+ * 📊 Statistiche protezioni per un dipendente o tutti
+ */
+export interface ProtectionStats {
+  userId?: string;
+  userName?: string;
+  totalTimesheets: number;
+  protectedTimesheets: number;
+  unprotectedTimesheets: number;
+  protectionPercentage: number;
+}
+
+/**
+ * 📋 Risultato operazione ricalcolo
+ */
+export interface RecalculateResult {
+  success: boolean;
+  recalculatedCount: number;
+  skippedCount: number;
+  errorCount: number;
+  errors?: string[];
+}
+
+/**
+ * Ricalcola tutti i timesheet per un dipendente da una data specifica,
+ * RISPETTANDO le modifiche manuali protette (lunch_manually_set = TRUE)
  */
 export async function recalculateTimesheetsFromDate(
   userId: string,
   fromDate: string
-): Promise<{ success: boolean; error?: string; recalculatedCount?: number }> {
+): Promise<RecalculateResult> {
   try {
-    console.log(`🔄 Recalculating timesheets for user ${userId} from ${fromDate}`);
-    
-    // Trigger il ricalcolo aggiornando updated_at su tutti i timesheet dalla data specificata
-    // Questo farà scattare il trigger calculate_timesheet_hours che ricalcola automaticamente
-    const { data, error } = await supabase
+    console.log('🔄 RECALCULATE START:', { userId, fromDate });
+
+    // STEP 1: Ottieni tutti i timesheets da ricalcolare
+    const { data: timesheets, error: fetchError } = await supabase
       .from('timesheets')
-      .update({ updated_at: new Date().toISOString() })
+      .select('id, date, lunch_manually_set, lunch_duration_minutes')
       .eq('user_id', userId)
       .gte('date', fromDate)
-      .select('id');
-    
-    if (error) throw error;
-    
-    const recalculatedCount = data?.length || 0;
-    console.log(`✅ Recalculated ${recalculatedCount} timesheets`);
-    
-    return { 
-      success: true, 
-      recalculatedCount 
+      .order('date', { ascending: true }) as any;
+
+    if (fetchError) {
+      console.error('❌ FETCH ERROR:', fetchError);
+      return {
+        success: false,
+        recalculatedCount: 0,
+        skippedCount: 0,
+        errorCount: 1,
+        errors: [fetchError.message]
+      };
+    }
+
+    if (!timesheets || timesheets.length === 0) {
+      console.log('⚠️ NO TIMESHEETS FOUND for recalculation');
+      return {
+        success: true,
+        recalculatedCount: 0,
+        skippedCount: 0,
+        errorCount: 0
+      };
+    }
+
+    console.log(`📊 Found ${timesheets.length} timesheets to process`);
+
+    // STEP 2: Separa timesheets protetti da quelli ricalcolabili
+    const protectedTimesheets = timesheets.filter(t => t.lunch_manually_set === true);
+    const recalculableTimesheets = timesheets.filter(t => t.lunch_manually_set !== true);
+
+    console.log('🔒 PROTECTED:', protectedTimesheets.length);
+    console.log('✅ RECALCULABLE:', recalculableTimesheets.length);
+
+    if (protectedTimesheets.length > 0) {
+      console.log('🔒 SKIPPING PROTECTED TIMESHEETS:', 
+        protectedTimesheets.map(t => ({
+          date: t.date,
+          lunch_minutes: t.lunch_duration_minutes
+        }))
+      );
+    }
+
+    // STEP 3: Ricalcola solo i NON protetti
+    let recalculatedCount = 0;
+    let errorCount = 0;
+    const errors: string[] = [];
+
+    for (const timesheet of recalculableTimesheets) {
+      try {
+        const { error: updateError } = await supabase
+          .from('timesheets')
+          .update({ 
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', timesheet.id);
+
+        if (updateError) {
+          console.error(`❌ ERROR updating timesheet ${timesheet.id}:`, updateError);
+          errorCount++;
+          errors.push(`${timesheet.date}: ${updateError.message}`);
+        } else {
+          recalculatedCount++;
+          console.log(`✅ Recalculated: ${timesheet.date}`);
+        }
+      } catch (err) {
+        console.error(`❌ EXCEPTION updating timesheet ${timesheet.id}:`, err);
+        errorCount++;
+        errors.push(`${timesheet.date}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    }
+
+    console.log('🔄 RECALCULATE COMPLETE:', {
+      recalculated: recalculatedCount,
+      skipped: protectedTimesheets.length,
+      errors: errorCount
+    });
+
+    return {
+      success: errorCount === 0,
+      recalculatedCount,
+      skippedCount: protectedTimesheets.length,
+      errorCount,
+      errors: errors.length > 0 ? errors : undefined
     };
+
   } catch (error) {
-    console.error('Error recalculating timesheets:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    console.error('❌ RECALCULATE FATAL ERROR:', error);
+    return {
+      success: false,
+      recalculatedCount: 0,
+      skippedCount: 0,
+      errorCount: 1,
+      errors: [error instanceof Error ? error.message : 'Unknown error']
+    };
+  }
+}
+
+/**
+ * Protegge una modifica manuale della pausa pranzo impostando lunch_manually_set = TRUE
+ */
+export async function protectTimesheetManualEdit(
+  timesheetId: string,
+  lunchMinutes: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    console.log('🔒 PROTECT MANUAL EDIT:', { timesheetId, lunchMinutes });
+
+    const { error } = await supabase
+      .from('timesheets')
+      .update({
+        lunch_manually_set: true,
+        lunch_duration_minutes: lunchMinutes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', timesheetId);
+
+    if (error) {
+      console.error('❌ PROTECT ERROR:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ PROTECTION SET: Timesheet', timesheetId, 'is now protected with', lunchMinutes, 'minutes lunch');
+    
+    return { success: true };
+
+  } catch (error) {
+    console.error('❌ PROTECT EXCEPTION:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+
+/**
+ * Rimuove la protezione da un timesheet, permettendo ricalcoli automatici
+ */
+export async function unlockTimesheetManualEdit(
+  timesheetId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    console.log('🔓 UNLOCK MANUAL EDIT:', timesheetId);
+
+    const { error } = await supabase
+      .from('timesheets')
+      .update({
+        lunch_manually_set: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', timesheetId);
+
+    if (error) {
+      console.error('❌ UNLOCK ERROR:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ PROTECTION REMOVED: Timesheet', timesheetId, 'can now be recalculated');
+    
+    return { success: true };
+
+  } catch (error) {
+    console.error('❌ UNLOCK EXCEPTION:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+
+/**
+ * Ottiene statistiche sulle protezioni manuali per dipendente o globali
+ */
+export async function getProtectionStats(
+  userId?: string
+): Promise<{ success: boolean; stats?: ProtectionStats[]; error?: string }> {
+  try {
+    console.log('📊 GET PROTECTION STATS:', userId ? `for user ${userId}` : 'global');
+
+    let query = supabase
+      .from('timesheets')
+      .select(`
+        user_id,
+        lunch_manually_set,
+        profiles!inner(first_name, last_name)
+      `);
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query as any;
+
+    if (error) {
+      console.error('❌ STATS ERROR:', error);
+      return { success: false, error: error.message };
+    }
+
+    if (!data || data.length === 0) {
+      return {
+        success: true,
+        stats: []
+      };
+    }
+
+    // Raggruppa per utente e calcola stats
+    const statsByUser = new Map<string, {
+      userId: string;
+      userName: string;
+      total: number;
+      protected: number;
+    }>();
+
+    for (const row of data) {
+      const key = row.user_id;
+      const profile = row.profiles as any;
+      const userName = profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown';
+      
+      if (!statsByUser.has(key)) {
+        statsByUser.set(key, {
+          userId: key,
+          userName,
+          total: 0,
+          protected: 0
+        });
+      }
+
+      const stats = statsByUser.get(key)!;
+      stats.total++;
+      if (row.lunch_manually_set === true) {
+        stats.protected++;
+      }
+    }
+
+    // Converti in array di ProtectionStats
+    const result: ProtectionStats[] = Array.from(statsByUser.values()).map(s => ({
+      userId: s.userId,
+      userName: s.userName,
+      totalTimesheets: s.total,
+      protectedTimesheets: s.protected,
+      unprotectedTimesheets: s.total - s.protected,
+      protectionPercentage: s.total > 0 ? Math.round((s.protected / s.total) * 100) : 0
+    }));
+
+    console.log('✅ STATS CALCULATED:', result);
+
+    return {
+      success: true,
+      stats: result
+    };
+
+  } catch (error) {
+    console.error('❌ STATS EXCEPTION:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     };
   }
 }
