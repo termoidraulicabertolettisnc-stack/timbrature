@@ -271,19 +271,27 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
       // If retroactive change, trigger recalculation
       if (applicationType === 'retroactive') {
         const recalcResult = await recalculateTimesheetsFromDate(employee.id, '1900-01-01');
-        if (!recalcResult.success) {
-          console.warn('Warning: Failed to recalculate timesheets:', recalcResult.error);
-          toast.success('Impostazioni salvate con successo. Avviso: alcuni calcoli potrebbero richiedere un aggiornamento manuale.');
+        
+        if (recalcResult.success) {
+          toast.success(
+            `Ricalcolati ${recalcResult.recalculatedCount} giorni. ` +
+            `Modifiche manuali protette sono state preservate.`
+          );
         } else {
-          toast.success('Impostazioni salvate con successo e calcoli aggiornati retroattivamente.');
+          toast.error(`Errore ricalcolo: ${recalcResult.error}`);
         }
       } else if (applicationType === 'from_date' && fromDate) {
         // For date-specific changes, recalculate from that date
         const recalcResult = await recalculateTimesheetsFromDate(employee.id, fromDate);
-        if (!recalcResult.success) {
-          console.warn('Warning: Failed to recalculate timesheets:', recalcResult.error);
+        
+        if (recalcResult.success) {
+          toast.success(
+            `Impostazioni salvate dal ${format(selectedDate!, 'dd/MM/yyyy', { locale: it })}. ` +
+            `Ricalcolati ${recalcResult.recalculatedCount} giorni.`
+          );
+        } else {
+          toast.error(`Errore ricalcolo: ${recalcResult.error}`);
         }
-        toast.success('Impostazioni salvate con successo. Le modifiche si applicano dal ' + format(selectedDate!, 'dd/MM/yyyy', { locale: it }));
       } else {
         toast.success('Impostazioni salvate con successo. Le modifiche si applicano da oggi.');
       }

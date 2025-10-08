@@ -417,11 +417,18 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         console.log('🔧 DIALOG SESSION FIX - Main timesheet updated successfully');
       }
 
+      // Check if lunch was manually modified
+      const lunchWasManuallyModified = !isEditingSpecificSession && 
+        lunchBreakMode === 'duration' && 
+        lunchDuration !== defaultLunchMinutes;
+
       toast({
         title: "Successo",
         description: isEditingSpecificSession 
           ? `Sessione #${(timesheet as any)._editing_session_order} modificata con successo`
-          : "Timesheet modificato con successo",
+          : lunchWasManuallyModified
+            ? "Timesheet modificato con successo. Pausa personalizzata salvata e protetta da ricalcoli automatici."
+            : "Timesheet modificato con successo",
       });
 
       onSuccess();

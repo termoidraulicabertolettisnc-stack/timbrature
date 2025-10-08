@@ -261,12 +261,28 @@ export async function saveTemporalEmployeeSettings(
 export async function recalculateTimesheetsFromDate(
   userId: string,
   fromDate: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; recalculatedCount?: number }> {
   try {
-    // Qui implementeremo la logica di ricalcolo dei timesheet
-    // Per ora ritorniamo successo, implementeremo dopo aver aggiornato calculateMealBenefits
-    console.log(`Recalculating timesheets for user ${userId} from ${fromDate}`);
-    return { success: true };
+    console.log(`🔄 Recalculating timesheets for user ${userId} from ${fromDate}`);
+    
+    // Trigger il ricalcolo aggiornando updated_at su tutti i timesheet dalla data specificata
+    // Questo farà scattare il trigger calculate_timesheet_hours che ricalcola automaticamente
+    const { data, error } = await supabase
+      .from('timesheets')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .gte('date', fromDate)
+      .select('id');
+    
+    if (error) throw error;
+    
+    const recalculatedCount = data?.length || 0;
+    console.log(`✅ Recalculated ${recalculatedCount} timesheets`);
+    
+    return { 
+      success: true, 
+      recalculatedCount 
+    };
   } catch (error) {
     console.error('Error recalculating timesheets:', error);
     return { 
