@@ -39,6 +39,7 @@ import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { BenefitsService } from '@/services/BenefitsService';
+import { protectTimesheetManualEdit } from '@/utils/temporalEmployeeSettings';
 
 interface Project {
   id: string;
@@ -547,6 +548,21 @@ export function DayEditDialog({
           .eq('id', timesheet.id);
         
         if (error) throw error;
+        
+        // 🔒 PROTEZIONE: Se override attivo, proteggi da ricalcoli
+        if (showLunchOverride && lunchBreakData.effective_minutes) {
+          console.log('🔒 DAY DIALOG: Protecting lunch override:', lunchBreakData.effective_minutes);
+          const protectResult = await protectTimesheetManualEdit(
+            timesheet.id,
+            lunchBreakData.effective_minutes
+          );
+          if (protectResult.success) {
+            console.log('✅ DAY DIALOG: Protection set');
+          } else {
+            console.warn('⚠️ DAY DIALOG: Protection failed:', protectResult.error);
+          }
+        }
+        
       } else {
         // Create new timesheet
         const { data, error } = await supabase
@@ -560,6 +576,18 @@ export function DayEditDialog({
         
         if (error) throw error;
         timesheetId = data.id;
+        
+        // 🔒 PROTEZIONE: Se override attivo, proteggi da ricalcoli
+        if (showLunchOverride && lunchBreakData.effective_minutes && timesheetId) {
+          console.log('🔒 DAY DIALOG (NEW): Protecting lunch override:', lunchBreakData.effective_minutes);
+          const protectResult = await protectTimesheetManualEdit(
+            timesheetId,
+            lunchBreakData.effective_minutes
+          );
+          if (protectResult.success) {
+            console.log('✅ DAY DIALOG (NEW): Protection set');
+          }
+        }
       }
 
       // Handle sessions
