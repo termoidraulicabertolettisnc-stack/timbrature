@@ -4,7 +4,7 @@ import { it } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clock, UserX } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Edit, Trash2, UtensilsCrossed, Clock, UserX, Lock } from 'lucide-react';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { BenefitsService } from '@/services/BenefitsService';
 import { useWeeklyRealtimeHours } from '@/hooks/use-weekly-realtime-hours';
@@ -387,6 +387,11 @@ export function WeeklyTimelineView({
             
             <div className="flex items-center gap-1">
               {entry.mealVoucher && <UtensilsCrossed className="h-3 w-3" />}
+              {(entry.timesheet as any).lunch_manually_set === true && (
+                <div title="Pausa pranzo modificata manualmente">
+                  <Lock className="h-3 w-3 text-amber-400" />
+                </div>
+              )}
               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Button
                   variant="ghost"
