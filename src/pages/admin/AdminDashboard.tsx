@@ -21,14 +21,22 @@ interface DashboardStats {
   monthlyConsolidationPercentage: number;
 }
 
-interface TopOvertimeEmployee {
+interface HybridOvertimeEmployee {
   first_name: string;
   last_name: string;
-  overtime_hours: number;
-  days_worked: number;
-  threshold: number;
-  percentage: number;
-  alert_level: 'ok' | 'warning' | 'danger';
+  // Ultimo mese
+  last_30d_hours: number;
+  last_30d_days: number;
+  // Anno solare (conformità normativa)
+  ytd_hours: number;
+  ytd_percentage: number;
+  ytd_remaining: number;
+  // Anno mobile (trend)
+  rolling_12m_hours: number;
+  rolling_12m_percentage: number;
+  // Alert
+  alert_level: 'ok' | 'attention' | 'warning' | 'danger' | 'critical';
+  alert_reason: string;
 }
 
 // ============================================
@@ -79,7 +87,7 @@ export default function AdminDashboard() {
 }
 
 // ============================================
-// DASHBOARD OVERVIEW (FUNZIONALE)
+// DASHBOARD OVERVIEW (VERSIONE IBRIDA)
 // ============================================
 
 function OverviewDashboard() {
@@ -90,7 +98,7 @@ function OverviewDashboard() {
     missingTimesheetsYesterday: 0,
     monthlyConsolidationPercentage: 0,
   });
-  const [topOvertime, setTopOvertime] = useState<TopOvertimeEmployee[]>([]);
+  const [overtimeData, setOvertimeData] = useState<HybridOvertimeEmployee[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -134,14 +142,13 @@ function OverviewDashboard() {
       const timesheetsYesterday = new Set(yesterdayTimesheets?.map(t => t.user_id) || []);
       const missingTimesheetsYesterday = activeEmployees - timesheetsYesterday.size;
 
-      // 4. Consolidato Mensile (% giorni compilati vs giorni lavorativi)
+      // 4. Consolidato Mensile
       const startOfCurrentMonth = startOfMonth(new Date());
       const daysInMonth = eachDayOfInterval({
         start: startOfCurrentMonth,
         end: new Date(),
       });
 
-      // Conta solo giorni lavorativi (lunedì-venerdì)
       const workingDays = daysInMonth.filter(day => !isWeekend(day)).length;
 
       const { data: monthTimesheets, error: monthError } = await supabase
@@ -152,7 +159,6 @@ function OverviewDashboard() {
 
       if (monthError) throw monthError;
 
-      // Conta giorni unici con almeno un timesheet
       const compiledDaysSet = new Set(monthTimesheets?.map(t => t.date) || []);
       const compiledDays = compiledDaysSet.size;
 
@@ -160,61 +166,17 @@ function OverviewDashboard() {
         ? Math.round((compiledDays / workingDays) * 100) 
         : 0;
 
-      // 5. Top 3 Straordinari (ultimi 30 giorni)
-      const thirtyDaysAgo = format(subDays(new Date(), 30), 'yyyy-MM-dd');
-      const { data: overtimeTimesheets } = await supabase
-        .from('timesheets')
-        .select('user_id, overtime_hours, profiles!timesheets_user_id_fkey(first_name, last_name)')
-        .gte('date', thirtyDaysAgo)
-        .lte('date', today)
-        .not('overtime_hours', 'is', null)
-        .gt('overtime_hours', 0);
+      // 5. Straordinari Ibridi (NUOVA FUNZIONE SQL)
+      const { data: overtimeResponse, error: overtimeError } = await supabase
+        .rpc('get_overtime_hybrid_view');
 
-      // Aggrega per dipendente
-      const overtimeByEmployee = new Map<string, { 
-        first_name: string, 
-        last_name: string, 
-        overtime_hours: number, 
-        days_worked: number 
-      }>();
-      
-      overtimeTimesheets?.forEach(ts => {
-        const key = ts.user_id;
-        const existing = overtimeByEmployee.get(key);
-        if (existing) {
-          existing.overtime_hours += ts.overtime_hours;
-          existing.days_worked += 1;
-        } else {
-          overtimeByEmployee.set(key, {
-            first_name: ts.profiles.first_name,
-            last_name: ts.profiles.last_name,
-            overtime_hours: ts.overtime_hours,
-            days_worked: 1
-          });
-        }
-      });
-      
-      // Calcola top 3
-      const topOvertimeList: TopOvertimeEmployee[] = Array.from(overtimeByEmployee.values())
-        .map(emp => {
-          const threshold = emp.days_worked * 1; // 1h per giorno
-          const percentage = threshold > 0 ? Math.round((emp.overtime_hours / threshold) * 100) : 0;
-          let alert_level: 'ok' | 'warning' | 'danger' = 'ok';
-          if (percentage > 100) alert_level = 'danger';
-          else if (percentage > 80) alert_level = 'warning';
-          
-          return {
-            ...emp,
-            overtime_hours: Math.round(emp.overtime_hours * 10) / 10,
-            threshold,
-            percentage,
-            alert_level
-          };
-        })
-        .sort((a, b) => b.overtime_hours - a.overtime_hours)
-        .slice(0, 3);
-
-      setTopOvertime(topOvertimeList);
+      if (overtimeError) {
+        console.error('Error loading overtime data:', overtimeError);
+        setOvertimeData([]);
+      } else {
+        // Prendi solo i top 3
+        setOvertimeData((overtimeResponse || []).slice(0, 3));
+      }
 
       // Aggiorna stato
       setStats({
@@ -232,18 +194,30 @@ function OverviewDashboard() {
     }
   };
 
-  // Helper per colore progress bar
-  const getProgressColor = (percentage: number) => {
-    if (percentage >= 100) return 'bg-red-500';
-    if (percentage >= 70) return 'bg-yellow-500';
-    return 'bg-green-500';
-  };
-
   // Helper per colore badge
   const getBadgeVariant = (alertLevel: string): "default" | "secondary" | "destructive" | "outline" => {
+    if (alertLevel === 'critical') return 'destructive';
     if (alertLevel === 'danger') return 'destructive';
     if (alertLevel === 'warning') return 'secondary';
     return 'outline';
+  };
+
+  // Helper per icona badge
+  const getAlertIcon = (alertLevel: string) => {
+    if (alertLevel === 'critical') return '🔴';
+    if (alertLevel === 'danger') return '🟠';
+    if (alertLevel === 'warning') return '🟡';
+    if (alertLevel === 'attention') return '🟢';
+    return '✅';
+  };
+
+  // Helper per label badge
+  const getAlertLabel = (alertLevel: string) => {
+    if (alertLevel === 'critical') return 'Critico';
+    if (alertLevel === 'danger') return 'Pericolo';
+    if (alertLevel === 'warning') return 'Attenzione';
+    if (alertLevel === 'attention') return 'Monitorare';
+    return 'OK';
   };
 
   if (loading) {
@@ -330,66 +304,117 @@ function OverviewDashboard() {
       </div>
 
       {/* ============================================
-          TOP 3 STRAORDINARI (Ultimi 30 giorni)
+          TOP 3 STRAORDINARI - VISTA IBRIDA
       ============================================ */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
-            Top 3 Dipendenti - Straordinari (Ultimi 30 Giorni)
+            Top 3 Dipendenti - Straordinari (Vista Ibrida)
           </CardTitle>
           <CardDescription>
-            Soglia mensile: 22 ore (1h/giorno lavorativo)
+            Limite normativo: 250 ore/anno (D.Lgs. 66/2003) - Anno solare: 1 gen - 31 dic
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {topOvertime.length === 0 ? (
+          {overtimeData.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>Nessun dato disponibile per gli ultimi 30 giorni</p>
+              <p>Nessun dato straordinari disponibile</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {topOvertime.map((employee, index) => (
-                <div key={index} className="space-y-2">
-                  {/* Header riga */}
+            <div className="space-y-6">
+              {overtimeData.map((employee, index) => (
+                <div key={index} className="space-y-3 pb-4 border-b last:border-b-0">
+                  {/* Header dipendente */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">
+                      <span className="text-sm font-semibold">
                         {employee.first_name} {employee.last_name}
                       </span>
                       <Badge variant={getBadgeVariant(employee.alert_level)}>
-                        {employee.alert_level === 'danger' && '🔴'}
-                        {employee.alert_level === 'warning' && '🟡'}
-                        {employee.alert_level === 'ok' && '🟢'}
-                        {employee.alert_level === 'danger' ? ' Critico' : 
-                         employee.alert_level === 'warning' ? ' Attenzione' : ' OK'}
+                        {getAlertIcon(employee.alert_level)} {getAlertLabel(employee.alert_level)}
                       </Badge>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-bold">
-                        {employee.overtime_hours}h / {employee.threshold}h
-                      </div>
-                      {employee.percentage > 100 && (
-                        <div className="text-xs text-red-600 font-medium flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3" />
-                          +{employee.percentage - 100}% sopra soglia
-                        </div>
-                      )}
                     </div>
                   </div>
 
-                  {/* Progress Bar */}
-                  <div className="space-y-1">
-                    <Progress 
-                      value={Math.min(employee.percentage, 100)} 
-                      className="h-2"
-                    />
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>{employee.days_worked} giorni lavorati</span>
-                      <span>{employee.percentage}% della soglia</span>
+                  {/* Metriche dettagliate */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                    {/* Ultimo Mese */}
+                    <div className="bg-muted/50 p-3 rounded-md">
+                      <div className="text-xs text-muted-foreground mb-1">Ultimo Mese</div>
+                      <div className="font-bold">{employee.last_30d_hours}h</div>
+                      <div className="text-xs text-muted-foreground">
+                        {employee.last_30d_days} giorni lavorati
+                      </div>
+                    </div>
+
+                    {/* Anno Solare (Conformità) */}
+                    <div className={`p-3 rounded-md ${
+                      employee.ytd_percentage >= 100 ? 'bg-red-50 border border-red-200' :
+                      employee.ytd_percentage >= 80 ? 'bg-yellow-50 border border-yellow-200' :
+                      'bg-green-50 border border-green-200'
+                    }`}>
+                      <div className="text-xs text-muted-foreground mb-1">
+                        Anno {new Date().getFullYear()} (Normativo)
+                      </div>
+                      <div className="font-bold">
+                        {employee.ytd_hours}h / 250h
+                      </div>
+                      <div className="text-xs">
+                        {employee.ytd_percentage}% • {employee.ytd_remaining}h disponibili
+                      </div>
+                    </div>
+
+                    {/* Anno Mobile (Trend) */}
+                    <div className={`p-3 rounded-md ${
+                      employee.rolling_12m_percentage >= 100 ? 'bg-orange-50 border border-orange-200' :
+                      'bg-blue-50 border border-blue-200'
+                    }`}>
+                      <div className="text-xs text-muted-foreground mb-1">Ultimi 12 Mesi (Trend)</div>
+                      <div className="font-bold">
+                        {employee.rolling_12m_hours}h
+                      </div>
+                      <div className="text-xs">
+                        {employee.rolling_12m_percentage}% del limite
+                        {employee.rolling_12m_percentage > 100 && (
+                          <span className="text-orange-600 font-semibold ml-1">
+                            ⚠️ +{employee.rolling_12m_percentage - 100}%
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
+
+                  {/* Progress Bar (basata su anno solare) */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Progresso Anno Solare</span>
+                      <span>{employee.ytd_percentage}%</span>
+                    </div>
+                    <Progress 
+                      value={Math.min(employee.ytd_percentage, 100)} 
+                      className={`h-2 ${
+                        employee.ytd_percentage >= 100 ? 'bg-red-100' :
+                        employee.ytd_percentage >= 80 ? 'bg-yellow-100' :
+                        'bg-green-100'
+                      }`}
+                    />
+                  </div>
+
+                  {/* Alert Reason */}
+                  {employee.alert_level !== 'ok' && (
+                    <div className={`flex items-start gap-2 p-2 rounded text-xs ${
+                      employee.alert_level === 'critical' || employee.alert_level === 'danger' 
+                        ? 'bg-red-50 text-red-800' 
+                        : employee.alert_level === 'warning'
+                        ? 'bg-yellow-50 text-yellow-800'
+                        : 'bg-blue-50 text-blue-800'
+                    }`}>
+                      <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                      <span>{employee.alert_reason}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -398,7 +423,7 @@ function OverviewDashboard() {
       </Card>
 
       {/* ============================================
-          SEZIONI STATICHE (Attività Recenti + Avvisi)
+          SEZIONI STATICHE (Attività + Avvisi)
       ============================================ */}
       <div className="grid gap-3 md:grid-cols-2">
         <Card>
@@ -459,13 +484,13 @@ function OverviewDashboard() {
                   </div>
                 </div>
               )}
-              {topOvertime.some(e => e.alert_level === 'danger') && (
+              {overtimeData.some(e => e.alert_level === 'critical' || e.alert_level === 'danger') && (
                 <div className="flex items-start gap-2">
                   <div className="h-2 w-2 bg-yellow-500 rounded-full mt-2"></div>
                   <div>
                     <p className="text-sm font-medium">Straordinari elevati</p>
                     <p className="text-xs text-muted-foreground">
-                      {topOvertime.filter(e => e.alert_level === 'danger').length} dipendenti oltre soglia
+                      {overtimeData.filter(e => e.alert_level === 'critical' || e.alert_level === 'danger').length} dipendenti richiedono attenzione
                     </p>
                   </div>
                 </div>
