@@ -168,14 +168,15 @@ function OverviewDashboard() {
 
       // 5. Straordinari Ibridi (NUOVA FUNZIONE SQL)
       const { data: overtimeResponse, error: overtimeError } = await supabase
-        .rpc('get_overtime_hybrid_view');
+        .rpc('get_overtime_hybrid_view' as any);
 
       if (overtimeError) {
         console.error('Error loading overtime data:', overtimeError);
         setOvertimeData([]);
       } else {
         // Prendi solo i top 3
-        setOvertimeData((overtimeResponse || []).slice(0, 3));
+        const dataArray = Array.isArray(overtimeResponse) ? overtimeResponse : [];
+        setOvertimeData(dataArray.slice(0, 3));
       }
 
       // Aggiorna stato

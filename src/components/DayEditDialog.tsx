@@ -243,7 +243,9 @@ export function DayEditDialog({
       // 🟢 CASO 1: Timesheet con sessioni multiple (nuovo formato)
       console.log('📊 SESSIONS - Formato nuovo: sessioni multiple trovate');
       
-      timesheet.timesheet_sessions.forEach((session, index) => {
+      timesheet.timesheet_sessions
+        .sort((a, b) => a.session_order - b.session_order)
+        .forEach((session, index) => {
         // Salta sessioni con dati NULL (da LEFT JOIN vuoto)
         if (!session.id || !session.start_time) return;
         
