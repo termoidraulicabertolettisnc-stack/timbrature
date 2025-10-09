@@ -216,7 +216,8 @@ export class OvertimeConversionService {
           updated_by: (await supabase.auth.getUser()).data.user?.id ?? userId,
           updated_at: new Date().toISOString()
         })
-        .eq('id', conversion.id)
+        .eq('user_id', userId)
+        .eq('month', normalizedMonth)
         .select();
 
       // 📊 LOGGING POST-UPDATE
