@@ -122,7 +122,7 @@ function OverviewDashboard() {
       const { count: projectsCount } = await supabase
         .from("projects")
         .select("*", { count: "exact", head: true })
-        .eq("status", "active");
+        .eq("is_active", true);
 
       // 4. Completamento mensile
       const startMonth = format(startOfMonth(new Date()), "yyyy-MM-dd");

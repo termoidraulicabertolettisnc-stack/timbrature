@@ -74,24 +74,16 @@ export class OvertimeConversionService {
   /**
    * Get or create overtime conversion record for a user/month
    */
+  /**
+   * Get or create overtime conversion record for a user/month
+   * FIXED: Usa upsert invece di select + insert per evitare 409 Conflict
+   */
   static async getOrCreateConversion(
     userId: string, 
     month: string
   ): Promise<OvertimeConversion | null> {
     const monthStart = this.normalizeMonth(month);
     
-    // Try to get existing record with explicit field selection
-    const { data: existing } = await supabase
-      .from('employee_overtime_conversions')
-      .select('id, user_id, company_id, month, manual_conversion_hours, total_conversion_hours, conversion_amount, notes, created_at, updated_at, created_by, updated_by')
-      .eq('user_id', userId)
-      .eq('month', monthStart)
-      .maybeSingle();
-
-    if (existing) {
-      return existing;
-    }
-
     // Get company_id for the user
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -99,28 +91,38 @@ export class OvertimeConversionService {
       .eq('user_id', userId)
       .single();
 
-    if (profileError) {
-      console.error('Error fetching user profile for conversion creation:', profileError);
+    if (profileError || !profile) {
+      console.error('❌ [OvertimeConversion] Error fetching user profile:', profileError);
       return null;
     }
 
-    if (!profile) return null;
-
-    // Create new record
-    const { data: newRecord } = await supabase
+    // Usa UPSERT per evitare 409 Conflict
+    // onConflict: se esiste (user_id, month), non fa nulla e ritorna il record esistente
+    const { data: record, error } = await supabase
       .from('employee_overtime_conversions')
-      .insert({
-        user_id: userId,
-        company_id: profile.company_id,
-        month: monthStart,
-        manual_conversion_hours: 0,
-        conversion_amount: 0,
-        created_by: userId
-      })
-      .select()
+      .upsert(
+        {
+          user_id: userId,
+          company_id: profile.company_id,
+          month: monthStart,
+          manual_conversion_hours: 0,
+          conversion_amount: 0,
+          created_by: userId
+        },
+        {
+          onConflict: 'user_id,month',
+          ignoreDuplicates: true // Non sovrascrive se esiste, ritorna solo il record
+        }
+      )
+      .select('id, user_id, company_id, month, manual_conversion_hours, total_conversion_hours, conversion_amount, notes, created_at, updated_at, created_by, updated_by')
       .single();
 
-    return newRecord;
+    if (error) {
+      console.error('❌ [OvertimeConversion] Error upserting conversion:', error);
+      return null;
+    }
+
+    return record;
   }
 
   /**
