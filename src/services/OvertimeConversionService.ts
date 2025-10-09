@@ -207,6 +207,7 @@ export class OvertimeConversionService {
       });
 
       // Update the conversion record (exclude total_conversion_hours as it's now a generated column)
+      // FIX: Usa user_id + month invece di id per evitare problemi RLS con .select()
       const { data, error, count } = await supabase
         .from('employee_overtime_conversions')
         .update({
@@ -230,7 +231,7 @@ export class OvertimeConversionService {
       });
 
       if (error) {
-        console.error('❌ [OvertimeConversion] UPDATE failed:', error);
+        console.error(`❌ [OvertimeConversion] Errore aggiornamento database:`, error);
         return false;
       }
 
