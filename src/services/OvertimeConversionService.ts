@@ -207,8 +207,15 @@ export class OvertimeConversionService {
         })
         .eq('id', conversion.id);
 
+      console.log('🔍 [OvertimeConversion] UPDATE result:', { 
+        error, 
+        conversionId: conversion.id,
+        userId,
+        month: normalizedMonth 
+      });
+
       if (error) {
-        console.error(`❌ [OvertimeConversion] Errore aggiornamento database:`, error);
+        console.error('❌ [OvertimeConversion] UPDATE failed:', error);
         return false;
       }
 
