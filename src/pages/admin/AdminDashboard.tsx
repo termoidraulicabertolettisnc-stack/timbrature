@@ -353,50 +353,68 @@ function OverviewDashboard() {
           ) : (
             <div className="space-y-6">
               {top3Overtime.map((emp, index) => (
-                <div key={emp.user_id} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-lg">{emp.name}</span>
-                      <Badge className={getStatusColor(emp.status)}>{getStatusLabel(emp.status)}</Badge>
+                <div key={emp.user_id}>
+                  <div className="space-y-3 pb-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="font-semibold text-lg">{emp.name}</span>
+                        <Badge className={getStatusColor(emp.status)}>{getStatusLabel(emp.status)}</Badge>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <div className="text-muted-foreground">Ultimo Mese</div>
+                        <div className="font-semibold text-lg">{emp.lastMonthHours}h</div>
+                        <div className="text-xs text-muted-foreground">
+                          {Math.round((emp.lastMonthHours / emp.yearHours) * 100 || 0)}% del totale
+                        </div>
+                      </div>
+                      <div className="bg-green-50 p-3 rounded-lg">
+                        <div className="text-muted-foreground">Anno 2025 (Normativo)</div>
+                        <div className="font-semibold text-lg text-blue-700">{emp.yearHours}h / 250h</div>
+                        <div className="text-xs text-muted-foreground">
+                          {emp.yearPercentage}% • {Math.round(250 - emp.yearHours)}h disponibili
+                        </div>
+                      </div>
+                      <div className="bg-blue-50 p-3 rounded-lg">
+                        <div className="text-muted-foreground">Ultimi 12 Mesi (Trend)</div>
+                        <div className="font-semibold text-lg text-blue-700">{emp.yearHours}h</div>
+                        <div className="text-xs text-muted-foreground">{emp.yearPercentage}% del limite</div>
+                      </div>
+                    </div>
+
                     <div>
-                      <div className="text-muted-foreground">Ultimo Mese</div>
-                      <div className="font-semibold text-lg">{emp.lastMonthHours}h</div>
-                      <div className="text-xs text-muted-foreground">
-                        {Math.round((emp.lastMonthHours / emp.yearHours) * 100 || 0)}% del totale
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                        <span>Progresso Anno Solare</span>
+                        <span>{emp.yearPercentage}%</span>
                       </div>
+                      <Progress value={emp.yearPercentage} className="h-2" />
                     </div>
-                    <div className="bg-green-50 p-3 rounded-lg">
-                      <div className="text-muted-foreground">Anno 2025 (Normativo)</div>
-                      <div className="font-semibold text-lg text-blue-700">{emp.yearHours}h / 250h</div>
-                      <div className="text-xs text-muted-foreground">
-                        {emp.yearPercentage}% • {Math.round(250 - emp.yearHours)}h disponibili
+
+                    {/* Avviso SEMPRE presente per tutti */}
+                    {emp.status === "alto" && (
+                      <div className="flex items-start gap-2 text-sm text-orange-700 bg-orange-50 p-2 rounded border border-orange-200">
+                        <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                        <span>Ritmo elevato ultimo mese</span>
                       </div>
-                    </div>
-                    <div className="bg-blue-50 p-3 rounded-lg">
-                      <div className="text-muted-foreground">Ultimi 12 Mesi (Trend)</div>
-                      <div className="font-semibold text-lg text-blue-700">{emp.yearHours}h</div>
-                      <div className="text-xs text-muted-foreground">{emp.yearPercentage}% del limite</div>
-                    </div>
+                    )}
+                    {emp.status === "monitorare" && (
+                      <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+                        <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                        <span>Andamento da monitorare</span>
+                      </div>
+                    )}
+                    {emp.status === "ok" && (
+                      <div className="flex items-start gap-2 text-sm text-green-700 bg-green-50 p-2 rounded border border-green-200">
+                        <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                        <span>Andamento regolare</span>
+                      </div>
+                    )}
                   </div>
 
-                  <div>
-                    <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                      <span>Progresso Anno Solare</span>
-                      <span>{emp.yearPercentage}%</span>
-                    </div>
-                    <Progress value={emp.yearPercentage} className="h-2" />
-                  </div>
-
-                  {emp.yearPercentage >= 50 && (
-                    <div className="flex items-start gap-2 text-sm text-orange-700 bg-orange-50 p-2 rounded">
-                      <AlertCircle className="h-4 w-4 mt-0.5" />
-                      <span>Ritmo elevato ultimo mese</span>
-                    </div>
-                  )}
+                  {/* Separatore tra dipendenti (non dopo l'ultimo) */}
+                  {index < top3Overtime.length - 1 && <div className="border-t border-gray-200 my-6"></div>}
                 </div>
               ))}
             </div>
