@@ -124,7 +124,7 @@ export class OvertimeConversionService {
         month: monthStart,
         manual_conversion_hours: 0,
         conversion_amount: 0,
-        created_by: userId
+        created_by: (await supabase.auth.getUser()).data.user?.id || userId
       },
       {
         onConflict: 'user_id,month'
