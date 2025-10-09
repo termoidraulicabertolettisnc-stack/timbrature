@@ -91,38 +91,54 @@ export class OvertimeConversionService {
       .eq('user_id', userId)
       .single();
 
-    if (profileError || !profile) {
-      console.error('❌ [OvertimeConversion] Error fetching user profile:', profileError);
-      return null;
-    }
+  if (profileError || !profile) {
+    console.error('❌ [OvertimeConversion] Error fetching user profile:', profileError);
+    return null;
+  }
 
-    // Usa UPSERT per evitare 409 Conflict
-    // onConflict: se esiste (user_id, month), non fa nulla e ritorna il record esistente
-    const { data: record, error } = await supabase
-      .from('employee_overtime_conversions')
-      .upsert(
-        {
-          user_id: userId,
-          company_id: profile.company_id,
-          month: monthStart,
-          manual_conversion_hours: 0,
-          conversion_amount: 0,
-          created_by: userId
-        },
-        {
-          onConflict: 'user_id,month',
-          ignoreDuplicates: true // Non sovrascrive se esiste, ritorna solo il record
-        }
-      )
-      .select('id, user_id, company_id, month, manual_conversion_hours, total_conversion_hours, conversion_amount, notes, created_at, updated_at, created_by, updated_by')
-      .single();
+  // Prima prova a leggere il record esistente
+  let { data: record, error } = await supabase
+    .from('employee_overtime_conversions')
+    .select('id, user_id, company_id, month, manual_conversion_hours, total_conversion_hours, conversion_amount, notes, created_at, updated_at, created_by, updated_by')
+    .eq('user_id', userId)
+    .eq('month', monthStart)
+    .maybeSingle();
 
-    if (error) {
-      console.error('❌ [OvertimeConversion] Error upserting conversion:', error);
-      return null;
-    }
+  if (error) {
+    console.error('❌ [OvertimeConversion] Error reading conversion:', error);
+    return null;
+  }
 
+  // Se esiste, ritornalo
+  if (record) {
     return record;
+  }
+
+  // Se non esiste, crealo con upsert (gestisce race conditions)
+  const { data: newRecord, error: upsertError } = await supabase
+    .from('employee_overtime_conversions')
+    .upsert(
+      {
+        user_id: userId,
+        company_id: profile.company_id,
+        month: monthStart,
+        manual_conversion_hours: 0,
+        conversion_amount: 0,
+        created_by: userId
+      },
+      {
+        onConflict: 'user_id,month'
+      }
+    )
+    .select('id, user_id, company_id, month, manual_conversion_hours, total_conversion_hours, conversion_amount, notes, created_at, updated_at, created_by, updated_by')
+    .single();
+
+  if (upsertError) {
+    console.error('❌ [OvertimeConversion] Error creating conversion:', upsertError);
+    return null;
+  }
+
+  return newRecord;
   }
 
   /**
