@@ -195,8 +195,19 @@ export class OvertimeConversionService {
         calculatedFrom: `${newManualHours} * ${settings.overtime_conversion_rate}`
       });
 
+      // 🔍 LOGGING PRE-UPDATE per diagnosi
+      console.log(`🔍 [OvertimeConversion] PRE-UPDATE - Conversion object:`, {
+        conversionId: conversion.id,
+        conversionIdType: typeof conversion.id,
+        currentManualHours: conversion.manual_conversion_hours,
+        newManualHours,
+        deltaHours,
+        userId,
+        normalizedMonth
+      });
+
       // Update the conversion record (exclude total_conversion_hours as it's now a generated column)
-      const { error } = await supabase
+      const { data, error, count } = await supabase
         .from('employee_overtime_conversions')
         .update({
           manual_conversion_hours: newManualHours,
@@ -205,19 +216,36 @@ export class OvertimeConversionService {
           updated_by: (await supabase.auth.getUser()).data.user?.id ?? userId,
           updated_at: new Date().toISOString()
         })
-        .eq('id', conversion.id);
+        .eq('id', conversion.id)
+        .select();
 
-      console.log('🔍 [OvertimeConversion] UPDATE result:', { 
-        error, 
-        conversionId: conversion.id,
-        userId,
-        month: normalizedMonth 
+      // 📊 LOGGING POST-UPDATE
+      console.log('🔍 [OvertimeConversion] POST-UPDATE result:', { 
+        error,
+        count,
+        dataLength: data?.length || 0,
+        data,
+        conversionId: conversion.id
       });
 
       if (error) {
         console.error('❌ [OvertimeConversion] UPDATE failed:', error);
         return false;
       }
+
+      // ⚠️ VERIFICA: Nessuna riga aggiornata?
+      if (!data || data.length === 0) {
+        console.error(`❌ [OvertimeConversion] UPDATE non ha modificato nessuna riga!`, {
+          conversionId: conversion.id,
+          conversionIdType: typeof conversion.id,
+          userId,
+          month: normalizedMonth,
+          message: 'Possibile problema: ID non trovato o RLS blocca UPDATE'
+        });
+        return false;
+      }
+
+      console.log(`✅ [OvertimeConversion] UPDATE riuscito - ${data.length} riga/e aggiornata/e`);
 
       // Aggiorna gli straordinari nei timesheets proporzionalmente
       const { TimesheetOvertimeDistributionService } = await import('./TimesheetOvertimeDistribution');
