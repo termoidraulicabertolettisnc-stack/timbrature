@@ -180,8 +180,6 @@ export class OvertimeConversionService {
         currentTotalHours: conversion.total_conversion_hours
       });
 
-      // Store old total for timesheet distribution calculation
-      const oldTotalConversionHours = conversion.total_conversion_hours || 0;
 
       // Calculate new manual conversion hours
       const newManualHours = conversion.manual_conversion_hours + deltaHours;
@@ -247,23 +245,14 @@ export class OvertimeConversionService {
         return false;
       }
 
-      console.log(`✅ [OvertimeConversion] UPDATE riuscito - ${data.length} riga/e aggiornata/e`);
+    console.log(`✅ [OvertimeConversion] UPDATE riuscito - ${data.length} riga/e aggiornata/e`);
 
-      // Aggiorna gli straordinari nei timesheets proporzionalmente
-      const { TimesheetOvertimeDistributionService } = await import('./TimesheetOvertimeDistribution');
-      const newTotalConversionHours = Math.max(0, totalHours);
-      
-      // Se c'è un cambiamento nelle conversioni totali, aggiorna i timesheets
-      if (Math.abs(newTotalConversionHours - oldTotalConversionHours) > 0.01) {
-        console.log(`🔄 [OvertimeConversion] Aggiornamento timesheets per conversioni:`, {
-          oldTotal: oldTotalConversionHours,
-          newTotal: newTotalConversionHours
-        });
-        
-        await TimesheetOvertimeDistributionService.synchronizeOvertimeWithConversions(userId, normalizedMonth);
-      }
+    // ℹ️ Le conversioni NON modificano i timesheets
+    // I timesheets contengono sempre i dati reali
+    // Le conversioni sono solo aggiustamenti contabili per la busta paga
+    console.log(`ℹ️ [OvertimeConversion] Conversione salvata. I timesheets mantengono i dati originali.`);
 
-      console.log(`✅ [OvertimeConversion] Conversione applicata con successo per ${userId}`);
+    console.log(`✅ [OvertimeConversion] Conversione applicata con successo per ${userId}`);
       return true;
     } catch (error) {
       console.error('❌ [OvertimeConversion] Errore applicazione conversione manuale:', error);
