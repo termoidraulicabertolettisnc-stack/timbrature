@@ -947,54 +947,58 @@ const BusinessTripsDashboard = () => {
                            <TableCell className="p-1"></TableCell>
                          </TableRow>
 
-                         {/* Overtime hours row */}
-                         <TableRow className="hover:bg-blue-50/50">
-                           <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
-                             <span className="text-blue-700 font-bold">S</span> - {employee.employee_name}
-                           </TableCell>
-                            {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                              const dayKey = String(i + 1).padStart(2, '0');
-                              const originalOvertime = employee.daily_data[dayKey]?.overtime || 0;
-                              // Calculate reduced overtime after proportional conversion
-                              const originalTotalOvertimeHours = employee.totals.overtime + employee.overtime_conversions.hours;
-                              const proportionalConversion = originalTotalOvertimeHours > 0 && employee.overtime_conversions.hours > 0
-                                ? (originalOvertime / originalTotalOvertimeHours) * employee.overtime_conversions.hours
-                                : 0;
-                              const reducedOvertime = Math.max(0, originalOvertime - proportionalConversion);
-                              const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
-                              return (
-                                <TableCell 
-                                  key={i + 1} 
-                                  className={`text-center text-xs p-1 ${
-                                    isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
-                                  } ${reducedOvertime > 0 ? 'text-blue-700 font-medium' : 'text-muted-foreground'}`}
+                          {/* Overtime hours row - mostra straordinari RESIDUI dopo conversioni */}
+                          <TableRow className="hover:bg-blue-50/50">
+                            <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                              <span className="text-blue-700 font-bold">S</span> - {employee.employee_name}
+                            </TableCell>
+                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                               const dayKey = String(i + 1).padStart(2, '0');
+                               const dailyOvertime = employee.daily_data[dayKey]?.overtime || 0;
+                               
+                               // Calcola straordinari residui per questo giorno proporzionalmente
+                               const totalRealOvertime = employee.totals.overtime; // 10h
+                               const totalConvertedHours = employee.overtime_conversions.hours; // 5h
+                               const totalRemainingOvertime = totalRealOvertime - totalConvertedHours; // 5h
+                               
+                               // Proporzionale: (ore_giorno / totale_reale) * totale_residuo
+                               const remainingOvertime = totalRealOvertime > 0
+                                 ? (dailyOvertime / totalRealOvertime) * totalRemainingOvertime
+                                 : 0;
+                               
+                               const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                               return (
+                                 <TableCell 
+                                   key={i + 1} 
+                                   className={`text-center text-xs p-1 ${
+                                     isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                   } ${remainingOvertime > 0 ? 'text-blue-700 font-medium' : 'text-muted-foreground'}`}
+                                 >
+                                   {remainingOvertime > 0 ? remainingOvertime.toFixed(1) : ''}
+                                 </TableCell>
+                               );
+                             })}
+                            <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-gray-50 border-l">
+                              {(employee.totals.overtime - employee.overtime_conversions.hours).toFixed(1)}
+                            </TableCell>
+                            <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                            <TableCell className="text-center text-xs p-1">€0.00</TableCell>
+                            <TableCell className="p-1">
+                              {(employee.totals.overtime > 0 || employee.overtime_conversions.hours > 0) && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOvertimeConversion(
+                                    employee.employee_id,
+                                    employee.employee_name,
+                                    employee.totals.overtime
+                                  )}
                                 >
-                                  {reducedOvertime > 0 ? reducedOvertime.toFixed(1) : ''}
-                                </TableCell>
-                              );
-                            })}
-                           <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-gray-50 border-l">
-                             {employee.totals.overtime.toFixed(1)}
-                           </TableCell>
-                           <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
-                           <TableCell className="text-center text-xs p-1">€0.00</TableCell>
-                           <TableCell className="p-1">
-                             {/* CORREZIONE: Mostra sempre il tasto se le conversioni sono abilitate o se ci sono già conversioni */}
-                             {(employee.totals.overtime > 0 || employee.overtime_conversions.hours > 0) && (
-                               <Button
-                                 variant="outline"
-                                 size="sm"
-                                 onClick={() => handleOvertimeConversion(
-                                   employee.employee_id,
-                                   employee.employee_name,
-                                   employee.totals.overtime // CORREZIONE: Passa solo gli straordinari attuali (già ridotti)
-                                 )}
-                               >
-                                 Conversioni
-                               </Button>
-                             )}
-                           </TableCell>
-                         </TableRow>
+                                  Conversioni
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
 
                          {/* Absence rows */}
                          {Object.entries(employee.totals.absence_totals).map(([absenceType, hours]) => (
