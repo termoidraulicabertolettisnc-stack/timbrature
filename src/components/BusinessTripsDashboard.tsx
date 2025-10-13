@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
 import { MealVoucherConversionService, MealVoucherConversion } from '@/services/MealVoucherConversionService';
-import { distributePayrollOvertime, applyPayrollOvertimeDistribution } from '@/utils/payrollOvertimeDistribution';
+// Import rimosso - le conversioni NON modificano i dati visualizzati
 import { DayConversionToggle } from '@/components/DayConversionToggle';
 import { MassConversionDialog } from '@/components/MassConversionDialog';
 import { useToast } from '@/hooks/use-toast';
@@ -367,15 +367,12 @@ const BusinessTripsDashboard = () => {
             absenceTotals[abs.absence_type] += abs.hours || 8;
           }
 
-          // Calculate overtime conversions (monthly)
+          // Calculate overtime conversions (monthly) - NON modificano i dati visualizzati
           let overtimeConversions = {
             hours: 0,
             amount: 0,
             monthly_total: false
           };
-
-          let finalDailyData = dailyData;
-          let finalOvertimeTotal = totalOvertime;
 
           try {
             const conversionCalc = await OvertimeConversionService.calculateConversionDetails(
@@ -388,35 +385,22 @@ const BusinessTripsDashboard = () => {
               overtimeConversions.hours = conversionCalc.converted_hours;
               overtimeConversions.amount = conversionCalc.conversion_amount;
               overtimeConversions.monthly_total = true;
-              
-              // Apply conversion distribution to daily data
-              const dailyDataForDistribution: { [day: string]: { ordinary: number; overtime: number; absence: string | null } } = {};
-              Object.keys(dailyData).forEach(day => {
-                dailyDataForDistribution[day] = {
-                  ordinary: dailyData[day].ordinary,
-                  overtime: dailyData[day].overtime,
-                  absence: dailyData[day].absence
-                };
-              });
-              
-              const distributions = distributePayrollOvertime(dailyDataForDistribution, conversionCalc.converted_hours);
-              finalDailyData = applyPayrollOvertimeDistribution(dailyDataForDistribution, distributions);
-              
-              // Recalculate total overtime after conversions
-              finalOvertimeTotal = Object.values(finalDailyData).reduce((sum, data) => sum + (data.overtime || 0), 0);
             }
           } catch (e) {
             console.warn('Conversion calc error', profile.user_id, e);
           }
 
+          // ℹ️ IMPORTANTE: Gli straordinari visualizzati sono sempre quelli REALI dai timesheets
+          // Le conversioni sono mostrate separatamente come "CB - Conversioni"
+
           return {
             employee_id: profile.user_id,
             employee_name: `${profile.first_name} ${profile.last_name}`,
             company_id: profile.company_id,
-            daily_data: finalDailyData,
+            daily_data: dailyData,
             totals: {
               ordinary: totalOrdinary,
-              overtime: finalOvertimeTotal,
+              overtime: totalOvertime,
               absence_totals: absenceTotals,
             },
             meal_vouchers: mealVoucherDays,
