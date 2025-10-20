@@ -238,16 +238,13 @@ const TimesheetEntry = () => {
 
       const nextSessionOrder = sessions && sessions.length > 0 ? sessions[0].session_order + 1 : 1;
 
-      // Converti timestamp ISO in formato TIME (HH:mm:ss)
-      const timeOnly = format(new Date(now), 'HH:mm:ss');
-
       const { error: sessionError} = await supabase
         .from('timesheet_sessions')
         .insert({
           timesheet_id: timesheetId,
           session_order: nextSessionOrder,
           session_type: 'work',
-          start_time: timeOnly,
+          start_time: now, // ✅ ISO string completo
           end_time: null,
           notes: notes || null
         });
