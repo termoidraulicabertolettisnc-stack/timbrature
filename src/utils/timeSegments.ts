@@ -14,37 +14,48 @@ export type Seg = {
  * Clamps a time segment to the bounds of a specific day in the given timezone
  */
 export function splitAtMidnight(seg: Seg, dayISO: string, tz = TZ): Seg | null {
-  // Validate inputs
-  if (!seg.startUtc || !seg.endUtc || !dayISO) {
-    console.warn('splitAtMidnight: Invalid input', { seg, dayISO });
+  // ✅ VALIDAZIONE ROBUSTA: Verifica che le date esistano e siano valide
+  if (!seg || !seg.startUtc || !seg.endUtc) {
+    console.warn('splitAtMidnight: Missing dates in segment', { seg });
+    return null;
+  }
+
+  // ✅ VALIDAZIONE: Verifica che le date siano stringhe valide
+  if (typeof seg.startUtc !== 'string' || typeof seg.endUtc !== 'string') {
+    console.warn('splitAtMidnight: Invalid date types', { 
+      startUtc: typeof seg.startUtc, 
+      endUtc: typeof seg.endUtc,
+      seg 
+    });
+    return null;
+  }
+
+  // ✅ VALIDAZIONE: Verifica che le date non siano vuote
+  if (seg.startUtc.trim() === '' || seg.endUtc.trim() === '') {
+    console.warn('splitAtMidnight: Empty date strings', { seg });
     return null;
   }
 
   const dayStart = startOfDay(new Date(dayISO + 'T00:00:00'));
   const dayEnd = endOfDay(new Date(dayISO + 'T00:00:00'));
   
-  // Validate day dates
-  if (isNaN(dayStart.getTime()) || isNaN(dayEnd.getTime())) {
-    console.warn('splitAtMidnight: Invalid day dates', { dayISO, dayStart, dayEnd });
-    return null;
-  }
-  
   // Convert day bounds to UTC
   const dayStartUtc = fromZonedTime(dayStart, tz);
   const dayEndUtc = fromZonedTime(dayEnd, tz);
   
-  // Validate UTC conversion
-  if (isNaN(dayStartUtc.getTime()) || isNaN(dayEndUtc.getTime())) {
-    console.warn('splitAtMidnight: Invalid UTC conversion', { dayStartUtc, dayEndUtc });
-    return null;
-  }
-  
+  // ✅ VALIDAZIONE: Prova a creare Date objects e verifica che siano validi
   const segStartUtc = new Date(seg.startUtc);
   const segEndUtc = new Date(seg.endUtc);
   
-  // Validate segment dates
+  // ✅ VALIDAZIONE: Verifica che le date siano valide (non NaN)
   if (isNaN(segStartUtc.getTime()) || isNaN(segEndUtc.getTime())) {
-    console.warn('splitAtMidnight: Invalid segment dates', { seg });
+    console.warn('splitAtMidnight: Invalid segment dates', { 
+      seg,
+      startUtc_parsed: segStartUtc.toString(),
+      endUtc_parsed: segEndUtc.toString(),
+      startUtc_valid: !isNaN(segStartUtc.getTime()),
+      endUtc_valid: !isNaN(segEndUtc.getTime())
+    });
     return null;
   }
   
