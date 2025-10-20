@@ -278,7 +278,7 @@ const TimesheetEntry = () => {
     
     try {
       const location = await getCurrentLocation();
-      const now = new Date();
+      const now = new Date().toISOString(); // ✅ ISO string completo
 
       // Trova la sessione aperta più recente
       const { data: openSession, error: fetchError } = await supabase
@@ -297,7 +297,7 @@ const TimesheetEntry = () => {
         throw new Error('Nessuna sessione di lavoro aperta trovata');
       }
 
-      // ✅ FIX: Controlla se la sessione attraversa la mezzanotte
+      // ✅ Controlla se la sessione attraversa la mezzanotte
       const sessionDate = new Date(openSession.timesheets.date);
       const currentDate = new Date();
       const isDifferentDay = sessionDate.toDateString() !== currentDate.toDateString();
@@ -306,13 +306,10 @@ const TimesheetEntry = () => {
         // Sessione che attraversa la mezzanotte: lascia che il trigger la gestisca
         console.log('🌙 Overnight session detected, letting trigger handle split');
         
-        // Usa semplicemente l'ora corrente, il trigger split_overnight farà il resto
-        const timeOnly = format(now, 'HH:mm:ss');
-        
         const { error: sessionError } = await supabase
           .from('timesheet_sessions')
           .update({
-            end_time: timeOnly,
+            end_time: now, // ✅ ISO string completo
             notes: notes || 'Sessione chiusa il giorno successivo',
           })
           .eq('id', openSession.id);
@@ -329,12 +326,10 @@ const TimesheetEntry = () => {
         });
       } else {
         // Sessione normale dello stesso giorno
-        const timeOnly = format(now, 'HH:mm:ss');
-        
         const { error: sessionError } = await supabase
           .from('timesheet_sessions')
           .update({
-            end_time: timeOnly,
+            end_time: now, // ✅ ISO string completo
             notes: notes || null,
           })
           .eq('id', openSession.id);
@@ -343,7 +338,7 @@ const TimesheetEntry = () => {
 
         toast({
           title: "Uscita registrata!",
-          description: `Ore ${now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`,
+          description: `Ore ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`,
         });
       }
 
