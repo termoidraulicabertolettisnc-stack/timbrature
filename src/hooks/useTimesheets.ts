@@ -10,6 +10,38 @@ interface UseTimesheetsParams {
   selectedProject?: string;
 }
 
+/**
+ * Converte date da formato SQL a ISO 8601
+ * SQL:  "2025-10-20 13:29:55.803+00"
+ * ISO:  "2025-10-20T13:29:55.803+00:00"
+ */
+const convertToISO8601 = (dateStr: string | null): string | null => {
+  if (!dateStr) return null;
+  
+  // Se ha già la T, è già ISO
+  if (dateStr.includes('T')) return dateStr;
+  
+  // Converti spazio in T e aggiungi :00 al timezone se manca
+  return dateStr
+    .replace(' ', 'T')                    // Spazio → T
+    .replace(/\+(\d{2})$/, '+$1:00')      // +00 → +00:00
+    .replace(/\-(\d{2})$/, '-$1:00');     // -00 → -00:00
+};
+
+/**
+ * Normalizza tutte le date nelle sessioni per il frontend
+ */
+const normalizeTimesheetDates = (timesheets: TimesheetWithProfile[]): TimesheetWithProfile[] => {
+  return timesheets.map(timesheet => ({
+    ...timesheet,
+    timesheet_sessions: timesheet.timesheet_sessions?.map(session => ({
+      ...session,
+      start_time: convertToISO8601(session.start_time),
+      end_time: convertToISO8601(session.end_time),
+    })) || []
+  }));
+};
+
 export function useTimesheets({
   dateFilter,
   activeView,
@@ -88,7 +120,9 @@ export function useTimesheets({
 
       if (error) throw error;
       
-      return (data as unknown as TimesheetWithProfile[]) || [];
+      // ✅ Normalizza le date SQL → ISO 8601
+      const normalizedData = normalizeTimesheetDates(data as unknown as TimesheetWithProfile[]);
+      return normalizedData || [];
     },
     staleTime: 5 * 60 * 1000, // 5 minuti
   });
