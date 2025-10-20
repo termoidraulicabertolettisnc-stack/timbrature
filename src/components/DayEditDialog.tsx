@@ -80,18 +80,25 @@ interface DayEditDialogProps {
 
 const TZ = 'Europe/Rome';
 
-const utcToLocalTime = (timeString: string): string => {
+const utcToLocalTime = (utcString: string): string => {
   try {
-    // Se è nel formato TIME (HH:mm, HH:mm:ss, o HH:mm:ss.SSS)
-    if (/^\d{2}:\d{2}(:\d{2})?(\.\d+)?$/.test(timeString)) {
-      return timeString.substring(0, 5); // Restituisce sempre HH:mm
+    // ✅ VALIDAZIONE: Se la stringa è vuota o null, ritorna stringa vuota
+    if (!utcString || utcString.trim() === '') {
+      console.warn('utcToLocalTime: Empty UTC string');
+      return '';
     }
-    
-    // Altrimenti, converti da timestamp UTC
-    const localTime = toZonedTime(new Date(timeString), TZ);
+
+    // ✅ VALIDAZIONE: Prova a creare una data valida
+    const date = new Date(utcString);
+    if (isNaN(date.getTime())) {
+      console.error('utcToLocalTime: Invalid date', { utcString });
+      return '';
+    }
+
+    const localTime = toZonedTime(date, TZ);
     return format(localTime, 'HH:mm');
   } catch (error) {
-    console.error('Error converting time:', error);
+    console.error('Error converting UTC to local time:', { error, utcString });
     return '';
   }
 };
