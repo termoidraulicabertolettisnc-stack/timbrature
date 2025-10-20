@@ -84,23 +84,17 @@ export function sessionsForDay(timesheet: any, dayISO: string, tz = TZ): Seg[] {
   
   const out: Seg[] = [];
   
-  // First, try to get sessions from timesheet_sessions
-  const sessions = timesheet.timesheet_sessions?.filter((s: any) => s.session_type === 'work') || [];
+  // ✅ Filtra sessioni con date valide (già normalizzate in formato ISO)
+  const sessions = timesheet.timesheet_sessions?.filter((s: any) => 
+    s.start_time && s.end_time
+  ) || [];
   
   if (sessions.length > 0) {
     for (const session of sessions) {
       if (session.start_time && session.end_time) {
-        // Le sessioni hanno start_time e end_time come TIME (HH:mm:ss)
-        // Devo combinarli con la data del timesheet per creare timestamp completi
-        const timesheetDate = timesheet.date; // formato YYYY-MM-DD
-        
-        // Combina data + orario in formato ISO
-        const sessionStartUtc = `${timesheetDate}T${session.start_time}`;
-        const sessionEndUtc = `${timesheetDate}T${session.end_time}`;
-        
         const part = splitAtMidnight({
-          startUtc: sessionStartUtc,
-          endUtc: sessionEndUtc,
+          startUtc: session.start_time,
+          endUtc: session.end_time,
           sessionId: session.id,
           sessionOrder: session.session_order
         }, dayISO, tz);
