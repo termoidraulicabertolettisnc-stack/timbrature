@@ -287,7 +287,7 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
       // Se ci sono sessioni multiple, usa quelle
       if (timesheet.timesheet_sessions && timesheet.timesheet_sessions.length > 0) {
         const workSessions = timesheet.timesheet_sessions
-          .filter(session => session.session_type === 'work')
+          .filter(session => session.start_time && session.end_time)  // ✅ Filtra solo sessioni valide
           .sort((a, b) => a.session_order - b.session_order);
 
         console.log(`🔍 Processing ${workSessions.length} work sessions for timesheet ${timesheet.id}`);
