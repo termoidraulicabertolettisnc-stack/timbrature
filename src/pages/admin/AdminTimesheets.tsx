@@ -993,6 +993,12 @@ export default function AdminTimesheets() {
   const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
     const employeeMap = new Map<string, EmployeeSummary>();
 
+    console.log('🔍 FILTERED TIMESHEETS:', {
+      count: filteredTimesheets.length,
+      ids: filteredTimesheets.map(t => t.id),
+      dates: filteredTimesheets.map(t => t.date)
+    });
+
     filteredTimesheets.forEach((timesheet) => {
       const userId = timesheet.user_id;
 
