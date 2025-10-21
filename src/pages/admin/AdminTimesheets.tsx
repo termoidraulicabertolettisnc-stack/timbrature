@@ -1447,6 +1447,17 @@ function DailySummaryViewFixed({
                                           {sessionIndex === 0 ? timesheet.projects?.name || "N/A" : ""}
                                         </TableCell>
                                         <TableCell>
+                                          {(() => {
+                                            console.log('🔍 RENDERING SESSION:', {
+                                              id: session.id,
+                                              start_time: session.start_time,
+                                              end_time: session.end_time,
+                                              start_type: typeof session.start_time,
+                                              session_order: session.session_order
+                                            });
+                                            return null;
+                                          })()}
+                                          
                                           <div className="flex items-center gap-2">
                                             <Badge variant="outline" className="text-xs">
                                               S{sessionIndex + 1}
