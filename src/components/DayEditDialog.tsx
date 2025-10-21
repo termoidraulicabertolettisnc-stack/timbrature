@@ -480,8 +480,27 @@ export function DayEditDialog({
     // Calcola ore lorde (somma di tutte le sessioni)
     sessions.forEach(session => {
       if (session.start_time && session.end_time) {
-        const startDate = new Date(`${date}T${session.start_time}:00`);
-        const endDate = new Date(`${date}T${session.end_time}:00`);
+        // ✅ FIX: Se start_time contiene già data completa, usala direttamente
+        let startDate: Date;
+        let endDate: Date;
+
+        // Controlla se start_time è un timestamp completo o solo orario
+        if (session.start_time.includes('T') || session.start_time.includes(' ')) {
+          // È un timestamp completo (es. "2025-10-06T14:30:00+00" o "2025-10-06 14:30:00+00")
+          startDate = new Date(session.start_time);
+          endDate = new Date(session.end_time);
+        } else {
+          // È solo orario (es. "14:30") - comportamento vecchio
+          startDate = new Date(`${date}T${session.start_time}:00`);
+          endDate = new Date(`${date}T${session.end_time}:00`);
+        }
+
+        // Validazione: se le date sono invalide, salta questa sessione
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+          console.warn('Invalid session dates:', { start: session.start_time, end: session.end_time });
+          return; // Salta questa sessione
+        }
+
         const duration = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
         
         if (duration > 0) {
