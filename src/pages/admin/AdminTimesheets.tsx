@@ -989,8 +989,8 @@ export default function AdminTimesheets() {
     return employeeName.includes(searchTerm.toLowerCase()) || projectName.includes(searchTerm.toLowerCase());
   });
 
-  // CORREZIONE: Aggregazione corretta delle sessioni multiple per dipendente
-  const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
+  // CORREZIONE: Aggregazione con useMemo per evitare duplicati
+  const aggregatedEmployees = useMemo(() => {
     const employeeMap = new Map<string, EmployeeSummary>();
 
     filteredTimesheets.forEach((timesheet) => {
@@ -1055,7 +1055,7 @@ export default function AdminTimesheets() {
     });
 
     return Array.from(employeeMap.values());
-  };
+  }, [filteredTimesheets]); // Ricalcola solo quando cambiano i timesheets filtrati
 
   if (loading) {
     return (
@@ -1195,7 +1195,7 @@ export default function AdminTimesheets() {
             timesheets={filteredTimesheets}
             absences={absences}
             dateFilter={dateFilter}
-            aggregateTimesheetsByEmployee={aggregateTimesheetsByEmployee}
+            aggregateTimesheetsByEmployee={() => aggregatedEmployees}
             employeeSettings={employeeSettings}
             companySettings={companySettings}
             onEditDay={handleEditDay}
