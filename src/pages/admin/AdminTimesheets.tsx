@@ -1463,8 +1463,27 @@ function DailySummaryViewFixed({
                                               S{sessionIndex + 1}
                                             </Badge>
                                             <span className="font-mono text-sm">
-                                              {session.start_time ? session.start_time.substring(0, 5) : "--:--"} -
-                                              {session.end_time ? session.end_time.substring(0, 5) : "--:--"}
+                                              <span>
+                                                {session.start_time ? (() => {
+                                                  try {
+                                                    const date = new Date(session.start_time);
+                                                    return formatInTimeZone(date, 'Europe/Rome', 'HH:mm');
+                                                  } catch {
+                                                    return '-';
+                                                  }
+                                                })() : '-'}
+                                              </span>
+                                              {' → '}
+                                              <span>
+                                                {session.end_time ? (() => {
+                                                  try {
+                                                    const date = new Date(session.end_time);
+                                                    return formatInTimeZone(date, 'Europe/Rome', 'HH:mm');
+                                                  } catch {
+                                                    return '-';
+                                                  }
+                                                })() : 'In corso'}
+                                              </span>
                                             </span>
                                           </div>
                                         </TableCell>
