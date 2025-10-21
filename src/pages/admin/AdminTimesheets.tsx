@@ -1448,7 +1448,7 @@ function DailySummaryViewFixed({
                                                 {session.start_time ? (() => {
                                                   try {
                                                     const date = new Date(session.start_time);
-                                                    return formatInTimeZone(date, 'Europe/Rome', 'HH:mm');
+                                                    return format(date, 'HH:mm');
                                                   } catch {
                                                     return '-';
                                                   }
@@ -1459,7 +1459,7 @@ function DailySummaryViewFixed({
                                                 {session.end_time ? (() => {
                                                   try {
                                                     const date = new Date(session.end_time);
-                                                    return formatInTimeZone(date, 'Europe/Rome', 'HH:mm');
+                                                    return format(date, 'HH:mm');
                                                   } catch {
                                                     return '-';
                                                   }
