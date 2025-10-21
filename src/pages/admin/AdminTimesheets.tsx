@@ -1013,32 +1013,20 @@ export default function AdminTimesheets() {
       }
 
       const employee = employeeMap.get(userId)!;
-
-      // Aggiungi il timesheet alla lista
-      employee.timesheets.push(timesheet);
-
-      // Conta il numero di sessioni
-      const sessions = timesheet.timesheet_sessions || [];
-      if (sessions.length > 0) {
-        employee.total_sessions += sessions.length;
-
-        // Calcola le ore totali sommando le ore di ogni sessione
-        sessions.forEach((session) => {
-          if (session.start_time && session.end_time) {
-            const start = new Date(`2000-01-01T${session.start_time}`);
-            const end = new Date(`2000-01-01T${session.end_time}`);
-            const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-            employee.total_hours += hours;
-          }
-        });
-      } else {
-        employee.total_sessions += 1;
-        employee.total_hours += parseFloat(String(timesheet.total_hours || 0));
+      
+      // ✅ AGGIUNGI QUESTE RIGHE (erano mancanti!)
+      const sessionsData = processTimesheetSessions(timesheet);
+      employee.timesheets.push(...sessionsData);
+      
+      // Aggiorna i totali
+      employee.total_hours += timesheet.total_hours || 0;
+      employee.overtime_hours += timesheet.overtime_hours || 0;
+      employee.night_hours += timesheet.night_hours || 0;
+      employee.regular_hours += (timesheet.total_hours || 0) - (timesheet.overtime_hours || 0);
+      
+      if (timesheet.meal_voucher_earned) {
+        employee.meal_vouchers += 1;
       }
-
-      // Aggrega straordinari e notturne solo una volta per timesheet
-      employee.overtime_hours += parseFloat(String(timesheet.overtime_hours || 0));
-      employee.night_hours += parseFloat(String(timesheet.night_hours || 0));
     });
 
     // Calcola ore regolari per ogni dipendente
