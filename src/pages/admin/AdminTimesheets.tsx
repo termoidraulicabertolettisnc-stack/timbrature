@@ -1024,6 +1024,13 @@ export default function AdminTimesheets() {
         sessions_pushed: sessionsData.length,
         total_in_array: employee.timesheets.length
       });
+
+      console.log('📦 AFTER PUSH:', {
+        user: employee.first_name,
+        timesheet_id: timesheet.id,
+        array_length: employee.timesheets.length,
+        session_ids: employee.timesheets.map(t => t.id)
+      });
       
       // Aggiorna i totali
       employee.total_hours += timesheet.total_hours || 0;
