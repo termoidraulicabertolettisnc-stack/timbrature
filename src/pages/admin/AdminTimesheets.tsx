@@ -1339,12 +1339,13 @@ function DailySummaryViewFixed({
   onNavigateNext: () => void;
   onNavigateToday: () => void;
 }) {
-  // ========== AGGIUNGI QUESTO BLOCCO DI DEBUG ==========
-  console.log("🎯 VISTA GIORNALIERA - DEBUG COMPLETO:", {
-    numero_timesheets_ricevuti: timesheets.length,
-    timesheets: timesheets,
-    primo_timesheet: timesheets[0],
-    ha_sessioni_il_primo: timesheets[0]?.timesheet_sessions,
+  console.log("🎯 VISTA GIORNALIERA - DEBUG SESSIONI:", {
+    numero_timesheets: timesheets.length,
+    primo_timesheet_id: timesheets[0]?.id,
+    ha_sessioni: !!timesheets[0]?.timesheet_sessions,
+    numero_sessioni: timesheets[0]?.timesheet_sessions?.length,
+    sessione_0: timesheets[0]?.timesheet_sessions?.[0],
+    sessione_1: timesheets[0]?.timesheet_sessions?.[1],
   });
 
   return (
