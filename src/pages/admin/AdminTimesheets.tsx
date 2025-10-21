@@ -182,6 +182,13 @@ const verifyTimesheetIntegrity = async (timesheetId: string) => {
 
 // CORREZIONE: Funzione per gestire correttamente le sessioni multiple
 const processTimesheetSessions = (timesheet: TimesheetWithProfile): ExtendedTimesheetWithProfile[] => {
+  console.log('🔍 PROCESS SESSIONS INPUT:', {
+    timesheet_id: timesheet.id,
+    user: timesheet.profiles?.first_name,
+    sessions_count: timesheet.timesheet_sessions?.length,
+    raw_sessions: timesheet.timesheet_sessions
+  });
+  
   const sessions: ExtendedTimesheetWithProfile[] = [];
 
   console.log(
