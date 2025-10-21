@@ -1491,8 +1491,8 @@ function DailySummaryViewFixed({
                                           {(() => {
                                             // Calcola ore per questa sessione
                                             if (session.start_time && session.end_time) {
-                                              const start = new Date(`2000-01-01T${session.start_time}`);
-                                              const end = new Date(`2000-01-01T${session.end_time}`);
+                                              const start = new Date(session.start_time);
+                                              const end = new Date(session.end_time);
                                               const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
                                               return hours.toFixed(2) + "h";
                                             }
