@@ -1458,11 +1458,11 @@ function DailySummaryViewFixed({
                                     <TableCell>
                                       <span className="font-mono text-sm">
                                         {session.start_time
-                                          ? format(new Date(session.start_time), "HH:mm")
+                                          ? format(parseISO(session.start_time), "HH:mm")
                                           : "--:--"}{" "}
                                         →{" "}
                                         {session.end_time
-                                          ? format(new Date(session.end_time), "HH:mm")
+                                          ? format(parseISO(session.end_time), "HH:mm")
                                           : "In corso"}
                                       </span>
                                     </TableCell>
