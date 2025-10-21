@@ -989,6 +989,10 @@ export default function AdminTimesheets() {
     return employeeName.includes(searchTerm.toLowerCase()) || projectName.includes(searchTerm.toLowerCase());
   });
 
+  // 🔍 DEBUG: Verifica dati in ingresso
+  console.log('🔍 FILTERED COUNT:', filteredTimesheets.length);
+  console.log('🔍 LORENZO TIMESHEET:', filteredTimesheets.find(t => t.profiles?.first_name === 'Lorenzo'));
+
   // CORREZIONE: Aggregazione con useMemo per evitare duplicati
   const aggregatedEmployees = useMemo(() => {
     const employeeMap = new Map<string, EmployeeSummary>();
