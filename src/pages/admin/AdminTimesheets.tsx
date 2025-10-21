@@ -182,13 +182,13 @@ const verifyTimesheetIntegrity = async (timesheetId: string) => {
 
 // CORREZIONE: Funzione per gestire correttamente le sessioni multiple
 const processTimesheetSessions = (timesheet: TimesheetWithProfile): ExtendedTimesheetWithProfile[] => {
-  console.log('🔍 PROCESS SESSIONS INPUT:', {
+  console.log("🔍 PROCESS SESSIONS INPUT:", {
     timesheet_id: timesheet.id,
     user: timesheet.profiles?.first_name,
     sessions_count: timesheet.timesheet_sessions?.length,
-    raw_sessions: timesheet.timesheet_sessions
+    raw_sessions: timesheet.timesheet_sessions,
   });
-  
+
   const sessions: ExtendedTimesheetWithProfile[] = [];
 
   console.log(
@@ -997,8 +997,11 @@ export default function AdminTimesheets() {
   });
 
   // 🔍 DEBUG: Verifica dati in ingresso
-  console.log('🔍 FILTERED COUNT:', filteredTimesheets.length);
-  console.log('🔍 LORENZO TIMESHEET:', filteredTimesheets.find(t => t.profiles?.first_name === 'Lorenzo'));
+  console.log("🔍 FILTERED COUNT:", filteredTimesheets.length);
+  console.log(
+    "🔍 LORENZO TIMESHEET:",
+    filteredTimesheets.find((t) => t.profiles?.first_name === "Lorenzo"),
+  );
 
   // CORREZIONE: Aggregazione con useMemo per evitare duplicati
   const aggregatedEmployees = useMemo(() => {
@@ -1453,24 +1456,15 @@ function DailySummaryViewFixed({
                                   user: employee.first_name,
                                   date: session.date,
                                 });
-                                
+
                                 return (
                                   <TableRow key={session.id}>
-                                    <TableCell>
-                                      {format(parseISO(session.date), "dd/MM/yyyy")}
-                                    </TableCell>
-                                    <TableCell>
-                                      {session.projects?.name || "N/A"}
-                                    </TableCell>
+                                    <TableCell>{format(parseISO(session.date), "dd/MM/yyyy")}</TableCell>
+                                    <TableCell>{session.projects?.name || "N/A"}</TableCell>
                                     <TableCell>
                                       <span className="font-mono text-sm">
-                                        {session.start_time
-                                          ? format(parseISO(session.start_time), "HH:mm")
-                                          : "--:--"}{" "}
-                                        →{" "}
-                                        {session.end_time
-                                          ? format(parseISO(session.end_time), "HH:mm")
-                                          : "In corso"}
+                                        {session.start_time ? session.start_time.substring(11, 16) : "--:--"} →{" "}
+                                        {session.end_time ? session.end_time.substring(11, 16) : "In corso"}
                                       </span>
                                     </TableCell>
                                     <TableCell>
@@ -1521,7 +1515,7 @@ function DailySummaryViewFixed({
                                                 session.date,
                                                 employeeData,
                                                 session,
-                                                session.timesheet_sessions || []
+                                                session.timesheet_sessions || [],
                                               );
                                             }
                                           }}
