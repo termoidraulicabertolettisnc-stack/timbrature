@@ -1430,7 +1430,14 @@ function DailySummaryViewFixed({
 
                                   if (sessions.length > 0) {
                                     // Se ci sono sessioni, mostra una riga per ogni sessione
-                                    return sessions.map((session, sessionIndex) => (
+                                    return sessions.map((session, sessionIndex) => {
+                                      console.log('🔄 MAP SESSION:', { 
+                                        index: sessionIndex, 
+                                        session_id: session.id,
+                                        user: employee.first_name,
+                                        date: timesheet.date 
+                                      });
+                                      return (
                                       <TableRow key={`${timesheet.id}_session_${session.id}`}>
                                         <TableCell>
                                           {sessionIndex === 0 ? format(parseISO(timesheet.date), "dd/MM/yyyy") : ""}
@@ -1539,8 +1546,9 @@ function DailySummaryViewFixed({
                                             )}
                                           </div>
                                         </TableCell>
-                                      </TableRow>
-                                    ));
+                                       </TableRow>
+                                      );
+                                    });
                                   } else {
                                     // Fallback per timesheet senza sessioni
                                     return (
