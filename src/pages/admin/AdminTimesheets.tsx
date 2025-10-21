@@ -1013,31 +1013,31 @@ export default function AdminTimesheets() {
       }
 
       const employee = employeeMap.get(userId)!;
-      
+
       // ✅ AGGIUNGI QUESTE RIGHE (erano mancanti!)
       const sessionsData = processTimesheetSessions(timesheet);
       employee.timesheets.push(...sessionsData);
-      
-      console.log('📊 AGGREGATE:', {
+
+      console.log("📊 AGGREGATE:", {
         user: employee.first_name,
         timesheet_id: timesheet.id,
         sessions_pushed: sessionsData.length,
-        total_in_array: employee.timesheets.length
+        total_in_array: employee.timesheets.length,
       });
 
-      console.log('📦 AFTER PUSH:', {
+      console.log("📦 AFTER PUSH:", {
         user: employee.first_name,
         timesheet_id: timesheet.id,
         array_length: employee.timesheets.length,
-        session_ids: employee.timesheets.map(t => t.id)
+        session_ids: employee.timesheets.map((t) => t.id),
       });
-      
+
       // Aggiorna i totali
       employee.total_hours += timesheet.total_hours || 0;
       employee.overtime_hours += timesheet.overtime_hours || 0;
       employee.night_hours += timesheet.night_hours || 0;
       employee.regular_hours += (timesheet.total_hours || 0) - (timesheet.overtime_hours || 0);
-      
+
       if (timesheet.meal_voucher_earned) {
         employee.meal_vouchers += 1;
       }
@@ -1376,7 +1376,12 @@ function DailySummaryViewFixed({
             </div>
           ) : (
             <div className="space-y-4">
-              {aggregateTimesheetsByEmployee().map((employee) => (
+              {(() => {
+                const employees = aggregateTimesheetsByEmployee();
+                console.log("🎯 EMPLOYEES COUNT:", employees.length);
+                console.log("🎯 FIRST EMPLOYEE SESSIONS:", employees[0]?.timesheets.length);
+                return employees;
+              })().map((employee) => (
                 <Card key={employee.user_id} className="border-l-4 border-l-primary">
                   <CardContent className="pt-6">
                     <div className="flex items-start justify-between mb-4">
@@ -1438,122 +1443,126 @@ function DailySummaryViewFixed({
                                   if (sessions.length > 0) {
                                     // Se ci sono sessioni, mostra una riga per ogni sessione
                                     return sessions.map((session, sessionIndex) => {
-                                      console.log('🔄 MAP SESSION:', { 
-                                        index: sessionIndex, 
+                                      console.log("🔄 MAP SESSION:", {
+                                        index: sessionIndex,
                                         session_id: session.id,
                                         user: employee.first_name,
-                                        date: timesheet.date 
+                                        date: timesheet.date,
                                       });
                                       return (
-                                      <TableRow key={`${timesheet.id}_session_${session.id}`}>
-                                        <TableCell>
-                                          {sessionIndex === 0 ? format(parseISO(timesheet.date), "dd/MM/yyyy") : ""}
-                                        </TableCell>
-                                        <TableCell>
-                                          {sessionIndex === 0 ? timesheet.projects?.name || "N/A" : ""}
-                                        </TableCell>
-                                        <TableCell>
-                                          <div className="flex items-center gap-2">
-                                            <Badge variant="outline" className="text-xs">
-                                              S{sessionIndex + 1}
+                                        <TableRow key={`${timesheet.id}_session_${session.id}`}>
+                                          <TableCell>
+                                            {sessionIndex === 0 ? format(parseISO(timesheet.date), "dd/MM/yyyy") : ""}
+                                          </TableCell>
+                                          <TableCell>
+                                            {sessionIndex === 0 ? timesheet.projects?.name || "N/A" : ""}
+                                          </TableCell>
+                                          <TableCell>
+                                            <div className="flex items-center gap-2">
+                                              <Badge variant="outline" className="text-xs">
+                                                S{sessionIndex + 1}
+                                              </Badge>
+                                              <span className="font-mono text-sm">
+                                                <span>
+                                                  {session.start_time
+                                                    ? (() => {
+                                                        try {
+                                                          const date = new Date(session.start_time);
+                                                          return format(date, "HH:mm");
+                                                        } catch {
+                                                          return "-";
+                                                        }
+                                                      })()
+                                                    : "-"}
+                                                </span>
+                                                {" → "}
+                                                <span>
+                                                  {session.end_time
+                                                    ? (() => {
+                                                        try {
+                                                          const date = new Date(session.end_time);
+                                                          return format(date, "HH:mm");
+                                                        } catch {
+                                                          return "-";
+                                                        }
+                                                      })()
+                                                    : "In corso"}
+                                                </span>
+                                              </span>
+                                            </div>
+                                          </TableCell>
+                                          <TableCell>
+                                            {(() => {
+                                              // Calcola ore per questa sessione
+                                              if (session.start_time && session.end_time) {
+                                                const start = new Date(session.start_time);
+                                                const end = new Date(session.end_time);
+                                                const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+                                                return hours.toFixed(2) + "h";
+                                              }
+                                              return "0.00h";
+                                            })()}
+                                          </TableCell>
+                                          <TableCell>
+                                            <Badge variant="secondary" className="text-xs">
+                                              {session.session_type || "work"}
                                             </Badge>
-                                            <span className="font-mono text-sm">
-                                              <span>
-                                                {session.start_time ? (() => {
-                                                  try {
-                                                    const date = new Date(session.start_time);
-                                                    return format(date, 'HH:mm');
-                                                  } catch {
-                                                    return '-';
-                                                  }
-                                                })() : '-'}
+                                          </TableCell>
+                                          <TableCell>
+                                            {sessionIndex === 0 && timesheet.meal_voucher_earned && (
+                                              <Badge className="bg-green-100 text-green-800">Sì</Badge>
+                                            )}
+                                          </TableCell>
+                                          <TableCell>
+                                            {sessionIndex === 0 &&
+                                            timesheet.start_location_lat &&
+                                            timesheet.start_location_lng ? (
+                                              <span className="text-xs">
+                                                {timesheet.start_location_lat.toFixed(4)},{" "}
+                                                {timesheet.start_location_lng.toFixed(4)}
                                               </span>
-                                              {' → '}
-                                              <span>
-                                                {session.end_time ? (() => {
-                                                  try {
-                                                    const date = new Date(session.end_time);
-                                                    return format(date, 'HH:mm');
-                                                  } catch {
-                                                    return '-';
-                                                  }
-                                                })() : 'In corso'}
-                                              </span>
-                                            </span>
-                                          </div>
-                                        </TableCell>
-                                        <TableCell>
-                                          {(() => {
-                                            // Calcola ore per questa sessione
-                                            if (session.start_time && session.end_time) {
-                                              const start = new Date(session.start_time);
-                                              const end = new Date(session.end_time);
-                                              const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-                                              return hours.toFixed(2) + "h";
-                                            }
-                                            return "0.00h";
-                                          })()}
-                                        </TableCell>
-                                        <TableCell>
-                                          <Badge variant="secondary" className="text-xs">
-                                            {session.session_type || "work"}
-                                          </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                          {sessionIndex === 0 && timesheet.meal_voucher_earned && (
-                                            <Badge className="bg-green-100 text-green-800">Sì</Badge>
-                                          )}
-                                        </TableCell>
-                                        <TableCell>
-                                          {sessionIndex === 0 &&
-                                          timesheet.start_location_lat &&
-                                          timesheet.start_location_lng ? (
-                                            <span className="text-xs">
-                                              {timesheet.start_location_lat.toFixed(4)},{" "}
-                                              {timesheet.start_location_lng.toFixed(4)}
-                                            </span>
-                                          ) : (
-                                            "-"
-                                          )}
-                                        </TableCell>
-                                        <TableCell>
-                                          <div className="flex gap-2">
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              onClick={() => {
-                                                if (onEditDay) {
-                                                  const employeeData = {
-                                                    user_id: employee.user_id,
-                                                    first_name: employee.first_name,
-                                                    last_name: employee.last_name,
-                                                    email: employee.email,
-                                                  };
-                                                  onEditDay(
-                                                    timesheet.date,
-                                                    employeeData,
-                                                    timesheet,
-                                                    timesheet.timesheet_sessions || [],
-                                                  );
-                                                }
-                                              }}
-                                              title="Modifica giornata"
-                                            >
-                                              <Edit className="h-4 w-4" />
-                                            </Button>
-                                            {sessionIndex === 0 && (
+                                            ) : (
+                                              "-"
+                                            )}
+                                          </TableCell>
+                                          <TableCell>
+                                            <div className="flex gap-2">
                                               <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                onClick={() => onDeleteTimesheet(timesheet.id)}
-                                                title="Elimina timesheet"
+                                                onClick={() => {
+                                                  if (onEditDay) {
+                                                    const employeeData = {
+                                                      user_id: employee.user_id,
+                                                      first_name: employee.first_name,
+                                                      last_name: employee.last_name,
+                                                      email: employee.email,
+                                                    };
+                                                    onEditDay(
+                                                      timesheet.date,
+                                                      employeeData,
+                                                      timesheet,
+                                                      timesheet.timesheet_sessions || [],
+                                                    );
+                                                  }
+                                                }}
+                                                title="Modifica giornata"
                                               >
-                                                <Trash2 className="h-4 w-4" />
+                                                <Edit className="h-4 w-4" />
                                               </Button>
-                                            )}
-                                          </div>
-                                        </TableCell>
-                                       </TableRow>
+                                              {sessionIndex === 0 && (
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  onClick={() => onDeleteTimesheet(timesheet.id)}
+                                                  title="Elimina timesheet"
+                                                >
+                                                  <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                              )}
+                                            </div>
+                                          </TableCell>
+                                        </TableRow>
                                       );
                                     });
                                   } else {
