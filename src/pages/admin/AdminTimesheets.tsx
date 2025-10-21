@@ -1440,13 +1440,17 @@ function DailySummaryViewFixed({
                             </TableHeader>
                             <TableBody>
                               {employee.timesheets
-                                .map((session, index) => {
-                                  console.log("🔄 MAP SESSION:", {
+                                .map((timesheet, index) => {
+                                  console.log("🔄 MAP TIMESHEET:", {
                                     index,
-                                    session_id: session.id,
+                                    timesheet_id: timesheet.id,
                                     user: employee.first_name,
-                                    date: session.date,
+                                    date: timesheet.date,
                                   });
+                                  
+                                  // Verifica se ci sono sessioni multiple
+                                  if (timesheet.timesheet_sessions && timesheet.timesheet_sessions.length > 0) {
+                                    return timesheet.timesheet_sessions.map((session, sessionIndex) => {
                                       console.log("🔄 MAP SESSION:", {
                                         index: sessionIndex,
                                         session_id: session.id,
