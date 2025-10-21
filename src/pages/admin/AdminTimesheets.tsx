@@ -1440,13 +1440,13 @@ function DailySummaryViewFixed({
                             </TableHeader>
                             <TableBody>
                               {employee.timesheets
-                                .map((timesheet: TimesheetWithProfile) => {
-                                  // Gestione sessioni multiple
-                                  const sessions = timesheet.timesheet_sessions || [];
-
-                                  if (sessions.length > 0) {
-                                    // Se ci sono sessioni, mostra una riga per ogni sessione
-                                    return sessions.map((session, sessionIndex) => {
+                                .map((session, index) => {
+                                  console.log("🔄 MAP SESSION:", {
+                                    index,
+                                    session_id: session.id,
+                                    user: employee.first_name,
+                                    date: session.date,
+                                  });
                                       console.log("🔄 MAP SESSION:", {
                                         index: sessionIndex,
                                         session_id: session.id,
