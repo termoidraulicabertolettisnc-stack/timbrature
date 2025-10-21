@@ -993,12 +993,6 @@ export default function AdminTimesheets() {
   const aggregateTimesheetsByEmployee = (): EmployeeSummary[] => {
     const employeeMap = new Map<string, EmployeeSummary>();
 
-    console.log('🔍 FILTERED TIMESHEETS:', {
-      count: filteredTimesheets.length,
-      ids: filteredTimesheets.map(t => t.id),
-      dates: filteredTimesheets.map(t => t.date)
-    });
-
     filteredTimesheets.forEach((timesheet) => {
       const userId = timesheet.user_id;
 
@@ -1023,6 +1017,13 @@ export default function AdminTimesheets() {
       // ✅ AGGIUNGI QUESTE RIGHE (erano mancanti!)
       const sessionsData = processTimesheetSessions(timesheet);
       employee.timesheets.push(...sessionsData);
+      
+      console.log('📊 AGGREGATE:', {
+        user: employee.first_name,
+        timesheet_id: timesheet.id,
+        sessions_pushed: sessionsData.length,
+        total_in_array: employee.timesheets.length
+      });
       
       // Aggiorna i totali
       employee.total_hours += timesheet.total_hours || 0;
@@ -1333,15 +1334,6 @@ function DailySummaryViewFixed({
   onNavigateNext: () => void;
   onNavigateToday: () => void;
 }) {
-  console.log("🎯 VISTA GIORNALIERA - DEBUG SESSIONI:", {
-    numero_timesheets: timesheets.length,
-    primo_timesheet_id: timesheets[0]?.id,
-    ha_sessioni: !!timesheets[0]?.timesheet_sessions,
-    numero_sessioni: timesheets[0]?.timesheet_sessions?.length,
-    sessione_0: timesheets[0]?.timesheet_sessions?.[0],
-    sessione_1: timesheets[0]?.timesheet_sessions?.[1],
-  });
-
   return (
     <Card>
       <CardHeader>
@@ -1447,17 +1439,6 @@ function DailySummaryViewFixed({
                                           {sessionIndex === 0 ? timesheet.projects?.name || "N/A" : ""}
                                         </TableCell>
                                         <TableCell>
-                                          {(() => {
-                                            console.log('🔍 RENDERING SESSION:', {
-                                              id: session.id,
-                                              start_time: session.start_time,
-                                              end_time: session.end_time,
-                                              start_type: typeof session.start_time,
-                                              session_order: session.session_order
-                                            });
-                                            return null;
-                                          })()}
-                                          
                                           <div className="flex items-center gap-2">
                                             <Badge variant="outline" className="text-xs">
                                               S{sessionIndex + 1}
