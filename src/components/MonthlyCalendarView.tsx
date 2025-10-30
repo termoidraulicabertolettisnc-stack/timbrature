@@ -70,8 +70,16 @@ export function MonthlyCalendarView({
   const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
   const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
+  console.log('🚨 MonthlyCalendarView MOUNTED:', {
+    timesheets_count: timesheets.length,
+    first_timesheet: timesheets[0]
+  });
+
   const employeeData = useMemo(() => {
-    const employeesMap = new Map<string, EmployeeMonthData>();
+    console.log('🔍 useMemo TRIGGERED');
+    
+    try {
+      const employeesMap = new Map<string, EmployeeMonthData>();
 
     // Processa i timesheets CON le loro sessioni
     timesheets.forEach(timesheet => {
@@ -179,6 +187,10 @@ export function MonthlyCalendarView({
     });
 
     return Array.from(employeesMap.values());
+    } catch (error) {
+      console.error('🚨 ERROR in useMemo:', error);
+      return [];
+    }
   }, [timesheets, absences]);
 
   const getWeeks = () => {
