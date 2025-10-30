@@ -191,7 +191,7 @@ export function MonthlyCalendarView({
       console.error('🚨 ERROR in useMemo:', error);
       return [];
     }
-  }, [timesheets, absences]);
+  }, [timesheets, absences, employeeSettings, companySettings, dateFilter]);
 
   const getWeeks = () => {
     const weeks = [];
