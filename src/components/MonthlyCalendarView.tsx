@@ -82,7 +82,7 @@ export function MonthlyCalendarView({
     try {
       const employeesMap = new Map<string, EmployeeMonthData>();
 
-    // Processa i timesheets CON le loro sessioni
+    // Processa i timesheets
     timesheets.forEach(timesheet => {
       if (!timesheet.profiles) return;
 
@@ -100,7 +100,7 @@ export function MonthlyCalendarView({
 
       const employee = employeesMap.get(key)!;
       const date = timesheet.date;
-
+      
       if (!employee.days[date]) {
         employee.days[date] = {
           date,
@@ -114,41 +114,24 @@ export function MonthlyCalendarView({
           meal_vouchers: 0
         };
       }
-
+      
       employee.days[date].timesheets.push(timesheet);
       
-      // IMPORTANTE: Aggiungi le sessioni se esistono
-      if (timesheet.timesheet_sessions && timesheet.timesheet_sessions.length > 0) {
-        employee.days[date].sessions = timesheet.timesheet_sessions;
-        
-        // Calcola le ore dalle sessioni
-        let dayTotalHours = 0;
-        timesheet.timesheet_sessions.forEach(session => {
-          const startTime = new Date(`2000-01-01T${session.start_time}`);
-          const endTime = new Date(`2000-01-01T${session.end_time}`);
-          const hours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
-          // Sessions don't have pause_minutes, ignore it
-          dayTotalHours += hours;
-        });
-        
-        employee.days[date].total_hours = dayTotalHours;
-        employee.days[date].regular_hours = Math.min(dayTotalHours, 8);
-        employee.days[date].overtime_hours = Math.max(0, dayTotalHours - 8);
-        
-      } else if (timesheet.total_hours) {
-        // Fallback: usa le ore dal timesheet principale se non ci sono sessioni
-        employee.days[date].total_hours = timesheet.total_hours;
-        employee.days[date].regular_hours = Math.min(timesheet.total_hours, 8);
-        employee.days[date].overtime_hours = timesheet.overtime_hours || Math.max(0, timesheet.total_hours - 8);
+      const totalHours = timesheet.total_hours || 0;
+      const regularHours = Math.min(totalHours, 8);
+      const overtimeHours = Math.max(0, totalHours - 8);
+      
+      employee.days[date].regular_hours += regularHours;
+      employee.days[date].overtime_hours += overtimeHours;
+      employee.days[date].night_hours += (timesheet.night_hours || 0);
+      
+      if (timesheet.meal_voucher_earned) {
+        employee.days[date].meal_vouchers += 1;
       }
       
-      employee.days[date].night_hours = timesheet.night_hours || 0;
-      employee.days[date].meal_vouchers = timesheet.meal_voucher_earned ? 1 : 0;
-
-      // Aggiorna i totali
-      employee.totals.regular_hours += employee.days[date].regular_hours;
-      employee.totals.overtime_hours += employee.days[date].overtime_hours;
-      employee.totals.total_hours += employee.days[date].total_hours;
+      employee.totals.regular_hours += regularHours;
+      employee.totals.overtime_hours += overtimeHours;
+      employee.totals.total_hours += totalHours;
     });
 
     // Aggiungi le assenze
