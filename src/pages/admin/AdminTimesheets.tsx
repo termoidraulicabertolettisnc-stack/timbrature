@@ -1241,6 +1241,29 @@ export default function AdminTimesheets() {
           />
         </TabsContent>
 
+        {/* ===== DEBUG INJECTION START ===== */}
+        {activeView === 'monthly' && (() => {
+          console.log('🚨 DEBUG MONTHLY VIEW - Rendering MonthlyCalendarView with:', {
+            activeView,
+            dateFilter,
+            timesheets_total: timesheets.length,
+            filteredTimesheets_count: filteredTimesheets.length,
+            absences_count: absences.length,
+            searchTerm,
+            selectedEmployee,
+            selectedProject,
+            sample_timesheet: filteredTimesheets[0],
+            first_5_timesheets: filteredTimesheets.slice(0, 5).map(t => ({
+              id: t.id,
+              date: t.date,
+              user: t.profiles?.first_name,
+              sessions_count: t.timesheet_sessions?.length
+            }))
+          });
+          return null;
+        })()}
+        {/* ===== DEBUG INJECTION END ===== */}
+
         <TabsContent value="monthly" className="mt-6">
           <MonthlyCalendarView
             timesheets={filteredTimesheets}
