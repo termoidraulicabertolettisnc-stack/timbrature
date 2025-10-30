@@ -63,13 +63,6 @@ export function MonthlyCalendarView({
   onNavigateToday,
   onEditDay
 }: MonthlyCalendarViewProps) {
-  const currentMonth = parseISO(dateFilter);
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
-  const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 });
-  const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
-  const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
-
   console.log('🚨 MonthlyCalendarView MOUNTED:', {
     timesheets_count: timesheets.length,
     first_timesheet: timesheets[0]
@@ -77,6 +70,14 @@ export function MonthlyCalendarView({
 
   const employeeData = useMemo(() => {
     console.log('🔍 useMemo TRIGGERED');
+    
+    // Calcola le date del mese
+    const currentMonth = parseISO(dateFilter);
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(currentMonth);
+    const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+    const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+    const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
     
     try {
       const employeesMap = new Map<string, EmployeeMonthData>();
@@ -192,6 +193,14 @@ export function MonthlyCalendarView({
       return [];
     }
   }, [timesheets, absences, employeeSettings, companySettings, dateFilter]);
+
+  // Ricalcola le date per le funzioni di rendering
+  const currentMonth = parseISO(dateFilter);
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(currentMonth);
+  const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+  const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+  const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
   const getWeeks = () => {
     const weeks = [];
