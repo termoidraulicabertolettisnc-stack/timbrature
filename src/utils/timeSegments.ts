@@ -84,10 +84,7 @@ export function sessionsForDay(timesheet: any, dayISO: string, tz = TZ): Seg[] {
   
   const out: Seg[] = [];
   
-  // ✅ Filtra sessioni con date valide (già normalizzate in formato ISO)
-  const sessions = timesheet.timesheet_sessions?.filter((s: any) => 
-    s.start_time && s.end_time
-  ) || [];
+  const sessions = timesheet.timesheet_sessions || [];
   
   if (sessions.length > 0) {
     for (const session of sessions) {
