@@ -202,6 +202,20 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
       // Process each affected day (use processedTimesheet with tolerance applied)
       for (const dayISO of affectedDays) {
         const segments = sessionsForDay(processedTimesheet, dayISO);
+        
+        // Debug logging for Luigi on October 11
+        if (profile.first_name === 'Luigi' && dayISO === '2025-10-11') {
+          console.log('🔍 DEBUG Luigi 11-10:', {
+            dayISO,
+            segments: segments.length,
+            segmentsData: segments.map(s => ({
+              start: s.startUtc,
+              end: s.endUtc,
+              duration: (new Date(s.endUtc).getTime() - new Date(s.startUtc).getTime()) / (1000 * 60 * 60)
+            }))
+          });
+        }
+        
         // Skip if no valid segments or if all segments have 0 duration
         if (segments.length === 0) continue;
         
@@ -234,6 +248,17 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
           dayHours += (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
         }
 
+        // Debug before lunch break logic for Luigi
+        if (profile.first_name === 'Luigi' && dayISO === '2025-10-11') {
+          console.log('🔍 Before lunch logic:', {
+            dayHours,
+            segmentsLength: segments.length,
+            lunchDuration: processedTimesheet.lunch_duration_minutes,
+            lunchStart: processedTimesheet.lunch_start_time,
+            lunchEnd: processedTimesheet.lunch_end_time
+          });
+        }
+        
         // ✅ Subtract lunch break if applicable
         // If there's only one session, we need to subtract the lunch break
         // If there are multiple sessions, the lunch break is already incorporated in the gap
@@ -257,6 +282,11 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
         }
 
         dayHours = Math.max(0, dayHours);
+        
+        // Debug after lunch break logic for Luigi
+        if (profile.first_name === 'Luigi' && dayISO === '2025-10-11') {
+          console.log('🔍 After lunch logic:', { dayHours });
+        }
 
         // ✅ Always recalculate ordinary and overtime based on dayHours vs contractualHours
         // This ensures lunch breaks are properly accounted for
