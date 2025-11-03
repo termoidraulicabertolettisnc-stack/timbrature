@@ -1247,32 +1247,6 @@ export default function AdminTimesheets() {
           />
         </TabsContent>
 
-        {/* 🔍 DEBUG TEMPORANEO - Box Debug Visivo */}
-        {activeView === 'monthly' && (
-          <div className="bg-yellow-100 border-2 border-yellow-600 rounded p-4 mb-4">
-            <h3 className="font-bold text-lg mb-2">🔍 DEBUG VISTA MENSILE</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p><strong>Timesheets passati a MonthlyCalendarView:</strong> {filteredTimesheets.length}</p>
-                <p><strong>Timesheets totali caricati:</strong> {timesheets.length}</p>
-                <p><strong>Assenze passate:</strong> {absences.length}</p>
-              </div>
-              <div>
-                <p><strong>Date Filter:</strong> {dateFilter}</p>
-                <p><strong>Active View:</strong> {activeView}</p>
-                <p><strong>Search Term:</strong> {searchTerm || '(vuoto)'}</p>
-              </div>
-            </div>
-            {filteredTimesheets.length > 0 && (
-              <details className="mt-2">
-                <summary className="cursor-pointer font-semibold">📋 Vedi primo timesheet (click per espandere)</summary>
-                <pre className="text-xs overflow-auto max-h-60 mt-2 bg-white p-2 rounded">
-                  {JSON.stringify(filteredTimesheets[0], null, 2)}
-                </pre>
-              </details>
-            )}
-          </div>
-        )}
 
         <TabsContent value="monthly" className="mt-6">
           <MonthlyCalendarView
