@@ -305,14 +305,19 @@ const BusinessTripsDashboard = () => {
                   const sessionStart = new Date(session.start_time);
                   const sessionEnd = new Date(session.end_time);
                   
-                  const startDay = sessionStart.toISOString().split('T')[0];
-                  if (startDay >= `${year}-${month}-01` && startDay <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
-                    affectedDays.add(startDay);
-                  }
+                  // Add all days between start and end (inclusive)
+                  let currentDay = new Date(sessionStart);
+                  currentDay.setHours(0, 0, 0, 0);
                   
-                  const endDay = sessionEnd.toISOString().split('T')[0];
-                  if (endDay !== startDay && endDay >= `${year}-${month}-01` && endDay <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
-                    affectedDays.add(endDay);
+                  const endDate = new Date(sessionEnd);
+                  endDate.setHours(0, 0, 0, 0);
+                  
+                  while (currentDay <= endDate) {
+                    const dayISO = currentDay.toISOString().split('T')[0];
+                    if (dayISO >= `${year}-${month}-01` && dayISO <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
+                      affectedDays.add(dayISO);
+                    }
+                    currentDay.setDate(currentDay.getDate() + 1);
                   }
                 }
               }
