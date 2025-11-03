@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
+import { useBusinessTripData, type BusinessTripData } from '@/hooks/useBusinessTripData';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -10,66 +11,21 @@ import { Button } from "@/components/ui/button";
 import { Calendar, Download, Users, MapPin, TrendingDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog';
-import { OvertimeConversionService } from '@/services/OvertimeConversionService';
-import { MealVoucherConversionService, MealVoucherConversion } from '@/services/MealVoucherConversionService';
-import { toZonedTime } from 'date-fns-tz';
-import { getEmployeeSettingsForDate } from '@/utils/temporalEmployeeSettings';
-// Import rimosso - le conversioni NON modificano i dati visualizzati
-import { DayConversionToggle } from '@/components/DayConversionToggle';
 import { MassConversionDialog } from '@/components/MassConversionDialog';
 import { useToast } from '@/hooks/use-toast';
-
-const TZ = 'Europe/Rome';
-
-interface BusinessTripData {
-  employee_id: string;
-  employee_name: string;
-  company_id: string;
-  daily_data: { [day: string]: { ordinary: number; overtime: number; absence: string | null } };
-  totals: { 
-    ordinary: number; 
-    overtime: number; 
-    absence_totals: { [absenceType: string]: number };
-  };
-  meal_vouchers: number;
-  meal_voucher_amount: number;
-  // Separate business trip types
-  saturday_trips: {
-    hours: number;
-    amount: number;
-    daily_data: { [day: string]: number }; // hours per day
-  };
-  daily_allowances: {
-    days: number;
-    amount: number;
-    daily_data: { [day: string]: boolean }; // true if allowance earned
-  };
-  overtime_conversions: {
-    hours: number;
-    amount: number;
-    monthly_total: boolean; // true if has conversion for the month
-  };
-  meal_voucher_conversions: {
-    days: number;
-    amount: number;
-    daily_data: { [day: string]: boolean }; // true if converted
-  };
-  // NEW: info giornaliere necessarie al CAP
-  meal_vouchers_daily_data: { [day: string]: boolean };          // BDP maturato e NON convertito
-  daily_allowances_amounts: { [day: string]: number };           // € TI del giorno (0 se assente)
-  saturday_rate?: number;                                        // tariffa oraria usata
-}
 
 const BusinessTripsDashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [businessTripData, setBusinessTripData] = useState<BusinessTripData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [holidays, setHolidays] = useState<string[]>([]);
+  const queryClient = useQueryClient();
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  const { data, isLoading: loading } = useBusinessTripData(selectedMonth);
+  const businessTripData = data?.data || [];
+  const holidays = data?.holidays || [];
 
   // Italian holidays (fallback for standard holidays)
   const getItalianHolidays = (year: number) => {
