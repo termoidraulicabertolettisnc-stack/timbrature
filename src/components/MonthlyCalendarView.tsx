@@ -69,7 +69,7 @@ export function MonthlyCalendarView({
   });
 
   const employeeData = useMemo(() => {
-    console.log('🔍 useMemo TRIGGERED');
+    console.log('🚨🚨🚨 MonthlyCalendarView - COMPONENTE TRIGGERED! 🚨🚨🚨');
     
     // Calcola le date del mese
     const currentMonth = parseISO(dateFilter);
@@ -78,6 +78,22 @@ export function MonthlyCalendarView({
     const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 });
     const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
     const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
+
+    console.log('🔍 MonthlyCalendarView - Processing data:', {
+      timesheets_count: timesheets.length,
+      absences_count: absences.length,
+      dateFilter,
+      currentMonth: format(currentMonth, 'yyyy-MM-dd'),
+      monthStart: format(monthStart, 'yyyy-MM-dd'),
+      monthEnd: format(monthEnd, 'yyyy-MM-dd'),
+      first_timesheet: timesheets.length > 0 ? {
+        id: timesheets[0].id,
+        date: timesheets[0].date,
+        user_id: timesheets[0].user_id,
+        sessions_count: timesheets[0].timesheet_sessions?.length || 0
+      } : null,
+      sample_absence: absences[0]
+    });
     
     try {
       const employeesMap = new Map<string, EmployeeMonthData>();

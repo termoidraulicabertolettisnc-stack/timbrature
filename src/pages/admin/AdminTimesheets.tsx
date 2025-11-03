@@ -996,12 +996,18 @@ export default function AdminTimesheets() {
     return employeeName.includes(searchTerm.toLowerCase()) || projectName.includes(searchTerm.toLowerCase());
   });
 
-  // 🔍 DEBUG: Verifica dati in ingresso
-  console.log("🔍 FILTERED COUNT:", filteredTimesheets.length);
-  console.log(
-    "🔍 LORENZO TIMESHEET:",
-    filteredTimesheets.find((t) => t.profiles?.first_name === "Lorenzo"),
-  );
+  // 🔍 DEBUG TEMPORANEO - Rimuovere dopo diagnosi
+  console.log('🔍 DEBUG VISTA MENSILE - Stato filteredTimesheets:', {
+    activeView,
+    dateFilter,
+    timesheets_totali: timesheets.length,
+    timesheets_filtrati: filteredTimesheets.length,
+    searchTerm,
+    selectedEmployee,
+    selectedProject,
+    sample_timesheet_raw: timesheets[0],
+    sample_timesheet_filtered: filteredTimesheets[0]
+  });
 
   // CORREZIONE: Aggregazione con useMemo per evitare duplicati
   const aggregatedEmployees = useMemo(() => {
@@ -1241,28 +1247,32 @@ export default function AdminTimesheets() {
           />
         </TabsContent>
 
-        {/* ===== DEBUG INJECTION START ===== */}
-        {activeView === 'monthly' && (() => {
-          console.log('🚨 DEBUG MONTHLY VIEW - Rendering MonthlyCalendarView with:', {
-            activeView,
-            dateFilter,
-            timesheets_total: timesheets.length,
-            filteredTimesheets_count: filteredTimesheets.length,
-            absences_count: absences.length,
-            searchTerm,
-            selectedEmployee,
-            selectedProject,
-            sample_timesheet: filteredTimesheets[0],
-            first_5_timesheets: filteredTimesheets.slice(0, 5).map(t => ({
-              id: t.id,
-              date: t.date,
-              user: t.profiles?.first_name,
-              sessions_count: t.timesheet_sessions?.length
-            }))
-          });
-          return null;
-        })()}
-        {/* ===== DEBUG INJECTION END ===== */}
+        {/* 🔍 DEBUG TEMPORANEO - Box Debug Visivo */}
+        {activeView === 'monthly' && (
+          <div className="bg-yellow-100 border-2 border-yellow-600 rounded p-4 mb-4">
+            <h3 className="font-bold text-lg mb-2">🔍 DEBUG VISTA MENSILE</h3>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p><strong>Timesheets passati a MonthlyCalendarView:</strong> {filteredTimesheets.length}</p>
+                <p><strong>Timesheets totali caricati:</strong> {timesheets.length}</p>
+                <p><strong>Assenze passate:</strong> {absences.length}</p>
+              </div>
+              <div>
+                <p><strong>Date Filter:</strong> {dateFilter}</p>
+                <p><strong>Active View:</strong> {activeView}</p>
+                <p><strong>Search Term:</strong> {searchTerm || '(vuoto)'}</p>
+              </div>
+            </div>
+            {filteredTimesheets.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer font-semibold">📋 Vedi primo timesheet (click per espandere)</summary>
+                <pre className="text-xs overflow-auto max-h-60 mt-2 bg-white p-2 rounded">
+                  {JSON.stringify(filteredTimesheets[0], null, 2)}
+                </pre>
+              </details>
+            )}
+          </div>
+        )}
 
         <TabsContent value="monthly" className="mt-6">
           <MonthlyCalendarView
