@@ -140,6 +140,7 @@ export function MonthlyCalendarView({
       employee.days[date].regular_hours += regularHours;
       employee.days[date].overtime_hours += overtimeHours;
       employee.days[date].night_hours += (timesheet.night_hours || 0);
+      employee.days[date].total_hours += totalHours;
       
       if (timesheet.meal_voucher_earned) {
         employee.days[date].meal_vouchers += 1;
