@@ -191,6 +191,15 @@ export default function PayrollDashboard() {
           // Determine which days this timesheet affects
           const affectedDays = new Set<string>();
           
+          console.log('🔍 Processing timesheet:', { 
+            id: ts.id, 
+            date: ts.date, 
+            sessions: ts.timesheet_sessions?.length || 0,
+            has_start_time: !!ts.start_time,
+            has_end_time: !!ts.end_time,
+            sample_session: ts.timesheet_sessions?.[0]
+          });
+          
           // Check if we have sessions (new format) or legacy format
           if (ts.timesheet_sessions && ts.timesheet_sessions.length > 0) {
             // New format with sessions - find all dates covered
