@@ -196,7 +196,7 @@ export default function PayrollDashboard() {
           
           // Check if we have sessions (new format) or legacy format
           if (ts.timesheet_sessions && ts.timesheet_sessions.length > 0) {
-            // New format with sessions - find all dates covered
+            // New format with sessions
             for (const session of ts.timesheet_sessions) {
               if (session.start_time && session.end_time) {
                 const sessionStart = toZonedTime(new Date(session.start_time), TZ);
@@ -226,15 +226,20 @@ export default function PayrollDashboard() {
             let currentDay = new Date(startDate);
             currentDay.setHours(0, 0, 0, 0);
             
-            while (currentDay <= endDate) {
+            const endDateNormalized = new Date(endDate);
+            endDateNormalized.setHours(0, 0, 0, 0);
+            
+            while (currentDay <= endDateNormalized) {
               const dayISO = currentDay.toISOString().split('T')[0];
               if (dayISO >= `${year}-${month}-01` && dayISO <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
                 affectedDays.add(dayISO);
               }
               currentDay.setDate(currentDay.getDate() + 1);
             }
-          } else {
-            // Fallback: just use the timesheet date
+          }
+          
+          // Fallback: if no days were added (sessions without times), use timesheet.date
+          if (affectedDays.size === 0) {
             affectedDays.add(ts.date);
           }
 

@@ -333,15 +333,20 @@ const BusinessTripsDashboard = () => {
               let currentDay = new Date(startDate);
               currentDay.setHours(0, 0, 0, 0);
               
-              while (currentDay <= endDate) {
+              const endDateNormalized = new Date(endDate);
+              endDateNormalized.setHours(0, 0, 0, 0);
+              
+              while (currentDay <= endDateNormalized) {
                 const dayISO = currentDay.toISOString().split('T')[0];
                 if (dayISO >= `${year}-${month}-01` && dayISO <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
                   affectedDays.add(dayISO);
                 }
                 currentDay.setDate(currentDay.getDate() + 1);
               }
-            } else {
-              // Fallback
+            }
+            
+            // Fallback: if no days were added (sessions without times), use timesheet.date
+            if (affectedDays.size === 0) {
               affectedDays.add(ts.date);
             }
 
