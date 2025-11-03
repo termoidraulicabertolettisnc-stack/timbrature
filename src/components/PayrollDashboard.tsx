@@ -197,7 +197,11 @@ export default function PayrollDashboard() {
             sessions: ts.timesheet_sessions?.length || 0,
             has_start_time: !!ts.start_time,
             has_end_time: !!ts.end_time,
-            sample_session: ts.timesheet_sessions?.[0]
+            session_details: ts.timesheet_sessions?.map(s => ({
+              id: s.id,
+              start: s.start_time,
+              end: s.end_time
+            }))
           });
           
           // Check if we have sessions (new format) or legacy format
