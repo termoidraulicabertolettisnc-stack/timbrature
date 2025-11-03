@@ -262,7 +262,7 @@ export class OvertimeConversionService {
 
   /**
    * Calculate conversion details for display
-   * CORREZIONE: Ora calcola correttamente i valori originali e attuali
+   * READ-ONLY: Non crea record durante la visualizzazione
    */
   static async calculateConversionDetails(
     userId: string,
@@ -275,10 +275,21 @@ export class OvertimeConversionService {
 
     const normalizedMonth = this.normalizeMonth(month);
     const settings = await this.getEffectiveConversionSettings(userId, normalizedMonth);
-    const conversion = await this.getOrCreateConversion(userId, normalizedMonth);
+    
+    // READ-ONLY: Leggi solo il record esistente senza crearlo
+    const { data: conversion, error: convError } = await supabase
+      .from('employee_overtime_conversions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('month', normalizedMonth)
+      .maybeSingle();
 
-    if (!settings?.enable_overtime_conversion || !conversion) {
-      console.log(`❌ [OvertimeConversion] Conversione disabilitata per utente ${userId}`);
+    if (convError) {
+      console.warn(`⚠️ [OvertimeConversion] Errore lettura conversione:`, convError);
+    }
+
+    if (!settings?.enable_overtime_conversion) {
+      console.log(`ℹ️ [OvertimeConversion] Conversione disabilitata per utente ${userId}`);
       return {
         original_overtime_hours: currentOvertimeHours,
         converted_hours: 0,
@@ -286,6 +297,18 @@ export class OvertimeConversionService {
         conversion_amount: 0,
         conversion_rate: settings?.overtime_conversion_rate || 0,
         explanation: "Conversione disabilitata"
+      };
+    }
+
+    // Se non esiste conversione, ritorna valori di default
+    if (!conversion) {
+      return {
+        original_overtime_hours: currentOvertimeHours,
+        converted_hours: 0,
+        remaining_overtime_hours: currentOvertimeHours,
+        conversion_amount: 0,
+        conversion_rate: settings.overtime_conversion_rate,
+        explanation: "Nessuna conversione per questo mese"
       };
     }
 
