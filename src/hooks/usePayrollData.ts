@@ -202,7 +202,18 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
       // Process each affected day (use processedTimesheet with tolerance applied)
       for (const dayISO of affectedDays) {
         const segments = sessionsForDay(processedTimesheet, dayISO);
+        // Skip if no valid segments or if all segments have 0 duration
         if (segments.length === 0) continue;
+        
+        const hasValidDuration = segments.some(seg => {
+          const start = new Date(seg.startUtc);
+          const end = new Date(seg.endUtc);
+          return (end.getTime() - start.getTime()) > 0;
+        });
+        if (!hasValidDuration) {
+          console.warn(`⚠️ Skipping day ${dayISO} for ${profile.first_name} - all sessions have 0 duration`);
+          continue;
+        }
 
         const date = new Date(`${dayISO}T00:00:00`);
         const dayKey = String(date.getDate()).padStart(2, '0');
@@ -329,7 +340,8 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
         finalOvertimeTotal = Object.values(finalDailyData).reduce((sum, data) => sum + (data.overtime || 0), 0);
       }
     } catch (error) {
-      console.error('Error applying overtime conversions for employee:', profile.user_id, error);
+      console.error(`❌ Error applying overtime conversions for ${profile.first_name} ${profile.last_name}:`, error);
+      // Continue with non-converted data - don't exclude employee from results
     }
 
     return {

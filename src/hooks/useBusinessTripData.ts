@@ -274,7 +274,18 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         // Process each affected day (use processedTimesheet with tolerance applied)
         for (const dayISO of affectedDays) {
           const segments = sessionsForDay(processedTimesheet, dayISO);
+          // Skip if no valid segments or if all segments have 0 duration
           if (segments.length === 0) continue;
+          
+          const hasValidDuration = segments.some(seg => {
+            const start = new Date(seg.startUtc);
+            const end = new Date(seg.endUtc);
+            return (end.getTime() - start.getTime()) > 0;
+          });
+          if (!hasValidDuration) {
+            console.warn(`⚠️ Skipping day ${dayISO} for ${profile.first_name} - all sessions have 0 duration`);
+            continue;
+          }
 
           const date = new Date(`${dayISO}T00:00:00`);
           const dayKey = String(date.getDate()).padStart(2, '0');
@@ -410,8 +421,9 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
           overtimeConversions.amount = conversionCalc.conversion_amount;
           overtimeConversions.monthly_total = true;
         }
-      } catch (e) {
-        console.warn('Conversion calc error', profile.user_id, e);
+      } catch (error) {
+        console.error(`❌ Error calculating overtime conversions for ${profile.first_name} ${profile.last_name}:`, error);
+        // Continue with empty overtimeConversions - don't exclude employee from results
       }
 
       return {
