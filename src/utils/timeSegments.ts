@@ -80,7 +80,7 @@ export function splitAtMidnight(seg: Seg, dayISO: string, tz = TZ): Seg | null {
  * Returns all work sessions for a specific day, properly segmented at midnight
  */
 export function sessionsForDay(timesheet: any, dayISO: string, tz = TZ): Seg[] {
-  console.log('🔍 sessionsForDay:', { dayISO, timesheet_id: timesheet.id });
+  console.log('🔍 sessionsForDay:', { dayISO, ts_id: timesheet.id });
   
   const out: Seg[] = [];
   
@@ -117,7 +117,7 @@ export function sessionsForDay(timesheet: any, dayISO: string, tz = TZ): Seg[] {
     }
   }
   
-  console.log('✅ sessionsForDay RESULT:', { dayISO, count: out.length });
+  console.log('✅ RESULT:', { dayISO, count: out.length });
   return out;
 }
 
