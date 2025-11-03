@@ -192,31 +192,32 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
   // Orari di riferimento dinamici
   const HOUR_HEIGHT = 60; // pixels per hour
   
-  // Converte timestamp in minuti dal midnight
-  const timeToMinutes = (timeString: string): number => {
+  // ✅ Converte timestamp UTC in minuti dal midnight LOCALE del giorno specificato
+  const timeToMinutes = (timeString: string, referenceDate: Date): number => {
     try {
-      // Prima prova con parseISO per timestamp completi
-      let time = parseISO(timeString);
+      // Converte UTC in local time
+      const localTime = utcToLocal(timeString);
       
-      // Se la data è invalida, potrebbe essere solo un orario (HH:mm:ss)
-      if (!isValid(time)) {
-        // Prova a parsare come orario puro aggiungendo una data
-        const timeOnly = timeString.match(/^(\d{2}):(\d{2}):?(\d{2})?$/);
-        if (timeOnly) {
-          const hours = parseInt(timeOnly[1], 10);
-          const minutes = parseInt(timeOnly[2], 10);
-          return hours * 60 + minutes;
-        }
-        // Fallback: prova con una data base
-        time = parseISO(`2024-01-01T${timeString}`);
-      }
-      
-      if (!isValid(time)) {
+      if (!isValid(localTime)) {
         console.warn('Invalid time format:', timeString);
         return 0;
       }
       
-      return time.getHours() * 60 + time.getMinutes();
+      // Se il timestamp è di un giorno diverso da quello di riferimento, 
+      // clampalo ai bordi del giorno (00:00 o 23:59)
+      const refDateStr = format(referenceDate, 'yyyy-MM-dd');
+      const localDateStr = format(localTime, 'yyyy-MM-dd');
+      
+      if (localDateStr < refDateStr) {
+        // Timestamp precedente: inizia a mezzanotte
+        return 0;
+      } else if (localDateStr > refDateStr) {
+        // Timestamp successivo: finisce a mezzanotte
+        return 24 * 60;
+      }
+      
+      // Stesso giorno: usa l'orario effettivo
+      return localTime.getHours() * 60 + localTime.getMinutes();
     } catch (error) {
       console.warn('Error parsing time:', timeString, error);
       return 0;
@@ -303,49 +304,35 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
             console.log(`🔍 Session ${session.id} is ongoing, using current time: ${sessionEndTime}`);
           }
 
-          const sessionStart = new Date(session.start_time);
-          const sessionEnd = new Date(sessionEndTime);
-          const sessionStartDate = format(sessionStart, 'yyyy-MM-dd');
-          const sessionEndDate = format(sessionEnd, 'yyyy-MM-dd');
-
-          console.log(`🔍 Session ${sessionIndex + 1}:`, {
-            start: session.start_time,
-            end: sessionEndTime,
-            startDate: sessionStartDate,
-            endDate: sessionEndDate,
-            isMultiDay: sessionStartDate !== sessionEndDate
-          });
-
-          // Determina se la sessione appartiene a questo giorno
-          const sessionBelongsToDay = sessionStartDate === currentDayStr || sessionEndDate === currentDayStr;
+          // ✅ Usa sessionsForDay per gestire correttamente le sessioni intergiornaliere
+          const daySegments = sessionsForDay(timesheet, currentDayStr);
+          const matchingSegment = daySegments.find(seg => 
+            seg.sessionId === session.id || 
+            (seg.sessionOrder === session.session_order && daySegments.length === 1)
+          );
           
-          if (!sessionBelongsToDay) {
+          if (!matchingSegment) {
             console.log(`🔍 Session ${sessionIndex + 1} doesn't belong to ${currentDayStr}, skipping`);
             return;
           }
 
-          const startMinutes = timeToMinutes(session.start_time);
-          const endMinutes = timeToMinutes(sessionEndTime);
+          // ✅ Usa i timestamp già clampati ai bordi del giorno
+          const localStart = utcToLocal(matchingSegment.startUtc);
+          const localEnd = utcToLocal(matchingSegment.endUtc);
           
-          let actualStartMinutes: number;
-          let actualEndMinutes: number;
+          const actualStartMinutes = localStart.getHours() * 60 + localStart.getMinutes();
+          const actualEndMinutes = localEnd.getHours() * 60 + localEnd.getMinutes();
+          const sessionStartDate = format(localStart, 'yyyy-MM-dd');
+          const sessionEndDate = format(localEnd, 'yyyy-MM-dd');
 
-          if (sessionStartDate !== currentDayStr && sessionEndDate === currentDayStr) {
-            // Sessione iniziata il giorno prima, finisce oggi
-            actualStartMinutes = 0; // Inizia a mezzanotte
-            actualEndMinutes = endMinutes;
-            console.log(`🔍 Session spans from previous day: 00:00 -> ${Math.floor(endMinutes/60)}:${(endMinutes%60).toString().padStart(2,'0')}`);
-          } else if (sessionStartDate === currentDayStr && sessionEndDate !== currentDayStr) {
-            // Sessione inizia oggi, continua domani
-            actualStartMinutes = startMinutes;
-            actualEndMinutes = 24 * 60; // Finisce a mezzanotte
-            console.log(`🔍 Session spans to next day: ${Math.floor(startMinutes/60)}:${(startMinutes%60).toString().padStart(2,'0')} -> 24:00`);
-          } else {
-            // Sessione normale dello stesso giorno
-            actualStartMinutes = startMinutes;
-            actualEndMinutes = endMinutes;
-            console.log(`🔍 Normal session: ${Math.floor(startMinutes/60)}:${(startMinutes%60).toString().padStart(2,'0')} -> ${Math.floor(endMinutes/60)}:${(endMinutes%60).toString().padStart(2,'0')}`);
-          }
+          console.log(`🔍 Session ${sessionIndex + 1} for ${currentDayStr}:`, {
+            original_start: session.start_time,
+            original_end: sessionEndTime,
+            clamped_start: matchingSegment.startUtc,
+            clamped_end: matchingSegment.endUtc,
+            startMinutes: actualStartMinutes,
+            endMinutes: actualEndMinutes
+          });
 
           // Crea blocco unico per questa sessione
           const blockId = `${timesheet.id}_s${sessionIndex + 1}`;
@@ -378,52 +365,27 @@ export function TimesheetTimeline({ timesheets, absences, weekDays, onTimesheetC
           console.log(`🔍 Legacy timesheet ${timesheet.id} is ongoing, using current time: ${endTime}`);
         }
 
-        const startMinutes = timeToMinutes(timesheet.start_time);
-        const endMinutes = timeToMinutes(endTime);
+        // ✅ Usa sessionsForDay anche per timesheet legacy
+        const daySegments = sessionsForDay(timesheet, currentDayStr);
         
-        const timesheetStartDate = timesheet.date;
-        const timesheetEndDate = timesheet.end_date || timesheet.date;
+        if (daySegments.length === 0) return;
         
-        // Determina se è una sessione multi-giorno
-        const isMultiDaySession = timesheetEndDate !== timesheetStartDate;
-        const isFromPreviousDay = timesheetStartDate !== currentDayStr && timesheetEndDate === currentDayStr;
-        const isToNextDay = timesheetStartDate === currentDayStr && timesheetEndDate !== currentDayStr;
+        const segment = daySegments[0]; // Legacy ha sempre un solo segmento
+        const localStart = utcToLocal(segment.startUtc);
+        const localEnd = utcToLocal(segment.endUtc);
         
-        let actualStartMinutes: number;
-        let actualEndMinutes: number;
+        const startMinutes = localStart.getHours() * 60 + localStart.getMinutes();
+        const endMinutes = localEnd.getHours() * 60 + localEnd.getMinutes();
 
-        if (isFromPreviousDay) {
-          actualStartMinutes = 0;
-          actualEndMinutes = endMinutes;
-        } else if (isToNextDay) {
-          actualStartMinutes = startMinutes;
-          actualEndMinutes = 24 * 60;
-        } else if (!isMultiDaySession && timesheetStartDate === currentDayStr) {
-          // Timesheet normale dello stesso giorno
-          actualStartMinutes = startMinutes;
-          actualEndMinutes = endMinutes;
-        } else {
-          // FIX: Verifica più flessibile per timesheet del giorno corrente
-          // Controlla se il timesheet appartiene a questo giorno considerando anche la data di inizio
-          const timesheetDate = parseISO(timesheet.start_time || timesheet.date);
-          const isCurrentDay = isSameDay(timesheetDate, dayDate);
-          
-          if (isCurrentDay) {
-            // È del giorno corrente, processa normalmente
-            actualStartMinutes = startMinutes;
-            actualEndMinutes = endMinutes;
-          } else {
-            // Non è il giorno giusto per questo timesheet
-            console.log(`🔍 [${currentDayStr}] Timesheet ${timesheet.id} skipped - belongs to different day`);
-            return;
-          }
-        }
+        // ✅ startMinutes e endMinutes già calcolati correttamente da sessionsForDay
+        const timesheetStartDate = format(localStart, 'yyyy-MM-dd');
+        const timesheetEndDate = format(localEnd, 'yyyy-MM-dd');
 
         // Crea un blocco singolo per il timesheet legacy
         blocks.push({
           timesheet,
-          startMinutes: actualStartMinutes,
-          endMinutes: actualEndMinutes,
+          startMinutes: startMinutes,
+          endMinutes: endMinutes,
           isLunchBreak: false,
           type: 'work',
           startDate: timesheetStartDate,

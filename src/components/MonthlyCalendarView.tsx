@@ -6,6 +6,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOf
 import { it } from 'date-fns/locale';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { AbsenceIndicator } from './AbsenceIndicator';
+import { sessionsForDay, utcToLocal } from '@/utils/timeSegments';
 
 interface MonthlyCalendarViewProps {
   timesheets: TimesheetWithProfile[];
@@ -98,7 +99,7 @@ export function MonthlyCalendarView({
     try {
       const employeesMap = new Map<string, EmployeeMonthData>();
 
-    // Processa i timesheets
+    // ✅ Processa i timesheets usando sessionsForDay per gestire correttamente sessioni intergiornaliere
     timesheets.forEach(timesheet => {
       if (!timesheet.profiles) return;
 
@@ -115,40 +116,76 @@ export function MonthlyCalendarView({
       }
 
       const employee = employeesMap.get(key)!;
-      const date = timesheet.date;
       
-      if (!employee.days[date]) {
-        employee.days[date] = {
-          date,
-          timesheets: [],
-          sessions: [],
-          absences: [],
-          regular_hours: 0,
-          overtime_hours: 0,
-          night_hours: 0,
-          total_hours: 0,
-          meal_vouchers: 0
-        };
-      }
-      
-      employee.days[date].timesheets.push(timesheet);
-      
-      const totalHours = timesheet.total_hours || 0;
-      const regularHours = Math.min(totalHours, 8);
-      const overtimeHours = Math.max(0, totalHours - 8);
-      
-      employee.days[date].regular_hours += regularHours;
-      employee.days[date].overtime_hours += overtimeHours;
-      employee.days[date].night_hours += (timesheet.night_hours || 0);
-      employee.days[date].total_hours += totalHours;
-      
-      if (timesheet.meal_voucher_earned) {
-        employee.days[date].meal_vouchers += 1;
-      }
-      
-      employee.totals.regular_hours += regularHours;
-      employee.totals.overtime_hours += overtimeHours;
-      employee.totals.total_hours += totalHours;
+      // ✅ Processa ogni giorno del calendario per questo timesheet
+      calendarDays.forEach(day => {
+        const dayISO = format(day, 'yyyy-MM-dd');
+        
+        // ✅ Usa sessionsForDay per ottenere solo le sessioni che appartengono a questo giorno
+        const segments = sessionsForDay(timesheet, dayISO);
+        
+        if (segments.length === 0) return;
+        
+        // Inizializza il giorno se non esiste
+        if (!employee.days[dayISO]) {
+          employee.days[dayISO] = {
+            date: dayISO,
+            timesheets: [],
+            sessions: [],
+            absences: [],
+            regular_hours: 0,
+            overtime_hours: 0,
+            night_hours: 0,
+            total_hours: 0,
+            meal_vouchers: 0
+          };
+        }
+        
+        // Aggiungi il timesheet solo se non è già presente
+        if (!employee.days[dayISO].timesheets.some(ts => ts.id === timesheet.id)) {
+          employee.days[dayISO].timesheets.push(timesheet);
+        }
+        
+        // ✅ Calcola le ore per questo giorno dai segmenti filtrati
+        let dayTotalHours = 0;
+        segments.forEach(segment => {
+          const localStart = utcToLocal(segment.startUtc);
+          const localEnd = utcToLocal(segment.endUtc);
+          const durationMs = localEnd.getTime() - localStart.getTime();
+          const durationHours = durationMs / (1000 * 60 * 60);
+          dayTotalHours += durationHours;
+          
+          // Aggiungi le sessioni
+          employee.days[dayISO].sessions.push({
+            id: segment.sessionId,
+            start_time: segment.startUtc,
+            end_time: segment.endUtc,
+            duration: durationHours
+          });
+        });
+        
+        const regularHours = Math.min(dayTotalHours, 8);
+        const overtimeHours = Math.max(0, dayTotalHours - 8);
+        
+        employee.days[dayISO].regular_hours += regularHours;
+        employee.days[dayISO].overtime_hours += overtimeHours;
+        employee.days[dayISO].total_hours += dayTotalHours;
+        
+        // ✅ Night hours: proporzione basata sulle ore di questo giorno
+        if (timesheet.night_hours && timesheet.total_hours) {
+          const nightHoursProportion = (timesheet.night_hours / timesheet.total_hours) * dayTotalHours;
+          employee.days[dayISO].night_hours += nightHoursProportion;
+        }
+        
+        // ✅ Meal voucher: conta solo se questo è il giorno principale del timesheet
+        if (timesheet.meal_voucher_earned && dayISO === timesheet.date) {
+          employee.days[dayISO].meal_vouchers += 1;
+        }
+        
+        employee.totals.regular_hours += regularHours;
+        employee.totals.overtime_hours += overtimeHours;
+        employee.totals.total_hours += dayTotalHours;
+      });
     });
 
     // Aggiungi le assenze
