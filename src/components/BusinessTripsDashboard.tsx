@@ -285,76 +285,108 @@ const BusinessTripsDashboard = () => {
           const defaultSaturdayRate = companySettingsForEmployee?.saturday_hourly_rate || 10;
           const defaultMealVoucherAmount = companySettingsForEmployee?.meal_voucher_amount || 8.0;
 
-          // Process timesheets - separate Saturday trips from regular work
-          for (const ts of employeeTimesheets) {
-            const day = new Date(`${ts.date}T00:00:00`).getDate();
+          // Import session splitting utility
+          const { sessionsForDay } = await import('@/utils/timeSegments');
+
+          // Process timesheets day by day to correctly handle inter-day sessions
+          for (let day = 1; day <= daysInMonth; day++) {
             const dayKey = String(day).padStart(2, '0');
-            const date = new Date(`${ts.date}T00:00:00`);
+            const dayISO = `${year}-${month}-${dayKey}`;
+            const date = new Date(parseInt(year), parseInt(month) - 1, day);
             const isSaturday = date.getDay() === 6;
 
-            const temporalSettings = await getEmployeeSettingsForDate(ts.user_id, ts.date);
-            const effectiveSaturdayHandling = temporalSettings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
-            const effectiveSaturdayRate = temporalSettings?.saturday_hourly_rate || defaultSaturdayRate;
+            // Process all timesheets to find sessions for this specific day
+            for (const ts of employeeTimesheets) {
+              const temporalSettings = await getEmployeeSettingsForDate(ts.user_id, dayISO);
+              const effectiveSaturdayHandling = temporalSettings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
+              const effectiveSaturdayRate = temporalSettings?.saturday_hourly_rate || defaultSaturdayRate;
 
-            if (isSaturday && effectiveSaturdayHandling === 'trasferta') {
-              // Saturday treated as business trip
-              const hours = ts.total_hours || 0;
-              saturdayTrips.hours += hours;
-              saturdayTrips.amount += hours * effectiveSaturdayRate;
-              saturdayTrips.daily_data[dayKey] = hours;
-            } else {
-              // Regular work day
-              const overtime = ts.overtime_hours || 0;
-              const ordinary = Math.max(0, (ts.total_hours || 0) - overtime);
+              // Get segments for this specific day
+              const segments = sessionsForDay(ts, dayISO);
               
-              dailyData[dayKey].ordinary = ordinary;
-              dailyData[dayKey].overtime = overtime;
-              totalOrdinary += ordinary;
-              totalOvertime += overtime;
-            }
+              if (segments.length === 0) continue;
 
-            // Calculate meal benefits (includes conversion logic)
-            const mealBenefits = await BenefitsService.calculateMealBenefits(
-              ts,
-              temporalSettings ? {
-                meal_allowance_policy: temporalSettings.meal_allowance_policy,
-                meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
-                daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
-                lunch_break_type: temporalSettings.lunch_break_type,
-                saturday_handling: temporalSettings.saturday_handling,
-              } : undefined,
-              companySettingsForEmployee,
-              ts.date,
-            );
-
-            // TI (indennità giornaliera)
-            if (mealBenefits.dailyAllowance) {
-              dailyAllowances.days += 1;
-              dailyAllowances.daily_data[dayKey] = true;
-              const effectiveDailyAllowanceAmount = mealBenefits.dailyAllowanceAmount 
-                || temporalSettings?.daily_allowance_amount 
-                || companySettingsForEmployee?.default_daily_allowance_amount 
-                || 10;
-              dailyAllowances.amount += effectiveDailyAllowanceAmount;
-
-              // NEW: salva l'importo TI del giorno
-              dailyAllowanceAmounts[dayKey] = effectiveDailyAllowanceAmount;
-            }
-
-            // BDP "non convertito" (serve per CAP=30,98)
-            if (mealBenefits.mealVoucher) {
-              mealVoucherDays++;
-              if (!employeeConversions.some(conv => conv.date === ts.date && conv.converted_to_allowance)) {
-                mealVouchersDaily[dayKey] = true;  // BDP maturato e NON convertito
+              // Calculate hours for this day from segments
+              let dayHours = 0;
+              for (const seg of segments) {
+                const startTime = new Date(seg.startUtc);
+                const endTime = new Date(seg.endUtc);
+                const hours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+                dayHours += hours;
               }
-            }
 
-            // CB (già fai la somma mensile + daily flag)
-            const isConverted = employeeConversions.some(conv => conv.date === ts.date && conv.converted_to_allowance);
-            if (isConverted) {
-              mealVoucherConversions.days += 1;
-              mealVoucherConversions.daily_data[dayKey] = true;
-              mealVoucherConversions.amount += defaultMealVoucherAmount;
+              if (isSaturday && effectiveSaturdayHandling === 'trasferta') {
+                // Saturday treated as business trip
+                saturdayTrips.hours += dayHours;
+                saturdayTrips.amount += dayHours * effectiveSaturdayRate;
+                saturdayTrips.daily_data[dayKey] += dayHours;
+              } else {
+                // Regular work day - distribute overtime proportionally
+                const timesheetTotalHours = ts.total_hours || 0;
+                const timesheetOvertimeHours = ts.overtime_hours || 0;
+                const timesheetOrdinaryHours = Math.max(0, timesheetTotalHours - timesheetOvertimeHours);
+                
+                let dayOvertime = 0;
+                let dayOrdinary = 0;
+                
+                if (timesheetTotalHours > 0) {
+                  // Distribute proportionally based on hours worked this day
+                  const proportion = dayHours / timesheetTotalHours;
+                  dayOvertime = timesheetOvertimeHours * proportion;
+                  dayOrdinary = timesheetOrdinaryHours * proportion;
+                }
+
+                dailyData[dayKey].ordinary += dayOrdinary;
+                dailyData[dayKey].overtime += dayOvertime;
+                totalOrdinary += dayOrdinary;
+                totalOvertime += dayOvertime;
+              }
+
+              // Calculate meal benefits only for primary date (includes conversion logic)
+              if (ts.date === dayISO) {
+                const mealBenefits = await BenefitsService.calculateMealBenefits(
+                  ts,
+                  temporalSettings ? {
+                    meal_allowance_policy: temporalSettings.meal_allowance_policy,
+                    meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
+                    daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
+                    lunch_break_type: temporalSettings.lunch_break_type,
+                    saturday_handling: temporalSettings.saturday_handling,
+                  } : undefined,
+                  companySettingsForEmployee,
+                  ts.date,
+                );
+
+                // TI (indennità giornaliera)
+                if (mealBenefits.dailyAllowance) {
+                  dailyAllowances.days += 1;
+                  dailyAllowances.daily_data[dayKey] = true;
+                  const effectiveDailyAllowanceAmount = mealBenefits.dailyAllowanceAmount 
+                    || temporalSettings?.daily_allowance_amount 
+                    || companySettingsForEmployee?.default_daily_allowance_amount 
+                    || 10;
+                  dailyAllowances.amount += effectiveDailyAllowanceAmount;
+
+                  // NEW: salva l'importo TI del giorno
+                  dailyAllowanceAmounts[dayKey] = effectiveDailyAllowanceAmount;
+                }
+
+                // BDP "non convertito" (serve per CAP=30,98)
+                if (mealBenefits.mealVoucher) {
+                  mealVoucherDays++;
+                  if (!employeeConversions.some(conv => conv.date === ts.date && conv.converted_to_allowance)) {
+                    mealVouchersDaily[dayKey] = true;  // BDP maturato e NON convertito
+                  }
+                }
+
+                // CB (già fai la somma mensile + daily flag)
+                const isConverted = employeeConversions.some(conv => conv.date === ts.date && conv.converted_to_allowance);
+                if (isConverted) {
+                  mealVoucherConversions.days += 1;
+                  mealVoucherConversions.daily_data[dayKey] = true;
+                  mealVoucherConversions.amount += defaultMealVoucherAmount;
+                }
+              }
             }
           }
 

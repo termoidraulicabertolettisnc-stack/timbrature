@@ -170,48 +170,84 @@ export default function PayrollDashboard() {
           dailyData[dayKey] = { ordinary: 0, overtime: 0, absence: null };
         }
 
-        // Process timesheets with temporal settings
-        for (const ts of employeeTimesheets) {
-          const day = new Date(ts.date).getDate();
+        // Import utilities for session splitting
+        const { sessionsForDay } = await import('@/utils/timeSegments');
+        const { getEmployeeSettingsForDate } = await import('@/utils/temporalEmployeeSettings');
+        const { calculateMealBenefitsTemporal } = await import('@/utils/mealBenefitsCalculator');
+
+        // Process timesheets day by day to correctly handle inter-day sessions
+        for (let day = 1; day <= daysInMonth; day++) {
           const dayKey = String(day).padStart(2, '0');
-          
-          // Get temporal employee settings for this specific date
-          const { getEmployeeSettingsForDate } = await import('@/utils/temporalEmployeeSettings');
-          const temporalSettings = await getEmployeeSettingsForDate(ts.user_id, ts.date);
-          
-          // Check if Saturday is configured as business trip for this employee on this date
-          const effectiveSaturdayHandling = temporalSettings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
-          
-          // Skip Saturday hours entirely if configured as business trip (trasferta)
-          if (ts.is_saturday && effectiveSaturdayHandling === 'trasferta') {
-            continue; // Don't include Saturday hours at all in payroll view
-          }
-          
-          const overtime = ts.overtime_hours || 0;
-          const ordinary = Math.max(0, (ts.total_hours || 0) - overtime);
-          
-          dailyData[dayKey].ordinary = ordinary;
-          dailyData[dayKey].overtime = overtime;
-          
-          totalOrdinary += ordinary;
-          totalOvertime += overtime;
-          
-          // Calculate meal vouchers using temporal calculation
-          const { calculateMealBenefitsTemporal } = await import('@/utils/mealBenefitsCalculator');
-          const mealBenefits = await calculateMealBenefitsTemporal(
-            ts,
-            temporalSettings ? {
-              meal_allowance_policy: temporalSettings.meal_allowance_policy,
-              meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
-              daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
-              lunch_break_type: temporalSettings.lunch_break_type
-            } : undefined,
-            companySettingsForEmployee,
-            ts.date
-          );
-          
-          if (mealBenefits.mealVoucher) {
-            mealVoucherDays++;
+          const dayISO = `${year}-${month}-${dayKey}`;
+          const date = new Date(parseInt(year), parseInt(month) - 1, day);
+          const isSaturday = date.getDay() === 6;
+
+          // Process all timesheets to find sessions for this specific day
+          for (const ts of employeeTimesheets) {
+            // Get temporal employee settings for this specific date
+            const temporalSettings = await getEmployeeSettingsForDate(ts.user_id, dayISO);
+            
+            // Check if Saturday is configured as business trip for this employee on this date
+            const effectiveSaturdayHandling = temporalSettings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
+            
+            // Skip Saturday hours entirely if configured as business trip (trasferta)
+            if (isSaturday && effectiveSaturdayHandling === 'trasferta') {
+              continue; // Don't include Saturday hours at all in payroll view
+            }
+
+            // Get segments for this specific day
+            const segments = sessionsForDay(ts, dayISO);
+            
+            if (segments.length === 0) continue;
+
+            // Calculate hours for this day from segments
+            let dayHours = 0;
+            for (const seg of segments) {
+              const startTime = new Date(seg.startUtc);
+              const endTime = new Date(seg.endUtc);
+              const hours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+              dayHours += hours;
+            }
+
+            // Distribute overtime proportionally for this day
+            const timesheetTotalHours = ts.total_hours || 0;
+            const timesheetOvertimeHours = ts.overtime_hours || 0;
+            const timesheetOrdinaryHours = Math.max(0, timesheetTotalHours - timesheetOvertimeHours);
+            
+            let dayOvertime = 0;
+            let dayOrdinary = 0;
+            
+            if (timesheetTotalHours > 0) {
+              // Distribute proportionally based on hours worked this day
+              const proportion = dayHours / timesheetTotalHours;
+              dayOvertime = timesheetOvertimeHours * proportion;
+              dayOrdinary = timesheetOrdinaryHours * proportion;
+            }
+
+            dailyData[dayKey].ordinary += dayOrdinary;
+            dailyData[dayKey].overtime += dayOvertime;
+            
+            totalOrdinary += dayOrdinary;
+            totalOvertime += dayOvertime;
+            
+            // Calculate meal vouchers using temporal calculation (only for primary date)
+            if (ts.date === dayISO) {
+              const mealBenefits = await calculateMealBenefitsTemporal(
+                ts,
+                temporalSettings ? {
+                  meal_allowance_policy: temporalSettings.meal_allowance_policy,
+                  meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
+                  daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
+                  lunch_break_type: temporalSettings.lunch_break_type
+                } : undefined,
+                companySettingsForEmployee,
+                ts.date
+              );
+              
+              if (mealBenefits.mealVoucher) {
+                mealVoucherDays++;
+              }
+            }
           }
         }
 
