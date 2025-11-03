@@ -223,6 +223,30 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
           dayHours += (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
         }
 
+        // ✅ Subtract lunch break if applicable
+        // If there's only one session, we need to subtract the lunch break
+        // If there are multiple sessions, the lunch break is already incorporated in the gap
+        if (segments.length === 1 && processedTimesheet.lunch_duration_minutes && processedTimesheet.lunch_duration_minutes > 0) {
+          dayHours -= processedTimesheet.lunch_duration_minutes / 60;
+        } else if (segments.length === 1 && processedTimesheet.lunch_start_time && processedTimesheet.lunch_end_time) {
+          const lunchStart = new Date(processedTimesheet.lunch_start_time);
+          const lunchEnd = new Date(processedTimesheet.lunch_end_time);
+          if (!isNaN(lunchStart.getTime()) && !isNaN(lunchEnd.getTime())) {
+            dayHours -= (lunchEnd.getTime() - lunchStart.getTime()) / (1000 * 60 * 60);
+          }
+        } else if (segments.length === 1 && dayHours > 6) {
+          // Apply default lunch break from settings only if no explicit lunch break
+          if (!processedTimesheet.lunch_duration_minutes && !processedTimesheet.lunch_start_time) {
+            const lunchBreakType = temporalSettings?.lunch_break_type || companySettingsForEmployee?.lunch_break_type || '60_minuti';
+            if (lunchBreakType !== '0_minuti' && lunchBreakType !== 'libera') {
+              const lunchMinutes = parseInt(lunchBreakType.split('_')[0]) || 60;
+              dayHours -= lunchMinutes / 60;
+            }
+          }
+        }
+
+        dayHours = Math.max(0, dayHours);
+
         // ✅ If tolerance was applied, recalculate hours based on segments
         if (toleranceConfig.enabled && dayHours > 0) {
           // Get contractual hours for this day
