@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, Download, Users } from "lucide-react";
+import { Calendar, Download, Users, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import * as ExcelJS from 'exceljs';
 
@@ -61,6 +61,10 @@ export default function PayrollDashboard() {
     const [year, month] = selectedMonth.split('-');
     const date = new Date(parseInt(year), parseInt(month) - 1, day);
     return date.getDay() === 0;
+  };
+
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['payroll-data', selectedMonth] });
   };
 
   const getAbsenceTypeLabel = (type: string | null) => {
@@ -347,6 +351,15 @@ export default function PayrollDashboard() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <Button
+            onClick={handleRefresh}
+            variant="outline"
+            size="sm"
+            className="gap-2 flex-shrink-0"
+          >
+            <RefreshCw className="h-4 w-4" />
+            <span className="hidden sm:inline">Aggiorna</span>
+          </Button>
           <Button
             onClick={exportToExcel}
             variant="outline"
