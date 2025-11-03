@@ -318,38 +318,23 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
             saturdayTrips.amount += dayHours * effectiveSaturdayRate;
             saturdayTrips.daily_data[dayKey] += dayHours;
           } else {
-            // ✅ If tolerance was applied, recalculate hours based on segments
-            if (toleranceConfig.enabled && dayHours > 0) {
-              // Get contractual hours for this day
-              const dayOfWeek = date.getDay();
-              const dayNames = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
-              const dayKey_it = dayNames[dayOfWeek];
-              const contractualHours = (temporalSettings?.standard_weekly_hours?.[dayKey_it] ?? 
-                                       companySettingsForEmployee?.standard_weekly_hours?.[dayKey_it] ?? 
-                                       8) as number;
-              
-              // Recalculate ordinary and overtime based on segments
-              const ordinaryForDay = Math.min(dayHours, contractualHours);
-              const overtimeForDay = Math.max(0, dayHours - contractualHours);
-              
-              dailyData[dayKey].ordinary += ordinaryForDay;
-              dailyData[dayKey].overtime += overtimeForDay;
-              totalOrdinary += ordinaryForDay;
-              totalOvertime += overtimeForDay;
-            } else {
-              // No tolerance - use database values distributed proportionally
-              const timesheetTotalHours = processedTimesheet.total_hours || 0;
-              const timesheetOvertimeHours = processedTimesheet.overtime_hours || 0;
-              const timesheetOrdinaryHours = Math.max(0, timesheetTotalHours - timesheetOvertimeHours);
-
-              if (timesheetTotalHours > 0) {
-                const proportion = dayHours / timesheetTotalHours;
-                dailyData[dayKey].ordinary += timesheetOrdinaryHours * proportion;
-                dailyData[dayKey].overtime += timesheetOvertimeHours * proportion;
-                totalOrdinary += timesheetOrdinaryHours * proportion;
-                totalOvertime += timesheetOvertimeHours * proportion;
-              }
-            }
+            // ✅ Always recalculate ordinary and overtime based on dayHours vs contractualHours
+            // This ensures lunch breaks are properly accounted for
+            const dayOfWeek = date.getDay();
+            const dayNames = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
+            const dayKey_it = dayNames[dayOfWeek];
+            const contractualHours = (temporalSettings?.standard_weekly_hours?.[dayKey_it] ?? 
+                                     companySettingsForEmployee?.standard_weekly_hours?.[dayKey_it] ?? 
+                                     8) as number;
+            
+            // Recalculate ordinary and overtime based on segments
+            const ordinaryForDay = Math.min(dayHours, contractualHours);
+            const overtimeForDay = Math.max(0, dayHours - contractualHours);
+            
+            dailyData[dayKey].ordinary += ordinaryForDay;
+            dailyData[dayKey].overtime += overtimeForDay;
+            totalOrdinary += ordinaryForDay;
+            totalOvertime += overtimeForDay;
           }
         }
 
