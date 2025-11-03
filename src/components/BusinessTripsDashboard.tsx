@@ -12,10 +12,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
 import { MealVoucherConversionService, MealVoucherConversion } from '@/services/MealVoucherConversionService';
+import { toZonedTime } from 'date-fns-tz';
+import { getEmployeeSettingsForDate } from '@/utils/temporalEmployeeSettings';
 // Import rimosso - le conversioni NON modificano i dati visualizzati
 import { DayConversionToggle } from '@/components/DayConversionToggle';
 import { MassConversionDialog } from '@/components/MassConversionDialog';
 import { useToast } from '@/hooks/use-toast';
+
+const TZ = 'Europe/Rome';
 
 interface BusinessTripData {
   employee_id: string;
@@ -297,24 +301,15 @@ const BusinessTripsDashboard = () => {
             // Determine which days this timesheet affects
             const affectedDays = new Set<string>();
             
-            console.log('🔍 Processing timesheet:', { 
-              id: ts.id, 
-              date: ts.date, 
-              sessions: ts.timesheet_sessions?.length || 0,
-              has_start_time: !!ts.start_time,
-              has_end_time: !!ts.end_time,
-              sample_session: ts.timesheet_sessions?.[0]
-            });
-            
             // Check if we have sessions (new format) or legacy format
             if (ts.timesheet_sessions && ts.timesheet_sessions.length > 0) {
               // New format with sessions
               for (const session of ts.timesheet_sessions) {
                 if (session.start_time && session.end_time) {
-                  const sessionStart = new Date(session.start_time);
-                  const sessionEnd = new Date(session.end_time);
+                  const sessionStart = toZonedTime(new Date(session.start_time), TZ);
+                  const sessionEnd = toZonedTime(new Date(session.end_time), TZ);
                   
-                  // Add all days between start and end (inclusive)
+                  // Add all days between start and end (inclusive) using ZONED dates
                   let currentDay = new Date(sessionStart);
                   currentDay.setHours(0, 0, 0, 0);
                   
@@ -331,9 +326,9 @@ const BusinessTripsDashboard = () => {
                 }
               }
             } else if (ts.start_time && ts.end_time) {
-              // Legacy format
-              const startDate = new Date(ts.start_time);
-              const endDate = new Date(ts.end_time);
+              // Legacy format with ZONED dates
+              const startDate = toZonedTime(new Date(ts.start_time), TZ);
+              const endDate = toZonedTime(new Date(ts.end_time), TZ);
               
               let currentDay = new Date(startDate);
               currentDay.setHours(0, 0, 0, 0);

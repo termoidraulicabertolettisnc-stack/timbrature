@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { BenefitsService } from '@/services/BenefitsService';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
 import { distributePayrollOvertime, applyPayrollOvertimeDistribution } from '@/utils/payrollOvertimeDistribution';
+import { toZonedTime } from 'date-fns-tz';
 import { getEmployeeSettingsForDate } from '@/utils/temporalEmployeeSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Calendar, Download, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import * as ExcelJS from 'exceljs';
+
+const TZ = 'Europe/Rome';
 
 interface PayrollData {
   employee_id: string;
@@ -191,28 +194,15 @@ export default function PayrollDashboard() {
           // Determine which days this timesheet affects
           const affectedDays = new Set<string>();
           
-          console.log('🔍 Processing timesheet:', { 
-            id: ts.id, 
-            date: ts.date, 
-            sessions: ts.timesheet_sessions?.length || 0,
-            has_start_time: !!ts.start_time,
-            has_end_time: !!ts.end_time,
-            session_details: ts.timesheet_sessions?.map(s => ({
-              id: s.id,
-              start: s.start_time,
-              end: s.end_time
-            }))
-          });
-          
           // Check if we have sessions (new format) or legacy format
           if (ts.timesheet_sessions && ts.timesheet_sessions.length > 0) {
             // New format with sessions - find all dates covered
             for (const session of ts.timesheet_sessions) {
               if (session.start_time && session.end_time) {
-                const sessionStart = new Date(session.start_time);
-                const sessionEnd = new Date(session.end_time);
+                const sessionStart = toZonedTime(new Date(session.start_time), TZ);
+                const sessionEnd = toZonedTime(new Date(session.end_time), TZ);
                 
-                // Add all days between start and end (inclusive)
+                // Add all days between start and end (inclusive) using ZONED dates
                 let currentDay = new Date(sessionStart);
                 currentDay.setHours(0, 0, 0, 0);
                 
@@ -229,9 +219,9 @@ export default function PayrollDashboard() {
               }
             }
           } else if (ts.start_time && ts.end_time) {
-            // Legacy format - use timesheet start/end
-            const startDate = new Date(ts.start_time);
-            const endDate = new Date(ts.end_time);
+            // Legacy format - use timesheet start/end with ZONED dates
+            const startDate = toZonedTime(new Date(ts.start_time), TZ);
+            const endDate = toZonedTime(new Date(ts.end_time), TZ);
             
             let currentDay = new Date(startDate);
             currentDay.setHours(0, 0, 0, 0);
