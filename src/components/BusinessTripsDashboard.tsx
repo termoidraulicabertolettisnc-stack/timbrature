@@ -306,22 +306,22 @@ const BusinessTripsDashboard = () => {
               // New format with sessions
               for (const session of ts.timesheet_sessions) {
                 if (session.start_time && session.end_time) {
+                  // Convert UTC to local timezone to determine which local days are affected
                   const sessionStart = toZonedTime(new Date(session.start_time), TZ);
                   const sessionEnd = toZonedTime(new Date(session.end_time), TZ);
                   
-                  // Add all days between start and end (inclusive) using ZONED dates
-                  let currentDay = new Date(sessionStart);
-                  currentDay.setHours(0, 0, 0, 0);
-                  
+                  // Extract local date using local methods (NOT .toISOString() which uses UTC)
+                  let currentDate = new Date(sessionStart);
+                  currentDate.setHours(0, 0, 0, 0);
                   const endDate = new Date(sessionEnd);
                   endDate.setHours(0, 0, 0, 0);
                   
-                  while (currentDay <= endDate) {
-                    const dayISO = currentDay.toISOString().split('T')[0];
+                  while (currentDate <= endDate) {
+                    const dayISO = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
                     if (dayISO >= `${year}-${month}-01` && dayISO <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
                       affectedDays.add(dayISO);
                     }
-                    currentDay.setDate(currentDay.getDate() + 1);
+                    currentDate.setDate(currentDate.getDate() + 1);
                   }
                 }
               }
@@ -330,18 +330,17 @@ const BusinessTripsDashboard = () => {
               const startDate = toZonedTime(new Date(ts.start_time), TZ);
               const endDate = toZonedTime(new Date(ts.end_time), TZ);
               
-              let currentDay = new Date(startDate);
-              currentDay.setHours(0, 0, 0, 0);
-              
+              let currentDate = new Date(startDate);
+              currentDate.setHours(0, 0, 0, 0);
               const endDateNormalized = new Date(endDate);
               endDateNormalized.setHours(0, 0, 0, 0);
               
-              while (currentDay <= endDateNormalized) {
-                const dayISO = currentDay.toISOString().split('T')[0];
+              while (currentDate <= endDateNormalized) {
+                const dayISO = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
                 if (dayISO >= `${year}-${month}-01` && dayISO <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
                   affectedDays.add(dayISO);
                 }
-                currentDay.setDate(currentDay.getDate() + 1);
+                currentDate.setDate(currentDate.getDate() + 1);
               }
             }
             
