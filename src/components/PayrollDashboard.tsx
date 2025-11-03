@@ -188,25 +188,51 @@ export default function PayrollDashboard() {
 
           const temporalSettings = await getEmployeeSettingsForDate(ts.user_id, ts.date);
 
-          // Determine date range this timesheet might affect
-          const startDate = new Date(ts.start_time || `${ts.date}T00:00:00`);
-          const endDate = ts.end_date && ts.end_time 
-            ? new Date(ts.end_time)
-            : new Date(ts.end_time || `${ts.date}T23:59:59`);
-
-          // Get all days this timesheet touches
+          // Determine which days this timesheet affects
           const affectedDays = new Set<string>();
-          let currentDay = new Date(startDate);
-          currentDay.setHours(0, 0, 0, 0);
           
-          while (currentDay <= endDate) {
-            const dayISO = currentDay.toISOString().split('T')[0];
-            // Only add if in current month
-            if (dayISO >= `${year}-${month}-01` && dayISO <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
-              affectedDays.add(dayISO);
+          // Check if we have sessions (new format) or legacy format
+          if (ts.timesheet_sessions && ts.timesheet_sessions.length > 0) {
+            // New format with sessions - find all dates covered
+            for (const session of ts.timesheet_sessions) {
+              if (session.start_time && session.end_time) {
+                const sessionStart = new Date(session.start_time);
+                const sessionEnd = new Date(session.end_time);
+                
+                // Add start day
+                const startDay = sessionStart.toISOString().split('T')[0];
+                if (startDay >= `${year}-${month}-01` && startDay <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
+                  affectedDays.add(startDay);
+                }
+                
+                // Add end day if different
+                const endDay = sessionEnd.toISOString().split('T')[0];
+                if (endDay !== startDay && endDay >= `${year}-${month}-01` && endDay <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
+                  affectedDays.add(endDay);
+                }
+              }
             }
-            currentDay.setDate(currentDay.getDate() + 1);
+          } else if (ts.start_time && ts.end_time) {
+            // Legacy format - use timesheet start/end
+            const startDate = new Date(ts.start_time);
+            const endDate = new Date(ts.end_time);
+            
+            let currentDay = new Date(startDate);
+            currentDay.setHours(0, 0, 0, 0);
+            
+            while (currentDay <= endDate) {
+              const dayISO = currentDay.toISOString().split('T')[0];
+              if (dayISO >= `${year}-${month}-01` && dayISO <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
+                affectedDays.add(dayISO);
+              }
+              currentDay.setDate(currentDay.getDate() + 1);
+            }
+          } else {
+            // Fallback: just use the timesheet date
+            affectedDays.add(ts.date);
           }
+
+          console.log('📅 Affected days:', Array.from(affectedDays));
 
           // Process each affected day
           for (const dayISO of affectedDays) {

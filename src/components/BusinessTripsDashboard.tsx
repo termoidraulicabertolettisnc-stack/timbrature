@@ -294,24 +294,46 @@ const BusinessTripsDashboard = () => {
             const effectiveSaturdayHandling = temporalSettings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
             const effectiveSaturdayRate = temporalSettings?.saturday_hourly_rate || defaultSaturdayRate;
 
-            // Determine date range this timesheet might affect
-            const startDate = new Date(ts.start_time || `${ts.date}T00:00:00`);
-            const endDate = ts.end_date && ts.end_time 
-              ? new Date(ts.end_time)
-              : new Date(ts.end_time || `${ts.date}T23:59:59`);
-
-            // Get all days this timesheet touches
+            // Determine which days this timesheet affects
             const affectedDays = new Set<string>();
-            let currentDay = new Date(startDate);
-            currentDay.setHours(0, 0, 0, 0);
             
-            while (currentDay <= endDate) {
-              const dayISO = currentDay.toISOString().split('T')[0];
-              // Only add if in current month
-              if (dayISO >= `${year}-${month}-01` && dayISO <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
-                affectedDays.add(dayISO);
+            // Check if we have sessions (new format) or legacy format
+            if (ts.timesheet_sessions && ts.timesheet_sessions.length > 0) {
+              // New format with sessions
+              for (const session of ts.timesheet_sessions) {
+                if (session.start_time && session.end_time) {
+                  const sessionStart = new Date(session.start_time);
+                  const sessionEnd = new Date(session.end_time);
+                  
+                  const startDay = sessionStart.toISOString().split('T')[0];
+                  if (startDay >= `${year}-${month}-01` && startDay <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
+                    affectedDays.add(startDay);
+                  }
+                  
+                  const endDay = sessionEnd.toISOString().split('T')[0];
+                  if (endDay !== startDay && endDay >= `${year}-${month}-01` && endDay <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
+                    affectedDays.add(endDay);
+                  }
+                }
               }
-              currentDay.setDate(currentDay.getDate() + 1);
+            } else if (ts.start_time && ts.end_time) {
+              // Legacy format
+              const startDate = new Date(ts.start_time);
+              const endDate = new Date(ts.end_time);
+              
+              let currentDay = new Date(startDate);
+              currentDay.setHours(0, 0, 0, 0);
+              
+              while (currentDay <= endDate) {
+                const dayISO = currentDay.toISOString().split('T')[0];
+                if (dayISO >= `${year}-${month}-01` && dayISO <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
+                  affectedDays.add(dayISO);
+                }
+                currentDay.setDate(currentDay.getDate() + 1);
+              }
+            } else {
+              // Fallback
+              affectedDays.add(ts.date);
             }
 
             // Process each affected day
