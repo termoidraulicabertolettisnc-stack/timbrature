@@ -108,11 +108,35 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
       
       // ✅ Apply entry tolerance BEFORE calculating hours
       let processedTimesheet = { ...ts };
-      if (ts.start_time) {
-        const toleranceConfig = shouldApplyEntryTolerance(temporalSettings, companySettingsForEmployee);
+      const toleranceConfig = shouldApplyEntryTolerance(temporalSettings, companySettingsForEmployee);
+      
+      // Check if we have sessions (new format) or legacy format
+      if (processedTimesheet.timesheet_sessions && processedTimesheet.timesheet_sessions.length > 0) {
+        // Apply tolerance to the first session's start time
+        if (toleranceConfig.enabled && toleranceConfig.standardTime && toleranceConfig.tolerance !== undefined) {
+          const sortedSessions = [...processedTimesheet.timesheet_sessions].sort((a, b) => 
+            (a.session_order || 0) - (b.session_order || 0)
+          );
+          
+          if (sortedSessions.length > 0 && sortedSessions[0].start_time) {
+            const adjustedStartTime = applyEntryTolerance(
+              new Date(sortedSessions[0].start_time),
+              toleranceConfig.standardTime,
+              toleranceConfig.tolerance
+            );
+            // Create a new sessions array with the adjusted first session
+            processedTimesheet.timesheet_sessions = sortedSessions.map((session, idx) => 
+              idx === 0 
+                ? { ...session, start_time: adjustedStartTime.toISOString() }
+                : session
+            );
+          }
+        }
+      } else if (processedTimesheet.start_time) {
+        // Legacy format - apply tolerance to main timesheet start_time
         if (toleranceConfig.enabled && toleranceConfig.standardTime && toleranceConfig.tolerance !== undefined) {
           const adjustedStartTime = applyEntryTolerance(
-            new Date(ts.start_time),
+            new Date(processedTimesheet.start_time),
             toleranceConfig.standardTime,
             toleranceConfig.tolerance
           );
