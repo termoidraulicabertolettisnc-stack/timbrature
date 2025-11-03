@@ -59,19 +59,19 @@ export type Database = {
         Row: {
           arguments: string | null
           function_code: string | null
-          function_name: unknown | null
+          function_name: unknown
           return_type: string | null
         }
         Insert: {
           arguments?: string | null
           function_code?: string | null
-          function_name?: unknown | null
+          function_name?: unknown
           return_type?: string | null
         }
         Update: {
           arguments?: string | null
           function_code?: string | null
-          function_name?: unknown | null
+          function_name?: unknown
           return_type?: string | null
         }
         Relationships: []
@@ -449,7 +449,15 @@ export type Database = {
           standard_weekly_hours?: Json | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "company_settings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       company_sites: {
         Row: {
@@ -773,7 +781,15 @@ export type Database = {
           valid_from?: string
           valid_to?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "employee_settings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       function_backups: {
         Row: {
@@ -793,6 +809,42 @@ export type Database = {
           function_definition?: string | null
           function_name?: string | null
           id?: number
+        }
+        Relationships: []
+      }
+      global_defaults: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          default_daily_allowance_min_hours: number
+          default_lunch_break_min_hours: number
+          default_meal_voucher_min_hours: number
+          default_night_shift_end: string
+          default_night_shift_start: string
+          default_weekly_hours: Json
+          id: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          default_daily_allowance_min_hours: number
+          default_lunch_break_min_hours: number
+          default_meal_voucher_min_hours: number
+          default_night_shift_end: string
+          default_night_shift_start: string
+          default_weekly_hours: Json
+          id?: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          default_daily_allowance_min_hours?: number
+          default_lunch_break_min_hours?: number
+          default_meal_voucher_min_hours?: number
+          default_night_shift_end?: string
+          default_night_shift_start?: string
+          default_weekly_hours?: Json
+          id?: string
         }
         Relationships: []
       }
@@ -996,7 +1048,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       projects: {
         Row: {
@@ -1139,6 +1199,21 @@ export type Database = {
         }
         Relationships: []
       }
+      settings_defaults: {
+        Row: {
+          key: string
+          value: Json
+        }
+        Insert: {
+          key: string
+          value: Json
+        }
+        Update: {
+          key?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       system_defaults: {
         Row: {
           category: string | null
@@ -1265,7 +1340,7 @@ export type Database = {
       timesheet_sessions: {
         Row: {
           created_at: string | null
-          end_time: string
+          end_time: string | null
           id: string
           notes: string | null
           pause_minutes: number | null
@@ -1277,7 +1352,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
-          end_time: string
+          end_time?: string | null
           id?: string
           notes?: string | null
           pause_minutes?: number | null
@@ -1289,7 +1364,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
-          end_time?: string
+          end_time?: string | null
           id?: string
           notes?: string | null
           pause_minutes?: number | null
@@ -1379,6 +1454,7 @@ export type Database = {
           is_saturday: boolean
           lunch_duration_minutes: number | null
           lunch_end_time: string | null
+          lunch_manually_set: boolean | null
           lunch_override_minutes: number | null
           lunch_start_time: string | null
           meal_voucher_earned: boolean
@@ -1410,6 +1486,7 @@ export type Database = {
           is_saturday?: boolean
           lunch_duration_minutes?: number | null
           lunch_end_time?: string | null
+          lunch_manually_set?: boolean | null
           lunch_override_minutes?: number | null
           lunch_start_time?: string | null
           meal_voucher_earned?: boolean
@@ -1441,6 +1518,7 @@ export type Database = {
           is_saturday?: boolean
           lunch_duration_minutes?: number | null
           lunch_end_time?: string | null
+          lunch_manually_set?: boolean | null
           lunch_override_minutes?: number | null
           lunch_start_time?: string | null
           meal_voucher_earned?: boolean
@@ -1623,6 +1701,61 @@ export type Database = {
         }
         Relationships: []
       }
+      timesheet_sessions_view: {
+        Row: {
+          created_at: string | null
+          end_time: string | null
+          id: string | null
+          notes: string | null
+          session_order: number | null
+          start_time: string | null
+          timesheet_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          end_time?: never
+          id?: string | null
+          notes?: string | null
+          session_order?: number | null
+          start_time?: never
+          timesheet_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          end_time?: never
+          id?: string | null
+          notes?: string | null
+          session_order?: number | null
+          start_time?: never
+          timesheet_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "timesheet_sessions_timesheet_id_fkey"
+            columns: ["timesheet_id"]
+            isOneToOne: false
+            referencedRelation: "timesheets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timesheet_sessions_timesheet_id_fkey"
+            columns: ["timesheet_id"]
+            isOneToOne: false
+            referencedRelation: "v_sessions_with_timesheets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timesheet_sessions_timesheet_id_fkey"
+            columns: ["timesheet_id"]
+            isOneToOne: false
+            referencedRelation: "v_timesheet_discrepancies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_sessions_with_timesheets: {
         Row: {
           absence_type: Database["public"]["Enums"]["absence_type"] | null
@@ -1755,6 +1888,22 @@ export type Database = {
       }
     }
     Functions: {
+      _append_session_to_other_day: {
+        Args: {
+          p_actor: string
+          p_date: string
+          p_end: string
+          p_notes: string
+          p_start: string
+          p_type: string
+          p_user: string
+        }
+        Returns: undefined
+      }
+      _split_session_if_crosses_midnight: {
+        Args: { p_end: string; p_start: string }
+        Returns: Json
+      }
       add_timesheet_session: {
         Args: {
           p_end_time: string
@@ -1762,6 +1911,19 @@ export type Database = {
           p_timesheet_id: string
         }
         Returns: string
+      }
+      api_get_timesheet_day: {
+        Args: { p_date: string; p_user: string }
+        Returns: Json
+      }
+      api_save_timesheet_day: {
+        Args: {
+          p_actor?: string
+          p_date: string
+          p_payload: Json
+          p_user: string
+        }
+        Returns: Json
       }
       apply_settings_changes_with_date_logic: {
         Args: {
@@ -1826,14 +1988,8 @@ export type Database = {
         }
         Returns: number
       }
-      cleanup_lorenzo_test_data: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
-      cleanup_old_imports: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
+      cleanup_lorenzo_test_data: { Args: never; Returns: undefined }
+      cleanup_old_imports: { Args: never; Returns: undefined }
       explain_timesheet_calculation: {
         Args: {
           p_date: string
@@ -1847,14 +2003,14 @@ export type Database = {
         Returns: string
       }
       get_current_user_context: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           company_id: string
           user_role: Database["public"]["Enums"]["user_role"]
         }[]
       }
       get_current_user_role_and_company: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           user_company_id: string
           user_role: Database["public"]["Enums"]["user_role"]
@@ -1864,22 +2020,47 @@ export type Database = {
         Args: { p_date?: string; p_user_id: string }
         Returns: Json
       }
+      get_effective_timesheet_config: {
+        Args: { p_date: string; p_user_id: string }
+        Returns: {
+          lunch_break_min_hours: number
+          lunch_break_minutes: number
+          lunch_break_type: string
+          meal_voucher_min_hours: number
+          meal_voucher_policy: string
+          night_shift_end: string
+          night_shift_start: string
+          saturday_handling: string
+          saturday_hourly_rate: number
+          weekly_hours: Json
+        }[]
+      }
       get_lunch_break_minutes: {
         Args: { p_lunch_type: string }
         Returns: number
+      }
+      get_overtime_hybrid_view: {
+        Args: never
+        Returns: {
+          alert_level: string
+          alert_reason: string
+          first_name: string
+          last_30d_days: number
+          last_30d_hours: number
+          last_name: string
+          rolling_12m_hours: number
+          rolling_12m_percentage: number
+          ytd_hours: number
+          ytd_percentage: number
+          ytd_remaining: number
+        }[]
       }
       get_standard_hours_for_day: {
         Args: { p_date: string; p_weekly_hours: Json }
         Returns: number
       }
-      is_admin: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
-      }
-      is_user_admin: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
-      }
+      is_admin: { Args: never; Returns: boolean }
+      is_user_admin: { Args: never; Returns: boolean }
       is_user_admin_in_company: {
         Args: { target_company_id?: string }
         Returns: boolean
@@ -1903,6 +2084,16 @@ export type Database = {
         }
         Returns: undefined
       }
+      night_minutes_between: {
+        Args: {
+          p_end: string
+          p_night_end: string
+          p_night_start: string
+          p_start: string
+          p_tz?: string
+        }
+        Returns: number
+      }
       process_import_batch: {
         Args: { p_batch_id: string; p_mode?: string; p_user_id?: string }
         Returns: {
@@ -1916,9 +2107,25 @@ export type Database = {
         Args: { p_user_id: string; p_valid_from: string; p_valid_to?: string }
         Returns: number
       }
+      resolve_effective_settings: {
+        Args: { p_date: string; p_user: string }
+        Returns: Json
+      }
+      session_minutes: {
+        Args: { p_end: string; p_start: string }
+        Returns: number
+      }
       set_lunch_override: {
         Args: { p_minutes: number; p_timesheet_id: string }
         Returns: undefined
+      }
+      split_overnight_session: {
+        Args: { p_session_id: string }
+        Returns: undefined
+      }
+      sum_work_session_hours: {
+        Args: { p_timesheet_id: string }
+        Returns: number
       }
       test_config_resolution: {
         Args: { p_date?: string; p_user_id: string }
