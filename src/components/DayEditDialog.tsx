@@ -260,8 +260,8 @@ export function DayEditDialog({
         sessionData.push({
           id: session.id,
           session_order: session.session_order ?? index,
-          start_time: session.start_time.substring(0, 5), // HH:mm
-          end_time: session.end_time ? session.end_time.substring(0, 5) : '',
+          start_time: utcToLocalTime(session.start_time),
+          end_time: session.end_time ? utcToLocalTime(session.end_time) : '',
           session_type: session.session_type || 'work',
           notes: session.notes || '',
         });
@@ -278,8 +278,8 @@ export function DayEditDialog({
       
       sessionData.push({
         session_order: 0,
-        start_time: format(legacyStartTime, 'HH:mm'),
-        end_time: format(legacyEndTime, 'HH:mm'),
+        start_time: utcToLocalTime(timesheet.start_time),
+        end_time: utcToLocalTime(timesheet.end_time),
         session_type: 'work',
         notes: '',
         isNew: true, // Marca come nuova (verrà salvata come sessione)
