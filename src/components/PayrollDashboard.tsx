@@ -115,10 +115,10 @@ export default function PayrollDashboard() {
         return;
       }
 
-      // Get timesheets for the period
+      // Get timesheets for the period WITH sessions
       const { data: timesheets, error: timesheetError } = await supabase
         .from('timesheets')
-        .select('*')
+        .select('*, timesheet_sessions(*)')
         .in('user_id', userIds)
         .gte('date', startDate)
         .lte('date', endDate)
@@ -177,6 +177,15 @@ export default function PayrollDashboard() {
 
         // Process each timesheet once - determine which days it affects
         for (const ts of employeeTimesheets) {
+          console.log('📋 Processing timesheet:', {
+            id: ts.id,
+            date: ts.date,
+            start_time: ts.start_time,
+            end_time: ts.end_time,
+            end_date: ts.end_date,
+            total_hours: ts.total_hours
+          });
+
           const temporalSettings = await getEmployeeSettingsForDate(ts.user_id, ts.date);
 
           // Determine date range this timesheet might affect

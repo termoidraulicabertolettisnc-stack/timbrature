@@ -199,7 +199,7 @@ const BusinessTripsDashboard = () => {
 
       const { data: timesheets, error: timesheetError } = await supabase
         .from('timesheets')
-        .select('*')
+        .select('*, timesheet_sessions(*)')
         .in('user_id', userIds)
         .gte('date', startDate)
         .lte('date', endDate)
