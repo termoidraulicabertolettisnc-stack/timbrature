@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toZonedTime } from 'date-fns-tz';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
 import { useAuth } from '@/contexts/AuthContext';
+import { applyEntryTolerance, shouldApplyEntryTolerance } from '@/utils/entryToleranceUtils';
 
 const TZ = 'Europe/Rome';
 
@@ -181,13 +182,27 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         const effectiveSaturdayHandling = temporalSettings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
         const effectiveSaturdayRate = temporalSettings?.saturday_hourly_rate || defaultSaturdayRate;
 
+        // ✅ Apply entry tolerance BEFORE calculating hours
+        let processedTimesheet = { ...ts };
+        if (ts.start_time) {
+          const toleranceConfig = shouldApplyEntryTolerance(temporalSettings, companySettingsForEmployee);
+          if (toleranceConfig.enabled && toleranceConfig.standardTime && toleranceConfig.tolerance !== undefined) {
+            const adjustedStartTime = applyEntryTolerance(
+              new Date(ts.start_time),
+              toleranceConfig.standardTime,
+              toleranceConfig.tolerance
+            );
+            processedTimesheet.start_time = adjustedStartTime.toISOString();
+          }
+        }
+
         // Determine which days this timesheet affects
         const affectedDays = new Set<string>();
         
         // Check if we have sessions (new format) or legacy format
-        if (ts.timesheet_sessions && ts.timesheet_sessions.length > 0) {
+        if (processedTimesheet.timesheet_sessions && processedTimesheet.timesheet_sessions.length > 0) {
           // New format with sessions
-          for (const session of ts.timesheet_sessions) {
+          for (const session of processedTimesheet.timesheet_sessions) {
             if (session.start_time && session.end_time) {
               // Convert UTC to local timezone to determine which local days are affected
               const sessionStart = toZonedTime(new Date(session.start_time), TZ);
@@ -208,10 +223,10 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
               }
             }
           }
-        } else if (ts.start_time && ts.end_time) {
-          // Legacy format with ZONED dates
-          const startDate = toZonedTime(new Date(ts.start_time), TZ);
-          const endDate = toZonedTime(new Date(ts.end_time), TZ);
+        } else if (processedTimesheet.start_time && processedTimesheet.end_time) {
+          // Legacy format with ZONED dates (with tolerance applied)
+          const startDate = toZonedTime(new Date(processedTimesheet.start_time), TZ);
+          const endDate = toZonedTime(new Date(processedTimesheet.end_time), TZ);
           
           let currentDate = new Date(startDate);
           currentDate.setHours(0, 0, 0, 0);
@@ -229,12 +244,12 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         
         // Fallback: if no days were added (sessions without times), use timesheet.date
         if (affectedDays.size === 0) {
-          affectedDays.add(ts.date);
+          affectedDays.add(processedTimesheet.date);
         }
 
-        // Process each affected day
+        // Process each affected day (use processedTimesheet with tolerance applied)
         for (const dayISO of affectedDays) {
-          const segments = sessionsForDay(ts, dayISO);
+          const segments = sessionsForDay(processedTimesheet, dayISO);
           if (segments.length === 0) continue;
 
           const date = new Date(`${dayISO}T00:00:00`);
@@ -255,9 +270,9 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
             saturdayTrips.amount += dayHours * effectiveSaturdayRate;
             saturdayTrips.daily_data[dayKey] += dayHours;
           } else {
-            // Regular work - distribute proportionally
-            const timesheetTotalHours = ts.total_hours || 0;
-            const timesheetOvertimeHours = ts.overtime_hours || 0;
+            // Regular work - distribute proportionally (use processed timesheet)
+            const timesheetTotalHours = processedTimesheet.total_hours || 0;
+            const timesheetOvertimeHours = processedTimesheet.overtime_hours || 0;
             const timesheetOrdinaryHours = Math.max(0, timesheetTotalHours - timesheetOvertimeHours);
 
             if (timesheetTotalHours > 0) {
@@ -270,10 +285,10 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
           }
         }
 
-        // Calculate meal benefits (only for primary date)
-        const primaryDayKey = String(new Date(`${ts.date}T00:00:00`).getDate()).padStart(2, '0');
+        // Calculate meal benefits (only for primary date, use processed timesheet)
+        const primaryDayKey = String(new Date(`${processedTimesheet.date}T00:00:00`).getDate()).padStart(2, '0');
         const mealBenefits = await BenefitsService.calculateMealBenefits(
-          ts,
+          processedTimesheet,
           temporalSettings ? {
             meal_allowance_policy: temporalSettings.meal_allowance_policy,
             meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
@@ -282,7 +297,7 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
             saturday_handling: temporalSettings.saturday_handling,
           } : undefined,
           companySettingsForEmployee,
-          ts.date,
+          processedTimesheet.date,
         );
 
         // Daily allowance
@@ -300,13 +315,13 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         // Meal voucher (non converted)
         if (mealBenefits.mealVoucher) {
           mealVoucherDays++;
-          if (!employeeConversions.some(conv => conv.date === ts.date && conv.converted_to_allowance)) {
+          if (!employeeConversions.some(conv => conv.date === processedTimesheet.date && conv.converted_to_allowance)) {
             mealVouchersDaily[primaryDayKey] = true;
           }
         }
 
         // Meal voucher conversions
-        const isConverted = employeeConversions.some(conv => conv.date === ts.date && conv.converted_to_allowance);
+        const isConverted = employeeConversions.some(conv => conv.date === processedTimesheet.date && conv.converted_to_allowance);
         if (isConverted) {
           mealVoucherConversions.days += 1;
           mealVoucherConversions.daily_data[primaryDayKey] = true;
