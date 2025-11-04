@@ -17,8 +17,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, CalendarDays } from 'lucide-react';
 import LocationDisplay from './LocationDisplay';
 import LocationTrackingRoute from './LocationTrackingRoute';
 import { TimesheetWithProfile } from '@/types/timesheet';
@@ -40,9 +41,12 @@ interface TimesheetEditDialogProps {
 const TZ = 'Europe/Rome';
 
 // Funzione per convertire da UTC a timezone locale per la visualizzazione
-const utcToLocalTime = (utcString: string): string => {
+const utcToLocalTime = (utcString: string, includeDate: boolean = false): string => {
   try {
     const localTime = toZonedTime(new Date(utcString), TZ);
+    if (includeDate) {
+      return format(localTime, "yyyy-MM-dd'T'HH:mm"); // Formato per datetime-local
+    }
     return format(localTime, 'HH:mm');
   } catch (error) {
     console.error('Error converting UTC to local time:', error);
@@ -53,7 +57,20 @@ const utcToLocalTime = (utcString: string): string => {
 // Funzione per convertire da timezone locale a UTC per il salvataggio
 const localTimeToUtc = (dateString: string, timeString: string): string => {
   try {
-    const localDateTime = `${dateString}T${timeString}:00`;
+    let localDateTime: string;
+    
+    // Se timeString include già la data (es: "2025-11-04T02:00" o "2025-11-04 02:00")
+    if (timeString.includes('T') || (timeString.includes('-') && timeString.length > 10)) {
+      // Usa direttamente timeString come datetime completo
+      localDateTime = timeString.replace(' ', 'T');
+      if (!localDateTime.includes(':00', localDateTime.length - 3)) {
+        localDateTime += ':00';
+      }
+    } else {
+      // Comportamento originale per solo orario
+      localDateTime = `${dateString}T${timeString}:00`;
+    }
+    
     const utcTime = fromZonedTime(new Date(localDateTime), TZ);
     return utcTime.toISOString();
   } catch (error) {
@@ -85,6 +102,7 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
   // Lunch break mode: 'times' for start/end times, 'duration' for duration in minutes
   const [lunchBreakMode, setLunchBreakMode] = useState<'times' | 'duration'>('duration');
   const [lunchDuration, setLunchDuration] = useState<number>(60); // in minutes
+  const [isMultiday, setIsMultiday] = useState<boolean>(false); // Track if session crosses midnight
 
   // Load projects and employee settings when dialog opens
   useEffect(() => {
@@ -180,15 +198,21 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
       if (isEditingSpecificSession) {
         console.log('🔧 DIALOG SESSION FIX - Editing specific session:', (timesheet as any)._editing_session_id, 'order:', (timesheet as any)._editing_session_order);
       } else {
-        console.log('🔧 DIALOG SESSION FIX - Editing main timesheet');
+      console.log('🔧 DIALOG SESSION FIX - Editing main timesheet');
       }
+      
+      // Determina se la sessione attraversa mezzanotte
+      const sessionIsMultiday = timesheet.start_time && timesheet.end_time && 
+        new Date(timesheet.start_time).toDateString() !== new Date(timesheet.end_time).toDateString();
+      
+      setIsMultiday(sessionIsMultiday);
       
       setFormData({
         date: timesheet.date,
         end_date: timesheet.end_date || timesheet.date,
-        // CORREZIONE: Usa gli orari corretti (che ora sono della sessione specifica)
-        start_time: timesheet.start_time ? utcToLocalTime(timesheet.start_time) : '',
-        end_time: timesheet.end_time ? utcToLocalTime(timesheet.end_time) : '',
+        // CORREZIONE: Usa gli orari corretti con data se multiday
+        start_time: timesheet.start_time ? utcToLocalTime(timesheet.start_time, sessionIsMultiday) : '',
+        end_time: timesheet.end_time ? utcToLocalTime(timesheet.end_time, sessionIsMultiday) : '',
         lunch_start_time: timesheet.lunch_start_time ? utcToLocalTime(timesheet.lunch_start_time) : '',
         lunch_end_time: timesheet.lunch_end_time ? utcToLocalTime(timesheet.lunch_end_time) : '',
         project_id: timesheet.project_id || 'none',
@@ -307,8 +331,12 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
         
         // CORREZIONE: Per sessioni specifiche, aggiorna solo la sessione
         const sessionUpdateData = {
-          start_time: formData.start_time ? localTimeToUtc(formData.date, formData.start_time) : null,
-          end_time: formData.end_time ? localTimeToUtc(formData.end_date || formData.date, formData.end_time) : null,
+          start_time: formData.start_time ? 
+            (isMultiday ? localTimeToUtc('', formData.start_time) : localTimeToUtc(formData.date, formData.start_time))
+            : null,
+          end_time: formData.end_time ? 
+            (isMultiday ? localTimeToUtc('', formData.end_time) : localTimeToUtc(formData.end_date || formData.date, formData.end_time))
+            : null,
           notes: formData.notes || null,
           session_type: 'work' // Mantieni il tipo
         };
@@ -559,22 +587,35 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
             </div>
           </div>
 
+          {isMultiday && (
+            <Alert className="py-2">
+              <CalendarDays className="h-4 w-4" />
+              <AlertDescription className="text-sm">
+                ⚠️ Sessione multiday: gli orari includono data e ora complete
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="start_time">Orario di inizio</Label>
+              <Label htmlFor="start_time">
+                {isMultiday ? 'Data e Ora di inizio' : 'Orario di inizio'}
+              </Label>
               <Input
                 id="start_time"
-                type="time"
+                type={isMultiday ? "datetime-local" : "time"}
                 value={formData.start_time}
                 onChange={(e) => handleInputChange('start_time', e.target.value)}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="end_time">Orario di fine</Label>
+              <Label htmlFor="end_time">
+                {isMultiday ? 'Data e Ora di fine' : 'Orario di fine'}
+              </Label>
               <Input
                 id="end_time"
-                type="time"
+                type={isMultiday ? "datetime-local" : "time"}
                 value={formData.end_time}
                 onChange={(e) => handleInputChange('end_time', e.target.value)}
               />

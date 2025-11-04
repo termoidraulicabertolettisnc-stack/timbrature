@@ -59,6 +59,7 @@ interface SessionData {
   session_type: string;
   notes: string;
   isNew?: boolean;
+  isMultiday?: boolean; // Flag per indicare se attraversa mezzanotte
 }
 
 interface DayEditDialogProps {
@@ -80,7 +81,7 @@ interface DayEditDialogProps {
 
 const TZ = 'Europe/Rome';
 
-const utcToLocalTime = (utcString: string): string => {
+const utcToLocalTime = (utcString: string, includeDate: boolean = false): string => {
   try {
     // ✅ VALIDAZIONE: Se la stringa è vuota o null, ritorna stringa vuota
     if (!utcString || utcString.trim() === '') {
@@ -96,6 +97,9 @@ const utcToLocalTime = (utcString: string): string => {
     }
 
     const localTime = toZonedTime(date, TZ);
+    if (includeDate) {
+      return format(localTime, "yyyy-MM-dd'T'HH:mm"); // Formato per datetime-local
+    }
     return format(localTime, 'HH:mm');
   } catch (error) {
     console.error('Error converting UTC to local time:', { error, utcString });
@@ -105,7 +109,20 @@ const utcToLocalTime = (utcString: string): string => {
 
 const localTimeToUtc = (dateString: string, timeString: string): string => {
   try {
-    const localDateTime = `${dateString}T${timeString}:00`;
+    let localDateTime: string;
+    
+    // Se timeString include già la data (es: "2025-11-04T02:00" o "2025-11-04 02:00")
+    if (timeString.includes('T') || (timeString.includes('-') && timeString.length > 10)) {
+      // Usa direttamente timeString come datetime completo
+      localDateTime = timeString.replace(' ', 'T');
+      if (!localDateTime.includes(':00', localDateTime.length - 3)) {
+        localDateTime += ':00';
+      }
+    } else {
+      // Comportamento originale per solo orario
+      localDateTime = `${dateString}T${timeString}:00`;
+    }
+    
     const utcTime = fromZonedTime(new Date(localDateTime), TZ);
     return utcTime.toISOString();
   } catch (error) {
@@ -257,13 +274,19 @@ export function DayEditDialog({
         // Salta sessioni con dati NULL (da LEFT JOIN vuoto)
         if (!session.id || !session.start_time) return;
         
+        // Determina se la sessione attraversa mezzanotte
+        const startDate = new Date(session.start_time);
+        const endDate = session.end_time ? new Date(session.end_time) : startDate;
+        const isMultiday = startDate.toDateString() !== endDate.toDateString();
+        
         sessionData.push({
           id: session.id,
           session_order: session.session_order ?? index,
-          start_time: utcToLocalTime(session.start_time),
-          end_time: session.end_time ? utcToLocalTime(session.end_time) : '',
+          start_time: utcToLocalTime(session.start_time, isMultiday),
+          end_time: session.end_time ? utcToLocalTime(session.end_time, isMultiday) : '',
           session_type: session.session_type || 'work',
           notes: session.notes || '',
+          isMultiday: isMultiday
         });
       });
     }
@@ -422,8 +445,34 @@ export function DayEditDialog({
 
     if (sessions.length === 0) return result;
 
+    // Valida sessioni multiday specificamente
+    sessions.forEach((session, index) => {
+      if (session.isMultiday && session.start_time && session.end_time) {
+        const startFull = new Date(session.start_time);
+        const endFull = new Date(session.end_time);
+        
+        if (endFull <= startFull) {
+          result.hasErrors = true;
+          result.messages.push({
+            type: 'error',
+            message: `Sessione #${session.session_order} multiday: data/ora fine precedente all'inizio`
+          });
+        }
+        
+        // Info: durata sessione multiday
+        const durationHours = (endFull.getTime() - startFull.getTime()) / (1000 * 60 * 60);
+        if (durationHours > 12) {
+          result.hasWarnings = true;
+          result.messages.push({
+            type: 'warning',
+            message: `Sessione #${session.session_order}: durata di ${durationHours.toFixed(1)}h. Verifica se corretto.`
+          });
+        }
+      }
+    });
+
     const sortedSessions = [...sessions]
-      .filter(s => s.start_time && s.end_time)
+      .filter(s => s.start_time && s.end_time && !s.isMultiday) // Escludi multiday dal controllo sovrapposizione normale
       .sort((a, b) => {
         const timeA = a.start_time.split(':').map(Number);
         const timeB = b.start_time.split(':').map(Number);
@@ -645,8 +694,12 @@ export function DayEditDialog({
           const sessionsToInsert = sortedSessions.map((session, index) => ({
             timesheet_id: timesheetId,
             session_order: index,
-            start_time: formatTimeForDatabase(session.start_time),
-            end_time: formatTimeForDatabase(session.end_time),
+            start_time: session.isMultiday 
+              ? localTimeToUtc('', session.start_time)  // timeString già include data
+              : localTimeToUtc(date, session.start_time),
+            end_time: session.isMultiday
+              ? localTimeToUtc('', session.end_time)
+              : localTimeToUtc(date, session.end_time),
             session_type: session.session_type,
             notes: session.notes || null,
           }));
@@ -912,9 +965,17 @@ export function DayEditDialog({
                   <Card key={index} className="border-l-4 border-l-primary">
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-sm">
-                          Sessione #{session.session_order}
-                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-sm">
+                            Sessione #{session.session_order}
+                          </CardTitle>
+                          {session.isMultiday && (
+                            <Badge variant="outline" className="text-xs">
+                              <CalendarDays className="w-3 h-3 mr-1" />
+                              Multi-giorno
+                            </Badge>
+                          )}
+                        </div>
                         {sessions.length > 1 && (
                           <Button
                             variant="ghost"
@@ -928,19 +989,30 @@ export function DayEditDialog({
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
+                      {session.isMultiday && (
+                        <Alert className="py-2">
+                          <AlertDescription className="text-xs">
+                            ⚠️ Sessione multiday: include data e ora complete
+                          </AlertDescription>
+                        </Alert>
+                      )}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-2">
-                          <Label>Ora Inizio</Label>
+                          <Label>
+                            {session.isMultiday ? 'Data e Ora Inizio' : 'Ora Inizio'}
+                          </Label>
                           <Input
-                            type="time"
+                            type={session.isMultiday ? "datetime-local" : "time"}
                             value={session.start_time}
                             onChange={(e) => updateSession(index, 'start_time', e.target.value)}
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Ora Fine</Label>
+                          <Label>
+                            {session.isMultiday ? 'Data e Ora Fine' : 'Ora Fine'}
+                          </Label>
                           <Input
-                            type="time"
+                            type={session.isMultiday ? "datetime-local" : "time"}
                             value={session.end_time}
                             onChange={(e) => updateSession(index, 'end_time', e.target.value)}
                           />
@@ -973,8 +1045,14 @@ export function DayEditDialog({
                       {session.start_time && session.end_time && (
                         <div className="text-sm text-muted-foreground">
                           Durata: {(() => {
-                            const start = new Date(`${date}T${session.start_time}:00`);
-                            const end = new Date(`${date}T${session.end_time}:00`);
+                            let start: Date, end: Date;
+                            if (session.isMultiday) {
+                              start = new Date(session.start_time);
+                              end = new Date(session.end_time);
+                            } else {
+                              start = new Date(`${date}T${session.start_time}:00`);
+                              end = new Date(`${date}T${session.end_time}:00`);
+                            }
                             const duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
                             return duration > 0 ? `${duration.toFixed(2)}h` : 'Orario non valido';
                           })()}

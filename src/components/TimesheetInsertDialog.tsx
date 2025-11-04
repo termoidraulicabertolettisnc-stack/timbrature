@@ -24,7 +24,20 @@ interface TimesheetInsertDialogProps {
 // Funzione helper per conversione timezone
 const localTimeToUtc = (dateString: string, timeString: string): string => {
   try {
-    const localDateTime = `${dateString}T${timeString}:00`;
+    let localDateTime: string;
+    
+    // Se timeString include già la data (es: "2025-11-04T02:00" o "2025-11-04 02:00")
+    if (timeString.includes('T') || (timeString.includes('-') && timeString.length > 10)) {
+      // Usa direttamente timeString come datetime completo
+      localDateTime = timeString.replace(' ', 'T');
+      if (!localDateTime.includes(':00', localDateTime.length - 3)) {
+        localDateTime += ':00';
+      }
+    } else {
+      // Comportamento originale per solo orario
+      localDateTime = `${dateString}T${timeString}:00`;
+    }
+    
     // Usa fromZonedTime per convertire da timezone locale a UTC
     const localDate = new Date(localDateTime);
     const utcDate = fromZonedTime(localDate, 'Europe/Rome');
