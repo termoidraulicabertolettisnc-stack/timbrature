@@ -231,16 +231,12 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
       
       console.log('🔧 SESSION-FIRST - Next session order:', nextOrder);
       
-      // Converti UTC timestamp a time format (HH:mm:ss)
-      const startTimeOnly = format(new Date(startTimeUTC), 'HH:mm:ss');
-      const endTimeOnly = endTimeUTC ? format(new Date(endTimeUTC), 'HH:mm:ss') : null;
-      
-      // SEMPRE crea la sessione
+      // SEMPRE crea la sessione con timestamp completi UTC
       const sessionData = {
         timesheet_id: timesheetId,
         session_order: nextOrder,
-        start_time: startTimeOnly,
-        end_time: endTimeOnly,
+        start_time: startTimeUTC,
+        end_time: endTimeUTC,
         session_type: 'work',
         notes: formData.notes || null
       };
