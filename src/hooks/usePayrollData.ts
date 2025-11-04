@@ -203,19 +203,6 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
       for (const dayISO of affectedDays) {
         const segments = sessionsForDay(processedTimesheet, dayISO);
         
-        // Debug logging for Luigi on October 11
-        if (profile.first_name === 'Luigi' && dayISO === '2025-10-11') {
-          console.log('🔍 DEBUG Luigi 11-10:', {
-            dayISO,
-            segments: segments.length,
-            segmentsData: segments.map(s => ({
-              start: s.startUtc,
-              end: s.endUtc,
-              duration: (new Date(s.endUtc).getTime() - new Date(s.startUtc).getTime()) / (1000 * 60 * 60)
-            }))
-          });
-        }
-        
         // Skip if no valid segments or if all segments have 0 duration
         if (segments.length === 0) continue;
         
@@ -248,45 +235,31 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
           dayHours += (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
         }
 
-        // Debug before lunch break logic for Luigi
-        if (profile.first_name === 'Luigi' && dayISO === '2025-10-11') {
-          console.log('🔍 Before lunch logic:', {
-            dayHours,
-            segmentsLength: segments.length,
-            lunchDuration: processedTimesheet.lunch_duration_minutes,
-            lunchStart: processedTimesheet.lunch_start_time,
-            lunchEnd: processedTimesheet.lunch_end_time
-          });
-        }
-        
-        // ✅ Subtract lunch break if applicable
-        // If there's only one session, we need to subtract the lunch break
-        // If there are multiple sessions, the lunch break is already incorporated in the gap
-        if (segments.length === 1 && processedTimesheet.lunch_duration_minutes && processedTimesheet.lunch_duration_minutes > 0) {
+        // ✅ Subtract lunch break if applicable (regardless of number of sessions)
+        // Admin can manually adjust if the lunch break was already accounted for in the gap
+        if (processedTimesheet.lunch_duration_minutes && processedTimesheet.lunch_duration_minutes > 0) {
           dayHours -= processedTimesheet.lunch_duration_minutes / 60;
-        } else if (segments.length === 1 && processedTimesheet.lunch_start_time && processedTimesheet.lunch_end_time) {
+        } else if (processedTimesheet.lunch_start_time && processedTimesheet.lunch_end_time) {
           const lunchStart = new Date(processedTimesheet.lunch_start_time);
           const lunchEnd = new Date(processedTimesheet.lunch_end_time);
           if (!isNaN(lunchStart.getTime()) && !isNaN(lunchEnd.getTime())) {
             dayHours -= (lunchEnd.getTime() - lunchStart.getTime()) / (1000 * 60 * 60);
           }
-        } else if (segments.length === 1 && dayHours > 6) {
+        } else {
           // Apply default lunch break from settings only if no explicit lunch break
           if (!processedTimesheet.lunch_duration_minutes && !processedTimesheet.lunch_start_time) {
-            const lunchBreakType = temporalSettings?.lunch_break_type || companySettingsForEmployee?.lunch_break_type || '60_minuti';
-            if (lunchBreakType !== '0_minuti' && lunchBreakType !== 'libera') {
-              const lunchMinutes = parseInt(lunchBreakType.split('_')[0]) || 60;
-              dayHours -= lunchMinutes / 60;
+            const minHoursForLunch = companySettingsForEmployee?.lunch_break_min_hours || 6;
+            if (dayHours > minHoursForLunch) {
+              const lunchBreakType = temporalSettings?.lunch_break_type || companySettingsForEmployee?.lunch_break_type || '60_minuti';
+              if (lunchBreakType !== '0_minuti' && lunchBreakType !== 'libera') {
+                const lunchMinutes = parseInt(lunchBreakType.split('_')[0]) || 60;
+                dayHours -= lunchMinutes / 60;
+              }
             }
           }
         }
 
         dayHours = Math.max(0, dayHours);
-        
-        // Debug after lunch break logic for Luigi
-        if (profile.first_name === 'Luigi' && dayISO === '2025-10-11') {
-          console.log('🔍 After lunch logic:', { dayHours });
-        }
 
         // ✅ Always recalculate ordinary and overtime based on dayHours vs contractualHours
         // This ensures lunch breaks are properly accounted for
