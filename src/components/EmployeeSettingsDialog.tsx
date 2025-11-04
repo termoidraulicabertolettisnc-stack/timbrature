@@ -713,9 +713,10 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                       <Input
                         id="daily_allowance_min_hours"
                         type="number"
+                        step="0.01"
                         min="1"
                         value={settings.daily_allowance_min_hours || ''}
-                        onChange={(e) => updateSetting('daily_allowance_min_hours', e.target.value ? parseInt(e.target.value) : null)}
+                        onChange={(e) => updateSetting('daily_allowance_min_hours', e.target.value ? parseFloat(e.target.value) : null)}
                         placeholder={`Default: ${(companySettings as any)?.default_daily_allowance_min_hours || 6}`}
                         className="mt-1"
                         required
@@ -759,10 +760,11 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                           </Label>
                           <Input
                             type="number"
+                            step="0.01"
                             min="1"
                             max="24"
                             value={String((settings as any).meal_voucher_min_hours || (companySettings as any)?.meal_voucher_min_hours || 6)}
-                            onChange={(e) => updateSetting('meal_voucher_min_hours' as any, parseInt(e.target.value) || 6)}
+                            onChange={(e) => updateSetting('meal_voucher_min_hours' as any, parseFloat(e.target.value) || 6)}
                             className="mt-1"
                             placeholder="6"
                           />
