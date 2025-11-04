@@ -56,10 +56,12 @@ interface SessionData {
   session_order: number;
   start_time: string;
   end_time: string;
-  session_type: string;
+  session_type: string; // 'work' | 'absence'
+  absence_type?: 'A' | 'F' | 'FS' | 'I' | 'M' | 'PR' | 'PNR'; // Used when session_type is 'absence'
   notes: string;
   isNew?: boolean;
   isMultiday?: boolean; // Flag per indicare se attraversa mezzanotte
+  hours?: number; // Used for absence sessions
 }
 
 interface DayEditDialogProps {
@@ -177,6 +179,8 @@ export function DayEditDialog({
 
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [nextSessionOrder, setNextSessionOrder] = useState(1);
+  const [absences, setAbsences] = useState<any[]>([]); // Absences from employee_absences table
+  
   // Stati per gestione pausa pranzo
   const [lunchBreakData, setLunchBreakData] = useState<LunchBreakData>({
   configured_minutes: 60,
@@ -190,6 +194,7 @@ export function DayEditDialog({
     if (open) {
       loadProjects();
       initializeData();
+      loadAbsences();
     }
   }, [open, timesheet, initialSessions]);
 
@@ -205,6 +210,21 @@ export function DayEditDialog({
       setProjects(data || []);
     } catch (error) {
       console.error('Error loading projects:', error);
+    }
+  };
+
+  const loadAbsences = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('employee_absences')
+        .select('*')
+        .eq('user_id', employee.user_id)
+        .eq('date', date);
+      
+      if (error) throw error;
+      setAbsences(data || []);
+    } catch (error) {
+      console.error('Error loading absences:', error);
     }
   };
 
@@ -403,14 +423,16 @@ export function DayEditDialog({
     }
   };
 
-  const addNewSession = () => {
+  const addNewSession = (type: 'work' | 'absence' = 'work') => {
     const newSession: SessionData = {
       session_order: nextSessionOrder,
       start_time: '',
       end_time: '',
-      session_type: 'work',
+      session_type: type,
+      absence_type: type === 'absence' ? 'F' : undefined,
       notes: '',
       isNew: true,
+      hours: type === 'absence' ? 8 : undefined,
     };
     
     setSessions(prev => [...prev, newSession]);
@@ -421,10 +443,17 @@ export function DayEditDialog({
     setSessions(prev => prev.filter((_, i) => i !== index));
   };
 
-  const updateSession = (index: number, field: keyof SessionData, value: string) => {
-    setSessions(prev => prev.map((session, i) => 
-      i === index ? { ...session, [field]: value } : session
-    ));
+  const updateSession = (index: number, field: keyof SessionData, value: string | number) => {
+    setSessions(prev => prev.map((session, i) => {
+      if (i !== index) return session;
+      
+      // Handle numeric fields
+      if (field === 'hours') {
+        return { ...session, hours: typeof value === 'string' ? parseFloat(value) : value };
+      }
+      
+      return { ...session, [field]: value };
+    }));
   };
 
   interface ValidationResult {
@@ -525,9 +554,16 @@ export function DayEditDialog({
     let regularHours = 0;
     let overtimeHours = 0;
     let hasMealVoucher = false;
+    let absenceHours = 0;
 
-    // Calcola ore lorde (somma di tutte le sessioni)
+    // Calcola ore lorde (somma di tutte le sessioni di lavoro)
     sessions.forEach(session => {
+      // Skip absence sessions in work hours calculation
+      if (session.session_type === 'absence') {
+        absenceHours += session.hours || 0;
+        return;
+      }
+      
       if (session.start_time && session.end_time) {
         // ✅ FIX: Se start_time contiene già data completa, usala direttamente
         let startDate: Date;
@@ -583,6 +619,7 @@ export function DayEditDialog({
       regularHours: Math.round(regularHours * 100) / 100,
       overtimeHours: Math.round(overtimeHours * 100) / 100,
       hasMealVoucher,
+      absenceHours: Math.round(absenceHours * 100) / 100,
     };
   };
 
@@ -677,10 +714,14 @@ export function DayEditDialog({
           if (deleteError) throw deleteError;
         }
 
-        // Insert new sessions
-        if (sessions.length > 0) {
+        // Separate work sessions from absence sessions
+        const workSessions = sessions.filter(s => s.session_type !== 'absence');
+        const absenceSessions = sessions.filter(s => s.session_type === 'absence');
+
+        // Insert work sessions
+        if (workSessions.length > 0) {
           // Riordina sessioni per orario cronologico
-          const sortedSessions = [...sessions]
+          const sortedSessions = [...workSessions]
             .filter(s => s.start_time && s.end_time)
             .sort((a, b) => {
               const timeToMinutes = (time: string) => {
@@ -729,6 +770,46 @@ export function DayEditDialog({
 
           if (cleanupError) {
             console.warn('Warning: Could not cleanup main timesheet fields', cleanupError);
+          }
+        }
+
+        // Handle absence sessions separately
+        if (absenceSessions.length > 0) {
+          // Get employee's company_id
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('company_id')
+            .eq('user_id', employee.user_id)
+            .single();
+
+          if (!profileData) throw new Error('Could not find employee profile');
+
+          // Delete existing absences for this date (to avoid duplicates)
+          await supabase
+            .from('employee_absences')
+            .delete()
+            .eq('user_id', employee.user_id)
+            .eq('date', date);
+
+          // Insert new absences
+          const absencesToInsert = absenceSessions
+            .filter(s => s.absence_type && s.hours && s.hours > 0)
+            .map(session => ({
+              user_id: employee.user_id,
+              company_id: profileData.company_id,
+              date: date,
+              absence_type: session.absence_type as 'A' | 'F' | 'FS' | 'I' | 'M' | 'PR' | 'PNR',
+              hours: session.hours,
+              notes: session.notes || null,
+              created_by: currentUserResult.data.user?.id || employee.user_id,
+            }));
+
+          if (absencesToInsert.length > 0) {
+            const { error: absenceError } = await supabase
+              .from('employee_absences')
+              .insert(absencesToInsert);
+
+            if (absenceError) throw absenceError;
           }
         }
       }
@@ -947,32 +1028,46 @@ export function DayEditDialog({
           {/* Sessions */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Sessioni di Lavoro</CardTitle>
-              <Button onClick={addNewSession} size="sm">
-                <Plus className="h-4 w-4 mr-2" />
-                Aggiungi Sessione
-              </Button>
+              <CardTitle>Sessioni di Lavoro e Assenze</CardTitle>
+              <div className="flex gap-2">
+                <Button onClick={() => addNewSession('work')} size="sm" variant="default">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Aggiungi Lavoro
+                </Button>
+                <Button onClick={() => addNewSession('absence')} size="sm" variant="outline">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Aggiungi Assenza
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {sessions.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Clock className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>Nessuna sessione di lavoro</p>
-                  <p className="text-sm">Clicca su "Aggiungi Sessione" per iniziare</p>
+                  <p>Nessuna sessione</p>
+                  <p className="text-sm">Clicca su "Aggiungi Lavoro" o "Aggiungi Assenza" per iniziare</p>
                 </div>
               ) : (
                 sessions.map((session, index) => (
-                  <Card key={index} className="border-l-4 border-l-primary">
+                  <Card 
+                    key={index} 
+                    className={`border-l-4 ${session.session_type === 'absence' ? 'border-l-orange-500' : 'border-l-primary'}`}
+                  >
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <CardTitle className="text-sm">
-                            Sessione #{session.session_order}
+                            {session.session_type === 'absence' ? 'Assenza' : 'Sessione'} #{session.session_order}
                           </CardTitle>
                           {session.isMultiday && (
                             <Badge variant="outline" className="text-xs">
                               <CalendarDays className="w-3 h-3 mr-1" />
                               Multi-giorno
+                            </Badge>
+                          )}
+                          {session.session_type === 'absence' && (
+                            <Badge variant="secondary" className="text-xs">
+                              Assenza
                             </Badge>
                           )}
                         </div>
@@ -996,67 +1091,125 @@ export function DayEditDialog({
                           </AlertDescription>
                         </Alert>
                       )}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                          <Label>
-                            {session.isMultiday ? 'Data e Ora Inizio' : 'Ora Inizio'}
-                          </Label>
-                          <Input
-                            type={session.isMultiday ? "datetime-local" : "time"}
-                            value={session.start_time}
-                            onChange={(e) => updateSession(index, 'start_time', e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>
-                            {session.isMultiday ? 'Data e Ora Fine' : 'Ora Fine'}
-                          </Label>
-                          <Input
-                            type={session.isMultiday ? "datetime-local" : "time"}
-                            value={session.end_time}
-                            onChange={(e) => updateSession(index, 'end_time', e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Tipo</Label>
-                          <Select
-                            value={session.session_type}
-                            onValueChange={(value) => updateSession(index, 'session_type', value)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="work">Lavoro</SelectItem>
-                              <SelectItem value="break">Pausa</SelectItem>
-                              <SelectItem value="meeting">Riunione</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Note Sessione</Label>
-                        <Input
-                          placeholder="Note specifiche per questa sessione..."
-                          value={session.notes}
-                          onChange={(e) => updateSession(index, 'notes', e.target.value)}
-                        />
-                      </div>
-                      {session.start_time && session.end_time && (
-                        <div className="text-sm text-muted-foreground">
-                          Durata: {(() => {
-                            let start: Date, end: Date;
-                            if (session.isMultiday) {
-                              start = new Date(session.start_time);
-                              end = new Date(session.end_time);
-                            } else {
-                              start = new Date(`${date}T${session.start_time}:00`);
-                              end = new Date(`${date}T${session.end_time}:00`);
-                            }
-                            const duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-                            return duration > 0 ? `${duration.toFixed(2)}h` : 'Orario non valido';
-                          })()}
-                        </div>
+                      
+                      {session.session_type === 'absence' ? (
+                        // Absence session fields
+                        <>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>Tipo Assenza</Label>
+                              <Select
+                                value={session.absence_type || 'F'}
+                                onValueChange={(value) => updateSession(index, 'absence_type', value)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="F">Ferie/Permesso</SelectItem>
+                                  <SelectItem value="M">Malattia</SelectItem>
+                                  <SelectItem value="I">Infortunio</SelectItem>
+                                  <SelectItem value="PNR">Permesso Non Retribuito</SelectItem>
+                                  <SelectItem value="PR">Permesso Retribuito</SelectItem>
+                                  <SelectItem value="FS">Ferie Solidali</SelectItem>
+                                  <SelectItem value="A">Altro</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Ore Assenza</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                max="24"
+                                step="0.5"
+                                value={session.hours || 0}
+                                onChange={(e) => updateSession(index, 'hours', e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Note</Label>
+                            <Input
+                              placeholder="Note per l'assenza..."
+                              value={session.notes}
+                              onChange={(e) => updateSession(index, 'notes', e.target.value)}
+                            />
+                          </div>
+                          {session.absence_type && (session.absence_type === 'M' || session.absence_type === 'I') && (
+                            <Alert>
+                              <AlertDescription className="text-xs">
+                                ℹ️ {session.absence_type === 'M' ? 'Malattia' : 'Infortunio'} non sarà compensato con straordinari mensili
+                              </AlertDescription>
+                            </Alert>
+                          )}
+                        </>
+                      ) : (
+                        // Work session fields (existing)
+                        <>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                              <Label>
+                                {session.isMultiday ? 'Data e Ora Inizio' : 'Ora Inizio'}
+                              </Label>
+                              <Input
+                                type={session.isMultiday ? "datetime-local" : "time"}
+                                value={session.start_time}
+                                onChange={(e) => updateSession(index, 'start_time', e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>
+                                {session.isMultiday ? 'Data e Ora Fine' : 'Ora Fine'}
+                              </Label>
+                              <Input
+                                type={session.isMultiday ? "datetime-local" : "time"}
+                                value={session.end_time}
+                                onChange={(e) => updateSession(index, 'end_time', e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Tipo</Label>
+                              <Select
+                                value={session.session_type}
+                                onValueChange={(value) => updateSession(index, 'session_type', value)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="work">Lavoro</SelectItem>
+                                  <SelectItem value="break">Pausa</SelectItem>
+                                  <SelectItem value="meeting">Riunione</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Note Sessione</Label>
+                            <Input
+                              placeholder="Note specifiche per questa sessione..."
+                              value={session.notes}
+                              onChange={(e) => updateSession(index, 'notes', e.target.value)}
+                            />
+                          </div>
+                          {session.start_time && session.end_time && (
+                            <div className="text-sm text-muted-foreground">
+                              Durata: {(() => {
+                                let start: Date, end: Date;
+                                if (session.isMultiday) {
+                                  start = new Date(session.start_time);
+                                  end = new Date(session.end_time);
+                                } else {
+                                  start = new Date(`${date}T${session.start_time}:00`);
+                                  end = new Date(`${date}T${session.end_time}:00`);
+                                }
+                                const duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+                                return duration > 0 ? `${duration.toFixed(2)}h` : 'Orario non valido';
+                              })()}
+                            </div>
+                          )}
+                        </>
                       )}
                     </CardContent>
                   </Card>
@@ -1103,7 +1256,7 @@ export function DayEditDialog({
               <CardTitle>Riepilogo Giornaliero</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 {/* Ore Lavorate (Lorde) */}
                 <div className="text-center p-3 rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
                   <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{totals.grossHours}h</div>
@@ -1153,6 +1306,19 @@ export function DayEditDialog({
                     {totals.overtimeHours > 0 ? 'Oltre le 8h' : 'Nessuno'}
                   </div>
                 </div>
+
+                {/* Ore Assenza */}
+                {totals.absenceHours > 0 && (
+                  <div className="text-center p-3 rounded-lg bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
+                    <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                      {totals.absenceHours}h
+                    </div>
+                    <div className="text-sm font-medium text-yellow-700 dark:text-yellow-300">Ore Assenza</div>
+                    <div className="text-xs text-yellow-500 dark:text-yellow-400 mt-1">
+                      Assenze registrate
+                    </div>
+                  </div>
+                )}
               </div>
 
               <Separator />
