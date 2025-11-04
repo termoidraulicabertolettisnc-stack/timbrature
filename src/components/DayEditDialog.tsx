@@ -1159,9 +1159,15 @@ export function DayEditDialog({
                                 onChange={(e) => updateSession(index, 'hours', e.target.value)}
                                 placeholder="Ore assenza"
                               />
-                              <p className="text-xs text-muted-foreground">
-                                💡 Calcolate automaticamente: {session.hours?.toFixed(1)}h mancanti rispetto al contratto
-                              </p>
+                              {session.hours && session.hours > 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                  💡 Ore suggerite: <span className="font-semibold">{session.hours.toFixed(1)}h</span> (basate su ore mancanti rispetto al contratto)
+                                </p>
+                              ) : (
+                                <p className="text-xs text-muted-foreground">
+                                  Le ore vengono calcolate automaticamente in base alle ore mancanti rispetto al contratto
+                                </p>
+                              )}
                             </div>
                           </div>
                           <div className="space-y-2">
