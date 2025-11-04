@@ -441,8 +441,9 @@ export function DayEditDialog({
       // Calcola ore contrattualizzate per questo giorno
       const contractedHours = getContractedHoursForDay(date, employeeSettings, companySettings);
       
-      // Calcola ore già lavorate sommando tutte le sessioni di lavoro
-      const workedHours = sessions.reduce((total, session) => {
+      // Calcola ore già lavorate sommando tutte le sessioni di lavoro (lorde)
+      let grossWorkedHours = 0;
+      sessions.forEach(session => {
         if (session.session_type === 'work' && session.start_time && session.end_time) {
           const start = new Date(session.start_time);
           const end = new Date(session.end_time);
@@ -450,11 +451,18 @@ export function DayEditDialog({
           // Verifica che le date siano valide
           if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
             const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-            return total + (hours > 0 ? hours : 0);
+            if (hours > 0) {
+              grossWorkedHours += hours;
+            }
           }
         }
-        return total;
-      }, 0);
+      });
+      
+      // Sottrai la pausa pranzo se applicabile
+      const lunchBreakMinHours = employeeSettings?.lunch_break_min_hours ?? companySettings?.lunch_break_min_hours ?? 6.5;
+      const shouldApplyLunch = grossWorkedHours >= lunchBreakMinHours;
+      const lunchHours = shouldApplyLunch ? (lunchBreakData.effective_minutes / 60) : 0;
+      const workedHours = Math.max(0, grossWorkedHours - lunchHours);
       
       // Calcola ore mancanti (contrattualizzate - lavorate)
       const missingHours = Math.max(0, contractedHours - workedHours);
@@ -464,6 +472,8 @@ export function DayEditDialog({
       
       console.log('🔍 CALCOLO ORE ASSENZA - Risultato', {
         contractedHours,
+        grossWorkedHours,
+        lunchHours,
         workedHours,
         missingHours,
         suggestedHours,
@@ -642,8 +652,19 @@ export function DayEditDialog({
     });
 
     // Calcola ore nette (lorde - pausa pranzo)
-    const lunchHours = lunchBreakData.effective_minutes / 60;
+    // La pausa pranzo si applica solo se le ore lorde superano la soglia minima
+    const lunchBreakMinHours = employeeSettings?.lunch_break_min_hours ?? companySettings?.lunch_break_min_hours ?? 6.5;
+    const shouldApplyLunch = grossHours >= lunchBreakMinHours;
+    const lunchHours = shouldApplyLunch ? (lunchBreakData.effective_minutes / 60) : 0;
     totalHours = Math.max(0, grossHours - lunchHours);
+    
+    console.log('🔍 calculateTotals - Pausa pranzo:', {
+      grossHours,
+      lunchBreakMinHours,
+      shouldApplyLunch,
+      lunchHours,
+      totalHours
+    });
 
     // Calcola straordinari (oltre le 8h nette)
     const dailyLimit = 8;
@@ -1340,7 +1361,12 @@ export function DayEditDialog({
                 {/* Pausa Pranzo */}
                 <div className="text-center p-3 rounded-lg bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800">
                   <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                    -{(lunchBreakData.effective_minutes / 60).toFixed(2)}h
+                    {(() => {
+                      const lunchBreakMinHours = employeeSettings?.lunch_break_min_hours ?? companySettings?.lunch_break_min_hours ?? 6.5;
+                      const shouldApplyLunch = totals.grossHours >= lunchBreakMinHours;
+                      const lunchHours = shouldApplyLunch ? (lunchBreakData.effective_minutes / 60) : 0;
+                      return lunchHours > 0 ? `-${lunchHours.toFixed(2)}h` : '0.00h';
+                    })()}
                   </div>
                   <div className="text-sm font-medium text-orange-700 dark:text-orange-300">Pausa Pranzo</div>
                   <div className="text-xs text-orange-500 dark:text-orange-400 mt-1">
@@ -1399,7 +1425,12 @@ export function DayEditDialog({
               {/* Formula Visiva */}
               <div className="text-center">
                 <code className="text-sm font-mono bg-muted px-3 py-2 rounded">
-                  {totals.grossHours.toFixed(2)}h (lordo) - {(lunchBreakData.effective_minutes / 60).toFixed(2)}h (pausa) = {totals.totalHours.toFixed(2)}h (netto)
+                  {(() => {
+                    const lunchBreakMinHours = employeeSettings?.lunch_break_min_hours ?? companySettings?.lunch_break_min_hours ?? 6.5;
+                    const shouldApplyLunch = totals.grossHours >= lunchBreakMinHours;
+                    const lunchHours = shouldApplyLunch ? (lunchBreakData.effective_minutes / 60) : 0;
+                    return `${totals.grossHours.toFixed(2)}h (lordo) - ${lunchHours.toFixed(2)}h (pausa) = ${totals.totalHours.toFixed(2)}h (netto)`;
+                  })()}
                 </code>
               </div>
             </CardContent>
