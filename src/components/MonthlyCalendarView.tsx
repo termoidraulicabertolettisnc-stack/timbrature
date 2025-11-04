@@ -265,6 +265,15 @@ export function MonthlyCalendarView({
     if (!dayData || !isCurrentMonth) {
       return (
         <div className={`min-h-[60px] p-1 ${!isCurrentMonth ? 'opacity-30' : ''}`}>
+          {isCurrentMonth && contractedHours > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded p-1">
+              <div className="flex items-center gap-1 text-red-600 mb-1">
+                <AlertCircle className="h-3 w-3" />
+                <span className="text-xs font-medium">-{contractedHours.toFixed(1)}h</span>
+              </div>
+              <div className="text-xs text-red-700 mb-1">Nessuna timbratura</div>
+            </div>
+          )}
           {isCurrentMonth && (
             <div className="flex gap-1 mt-1">
               <Button

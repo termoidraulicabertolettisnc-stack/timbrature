@@ -1015,9 +1015,30 @@ export default function AdminTimesheets() {
   const aggregatedEmployees = useMemo(() => {
     const employeeMap = new Map<string, EmployeeSummary>();
 
+    // Prima, aggiungi TUTTI i dipendenti (anche quelli senza timbrature)
+    employees.forEach((emp) => {
+      if (!employeeMap.has(emp.user_id)) {
+        employeeMap.set(emp.user_id, {
+          user_id: emp.user_id,
+          first_name: emp.first_name || "",
+          last_name: emp.last_name || "",
+          email: emp.email || "",
+          total_hours: 0,
+          overtime_hours: 0,
+          night_hours: 0,
+          regular_hours: 0,
+          meal_vouchers: 0,
+          timesheets: [],
+          total_sessions: 0,
+        });
+      }
+    });
+
+    // Poi, processa i timesheets per i dipendenti che ne hanno
     filteredTimesheets.forEach((timesheet) => {
       const userId = timesheet.user_id;
 
+      // Se il dipendente non esiste nella mappa, crealo
       if (!employeeMap.has(userId)) {
         employeeMap.set(userId, {
           user_id: userId,
@@ -1077,7 +1098,7 @@ export default function AdminTimesheets() {
     });
 
     return Array.from(employeeMap.values());
-  }, [filteredTimesheets]); // Ricalcola solo quando cambiano i timesheets filtrati
+  }, [filteredTimesheets, employees]); // Ricalcola quando cambiano timesheets o dipendenti
 
   if (loading) {
     return (
@@ -1393,21 +1414,51 @@ function DailySummaryViewFixed({
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {aggregateTimesheetsByEmployee().length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Nessun timesheet trovato per i criteri selezionati
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {(() => {
-                const employees = aggregateTimesheetsByEmployee();
-                console.log("🎯 EMPLOYEES COUNT:", employees.length);
-                console.log("🎯 FIRST EMPLOYEE SESSIONS:", employees[0]?.timesheets.length);
-                return employees;
-              })().map((employee) => (
-                <Card key={employee.user_id} className="border-l-4 border-l-primary">
-                  <CardContent className="pt-6">
-                    <div className="flex items-start justify-between mb-4">
+          {(() => {
+            // Filtra dipendenti per mostrare solo quelli con timbrature o ore contrattualizzate per questo giorno
+            const relevantEmployees = aggregateTimesheetsByEmployee().filter(employee => {
+              if (employee.timesheets.length > 0) return true; // Ha timbrature
+              
+              // Verifica se ha ore contrattualizzate per questo giorno
+              const employeeSetting = employeeSettings?.[employee.user_id];
+              const contractedHours = getContractedHoursForDay(dateFilter, employeeSetting, companySettings);
+              return contractedHours > 0; // Ha ore contrattualizzate
+            });
+            
+            return relevantEmployees.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Nessun timesheet trovato per i criteri selezionati
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {(() => {
+                  console.log("🎯 EMPLOYEES COUNT:", relevantEmployees.length);
+                  console.log("🎯 FIRST EMPLOYEE SESSIONS:", relevantEmployees[0]?.timesheets.length);
+                  return relevantEmployees;
+                })().map((employee) => {
+                  // Calcola ore contrattualizzate per mostrare warning
+                  const employeeSetting = employeeSettings?.[employee.user_id];
+                  const contractedHours = getContractedHoursForDay(dateFilter, employeeSetting, companySettings);
+                  const hasNoTimesheets = employee.timesheets.length === 0;
+                  
+                  return (
+                    <Card 
+                      key={employee.user_id} 
+                      className={`border-l-4 ${hasNoTimesheets ? 'border-l-red-500 bg-red-50' : 'border-l-primary'}`}
+                    >
+                      <CardContent className="pt-6">
+                        {hasNoTimesheets && contractedHours > 0 && (
+                          <div className="mb-4 p-3 bg-red-100 border border-red-300 rounded-lg">
+                            <div className="flex items-center gap-2 text-red-800">
+                              <AlertCircle className="h-5 w-5" />
+                              <span className="font-medium">
+                                Nessuna timbratura per questo giorno ({contractedHours.toFixed(1)}h previste) - Inserire assenza
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="flex items-start justify-between mb-4">
                       <div>
                         <h3 className="font-semibold text-lg">
                           {employee.first_name} {employee.last_name}
@@ -1567,40 +1618,42 @@ function DailySummaryViewFixed({
                                       </div>
                                     </TableCell>
                                   </TableRow>
-                                );
-                              })}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
+                                 );
+                               })}
+                             </TableBody>
+                           </Table>
+                         </div>
+                       </CollapsibleContent>
+                     </Collapsible>
 
-                    {/* Mostra le assenze per questo dipendente */}
-                    {absences.filter((absence) => absence.user_id === employee.user_id).length > 0 && (
-                      <div className="mt-4 pt-4 border-t">
-                        <h4 className="font-medium text-sm mb-2">Assenze</h4>
-                        <div className="space-y-1">
-                          {absences
-                            .filter((absence) => absence.user_id === employee.user_id)
-                            .map((absence) => (
-                              <div key={absence.id} className="flex items-center gap-2 text-sm">
-                                <AbsenceIndicator absences={[absence]} />
-                                <span className="text-muted-foreground">
-                                  {format(parseISO(absence.date), "dd/MM/yyyy", { locale: it })}
-                                </span>
-                                {absence.notes && <span className="text-muted-foreground">- {absence.notes}</span>}
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
-      </CardContent>
+                     {/* Mostra le assenze per questo dipendente */}
+                     {absences.filter((absence) => absence.user_id === employee.user_id).length > 0 && (
+                       <div className="mt-4 pt-4 border-t">
+                         <h4 className="font-medium text-sm mb-2">Assenze</h4>
+                         <div className="space-y-1">
+                           {absences
+                             .filter((absence) => absence.user_id === employee.user_id)
+                             .map((absence) => (
+                               <div key={absence.id} className="flex items-center gap-2 text-sm">
+                                 <AbsenceIndicator absences={[absence]} />
+                                 <span className="text-muted-foreground">
+                                   {format(parseISO(absence.date), "dd/MM/yyyy", { locale: it })}
+                                 </span>
+                                 {absence.notes && <span className="text-muted-foreground">- {absence.notes}</span>}
+                               </div>
+                             ))}
+                         </div>
+                       </div>
+                     )}
+                   </CardContent>
+                 </Card>
+               );
+             })}
+           </div>
+         );
+       })()}
+     </div>
+   </CardContent>
     </Card>
   );
 }

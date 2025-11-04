@@ -578,7 +578,11 @@ export function WeeklyTimelineView({
                           </div>
                         </div>
 
-                        <div className="relative h-8 bg-muted/30 rounded">
+                        <div className={`relative h-8 rounded ${
+                          showMissingHoursWarning && day.entries.length === 0 
+                            ? 'bg-red-50 border border-red-200' 
+                            : 'bg-muted/30'
+                        }`}>
                           {/* Hour grid lines */}
                           <div className="absolute inset-0 flex">
                             {timeMarkers.slice(0, 24).map(hour => (
@@ -589,6 +593,15 @@ export function WeeklyTimelineView({
                               />
                             ))}
                           </div>
+
+                          {/* Empty day warning */}
+                          {showMissingHoursWarning && day.entries.length === 0 && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="text-xs text-red-700 font-medium">
+                                Nessuna timbratura ({contractedHours.toFixed(1)}h previste)
+                              </span>
+                            </div>
+                          )}
 
                           {/* Timeline entries */}
                           {day.entries.map(renderTimelineEntryFixed)}
