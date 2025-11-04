@@ -54,6 +54,7 @@ import { TimesheetTimeline } from "@/components/TimesheetTimeline";
 import { TimesheetEditDialog } from "@/components/TimesheetEditDialog";
 import { TimesheetInsertDialog } from "@/components/TimesheetInsertDialog";
 import { AbsenceInsertDialog } from "@/components/AbsenceInsertDialog";
+import { MassAbsenceInsertDialog } from "@/components/MassAbsenceInsertDialog";
 import { DayEditDialog } from "@/components/DayEditDialog";
 import { DayActionMenu } from "@/components/DayActionMenu";
 import { AbsenceIndicator } from "@/components/AbsenceIndicator";
@@ -481,6 +482,7 @@ export default function AdminTimesheets() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [insertDialogOpen, setInsertDialogOpen] = useState(false);
   const [absenceDialogOpen, setAbsenceDialogOpen] = useState(false);
+  const [massAbsenceDialogOpen, setMassAbsenceDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [dayEditDialogOpen, setDayEditDialogOpen] = useState(false);
   const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
@@ -1129,6 +1131,10 @@ export default function AdminTimesheets() {
             <UserPlus className="h-4 w-4" />
             Aggiungi Assenza
           </Button>
+          <Button variant="secondary" onClick={() => setMassAbsenceDialogOpen(true)} className="gap-2">
+            <Users className="h-4 w-4" />
+            Assenze Multiple
+          </Button>
           <Button variant="outline" onClick={() => setImportDialogOpen(true)} className="gap-2">
             <FileSpreadsheet className="h-4 w-4" />
             Importa Excel
@@ -1323,6 +1329,16 @@ export default function AdminTimesheets() {
         onSuccess={() => {
           invalidateTimesheets(); // Invalida cache timesheets e ricarica assenze
           setAbsenceDialogOpen(false);
+        }}
+      />
+
+      {/* Dialog per inserimento assenze multiple */}
+      <MassAbsenceInsertDialog
+        open={massAbsenceDialogOpen}
+        onOpenChange={setMassAbsenceDialogOpen}
+        onSuccess={() => {
+          invalidateTimesheets();
+          setMassAbsenceDialogOpen(false);
         }}
       />
 
