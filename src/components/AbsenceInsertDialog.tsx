@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CalendarIcon } from 'lucide-react';
 import { format, addDays, eachDayOfInterval } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { getContractedHoursForDay } from '@/utils/contractedHours';
 
 interface AbsenceInsertDialogProps {
   open: boolean;
@@ -25,6 +26,8 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [employeeSettings, setEmployeeSettings] = useState<any>(null);
+  const [companySettings, setCompanySettings] = useState<any>(null);
   
   const [formData, setFormData] = useState({
     user_id: '',
@@ -54,7 +57,7 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
     try {
       const { data: employeesData, error: employeesError } = await supabase
         .from('profiles')
-        .select('user_id, first_name, last_name, email')
+        .select('user_id, first_name, last_name, email, company_id')
         .eq('is_active', true)
         .order('first_name');
 
@@ -70,6 +73,56 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
       });
     }
   };
+
+  // Carica le impostazioni del dipendente quando viene selezionato
+  const loadEmployeeSettings = async (userId: string, date: Date) => {
+    try {
+      const dateStr = format(date, 'yyyy-MM-dd');
+      
+      // Carica employee_settings
+      const { data: empSettings } = await supabase
+        .from('employee_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .lte('valid_from', dateStr)
+        .or(`valid_to.is.null,valid_to.gte.${dateStr}`)
+        .order('valid_from', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      setEmployeeSettings(empSettings);
+
+      // Carica company_settings
+      const employee = employees.find(e => e.user_id === userId);
+      if (employee?.company_id) {
+        const { data: compSettings } = await supabase
+          .from('company_settings')
+          .select('*')
+          .eq('company_id', employee.company_id)
+          .maybeSingle();
+
+        setCompanySettings(compSettings);
+      }
+
+      // Calcola ore contrattualizzate per il giorno
+      const contractedHours = getContractedHoursForDay(date, empSettings, companySettings);
+      
+      // Aggiorna le ore solo se maggiori di 0
+      if (contractedHours > 0) {
+        setFormData(prev => ({ ...prev, hours: contractedHours }));
+      }
+      
+    } catch (error) {
+      console.error('Error loading employee settings:', error);
+    }
+  };
+
+  // Effetto per caricare le impostazioni quando cambia dipendente o data
+  useEffect(() => {
+    if (formData.user_id && employees.length > 0) {
+      loadEmployeeSettings(formData.user_id, formData.date_from);
+    }
+  }, [formData.user_id, formData.date_from, employees]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -344,15 +397,33 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
 
           <div className="space-y-2">
             <Label htmlFor="hours">Ore per Giorno</Label>
-            <Input
-              id="hours"
-              type="number"
-              min="0"
-              max="24"
-              step="0.5"
-              value={formData.hours}
-              onChange={(e) => setFormData(prev => ({ ...prev, hours: parseFloat(e.target.value) || 0 }))}
-            />
+            <div className="flex gap-2">
+              <Input
+                id="hours"
+                type="number"
+                min="0"
+                max="24"
+                step="0.5"
+                value={formData.hours}
+                onChange={(e) => setFormData(prev => ({ ...prev, hours: parseFloat(e.target.value) || 0 }))}
+              />
+              {formData.user_id && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadEmployeeSettings(formData.user_id, formData.date_from)}
+                  title="Calcola ore da contratto"
+                >
+                  Auto
+                </Button>
+              )}
+            </div>
+            {formData.user_id && (
+              <p className="text-xs text-muted-foreground">
+                Ore calcolate automaticamente dal contratto del dipendente per il giorno selezionato
+              </p>
+            )}
           </div>
 
           <div className="p-3 bg-muted rounded-lg">
