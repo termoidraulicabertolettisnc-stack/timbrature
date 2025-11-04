@@ -515,7 +515,13 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                     id="use_custom_lunch"
                     checked={!!settings.lunch_break_type}
                     onCheckedChange={(checked) => {
-                      if (!checked) {
+                      console.log('🍽️ Custom lunch toggle:', checked);
+                      if (checked) {
+                        // Quando si attiva, imposta un valore di default
+                        updateSetting('lunch_break_type', '60_minuti');
+                        updateSetting('lunch_break_min_hours', 6.5);
+                      } else {
+                        // Quando si disattiva, rimuovi i valori personalizzati
                         updateSetting('lunch_break_type', null);
                         updateSetting('lunch_break_min_hours', null);
                       }
