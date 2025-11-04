@@ -446,8 +446,12 @@ export function DayEditDialog({
         if (session.session_type === 'work' && session.start_time && session.end_time) {
           const start = new Date(session.start_time);
           const end = new Date(session.end_time);
-          const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-          return total + hours;
+          
+          // Verifica che le date siano valide
+          if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+            const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+            return total + (hours > 0 ? hours : 0);
+          }
         }
         return total;
       }, 0);
