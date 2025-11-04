@@ -438,44 +438,16 @@ export function DayEditDialog({
         companyWeeklyHours: companySettings?.standard_weekly_hours
       });
       
-      // Calcola ore contrattualizzate per questo giorno
-      const contractedHours = getContractedHoursForDay(date, employeeSettings, companySettings);
+      // Calcola usando lo stesso metodo del riepilogo giornaliero
+      // per garantire coerenza e semplicità
+      const totals = calculateTotals();
       
-      // Calcola ore già lavorate sommando tutte le sessioni di lavoro (lorde)
-      let grossWorkedHours = 0;
-      sessions.forEach(session => {
-        if (session.session_type === 'work' && session.start_time && session.end_time) {
-          const start = new Date(session.start_time);
-          const end = new Date(session.end_time);
-          
-          // Verifica che le date siano valide
-          if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-            const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-            if (hours > 0) {
-              grossWorkedHours += hours;
-            }
-          }
-        }
-      });
+      // Le ore di assenza suggerite sono quelle calcolate nel riepilogo
+      suggestedHours = totals.absenceHours;
       
-      // Sottrai la pausa pranzo se applicabile
-      const lunchBreakMinHours = employeeSettings?.lunch_break_min_hours ?? companySettings?.lunch_break_min_hours ?? 6.5;
-      const shouldApplyLunch = grossWorkedHours >= lunchBreakMinHours;
-      const lunchHours = shouldApplyLunch ? (lunchBreakData.effective_minutes / 60) : 0;
-      const workedHours = Math.max(0, grossWorkedHours - lunchHours);
-      
-      // Calcola ore mancanti (contrattualizzate - lavorate)
-      const missingHours = Math.max(0, contractedHours - workedHours);
-      
-      // Arrotonda a 0.5 ore per praticità
-      suggestedHours = Math.round(missingHours * 2) / 2;
-      
-      console.log('🔍 CALCOLO ORE ASSENZA - Risultato', {
-        contractedHours,
-        grossWorkedHours,
-        lunchHours,
-        workedHours,
-        missingHours,
+      console.log('🔍 CALCOLO ORE ASSENZA - Auto suggerimento', {
+        contractedHours: getContractedHoursForDay(date, employeeSettings, companySettings),
+        totalHours: totals.totalHours,
         suggestedHours,
         isNaN: isNaN(suggestedHours)
       });
@@ -611,13 +583,11 @@ export function DayEditDialog({
     let regularHours = 0;
     let overtimeHours = 0;
     let hasMealVoucher = false;
-    let absenceHours = 0;
 
     // Calcola ore lorde (somma di tutte le sessioni di lavoro)
     sessions.forEach(session => {
       // Skip absence sessions in work hours calculation
       if (session.session_type === 'absence') {
-        absenceHours += session.hours || 0;
         return;
       }
       
@@ -658,14 +628,6 @@ export function DayEditDialog({
     const lunchHours = shouldApplyLunch ? (lunchBreakData.effective_minutes / 60) : 0;
     totalHours = Math.max(0, grossHours - lunchHours);
     
-    console.log('🔍 calculateTotals - Pausa pranzo:', {
-      grossHours,
-      lunchBreakMinHours,
-      shouldApplyLunch,
-      lunchHours,
-      totalHours
-    });
-
     // Calcola straordinari (oltre le 8h nette)
     const dailyLimit = 8;
     if (totalHours > dailyLimit) {
@@ -676,10 +638,23 @@ export function DayEditDialog({
       overtimeHours = 0;
     }
 
+    // Calcola ore di assenza: Ore da Contratto - Ore Totali Nette
+    const contractedHours = getContractedHoursForDay(date, employeeSettings, companySettings);
+    const absenceHours = Math.max(0, contractedHours - totalHours);
+
     // Check meal voucher eligibility
     if (companySettings && totalHours >= (companySettings.meal_voucher_min_hours || 6)) {
       hasMealVoucher = true;
     }
+
+    console.log('🔍 calculateTotals - Riepilogo:', {
+      contractedHours,
+      grossHours,
+      lunchHours,
+      totalHours,
+      absenceHours,
+      overtimeHours
+    });
 
     return {
       grossHours: Math.round(grossHours * 100) / 100,
