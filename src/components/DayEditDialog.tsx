@@ -1150,22 +1150,30 @@ export function DayEditDialog({
                             </div>
                             <div className="space-y-2">
                               <Label>Ore Assenza</Label>
-                              <Input
-                                type="number"
-                                min="0"
-                                max="24"
-                                step="0.5"
-                                value={session.hours || 0}
-                                onChange={(e) => updateSession(index, 'hours', e.target.value)}
-                                placeholder="Ore assenza"
-                              />
+                              <div className="relative">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max="24"
+                                  step="0.5"
+                                  value={session.hours ?? ''}
+                                  onChange={(e) => updateSession(index, 'hours', parseFloat(e.target.value) || 0)}
+                                  placeholder={session.hours && session.hours > 0 ? `${session.hours.toFixed(1)} ore (suggerite)` : "Inserisci ore"}
+                                  className="pr-16"
+                                />
+                                {session.hours && session.hours > 0 && (
+                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-primary">
+                                    ✓ Auto
+                                  </span>
+                                )}
+                              </div>
                               {session.hours && session.hours > 0 ? (
-                                <p className="text-xs text-muted-foreground">
-                                  💡 Ore suggerite: <span className="font-semibold">{session.hours.toFixed(1)}h</span> (basate su ore mancanti rispetto al contratto)
+                                <p className="text-xs text-primary font-medium">
+                                  ✓ {session.hours.toFixed(1)} ore calcolate automaticamente (ore mancanti rispetto al contratto)
                                 </p>
                               ) : (
                                 <p className="text-xs text-muted-foreground">
-                                  Le ore vengono calcolate automaticamente in base alle ore mancanti rispetto al contratto
+                                  Le ore verranno calcolate in base alle ore mancanti rispetto al contratto
                                 </p>
                               )}
                             </div>
