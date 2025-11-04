@@ -27,6 +27,7 @@ import {
   UserPlus,
   Calendar,
   FileSpreadsheet,
+  AlertCircle,
 } from "lucide-react";
 import {
   format,
@@ -48,6 +49,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { it } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { OvertimeTracker } from "@/components/OvertimeTracker";
+import { getContractedHoursForDay, hasMissingHours, formatMissingHours } from '@/utils/contractedHours';
 import { TimesheetTimeline } from "@/components/TimesheetTimeline";
 import { TimesheetEditDialog } from "@/components/TimesheetEditDialog";
 import { TimesheetInsertDialog } from "@/components/TimesheetInsertDialog";
@@ -1413,25 +1415,49 @@ function DailySummaryViewFixed({
                         <p className="text-sm text-muted-foreground">{employee.email}</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <Badge variant="secondary">{employee.total_hours.toFixed(1)}h totali</Badge>
-                        <Badge variant="outline" className="text-purple-600 border-purple-200">
-                          {employee.total_sessions || employee.timesheets.length} sessioni
-                        </Badge>
-                        {employee.overtime_hours > 0 && (
-                          <Badge variant="outline" className="text-orange-600 border-orange-200">
-                            {employee.overtime_hours.toFixed(1)}h straord.
-                          </Badge>
-                        )}
-                        {employee.night_hours > 0 && (
-                          <Badge variant="outline" className="text-blue-600 border-blue-200">
-                            {employee.night_hours.toFixed(1)}h notturne
-                          </Badge>
-                        )}
-                        {employee.meal_vouchers > 0 && (
-                          <Badge variant="outline" className="text-green-600 border-green-200">
-                            {employee.meal_vouchers} buoni pasto
-                          </Badge>
-                        )}
+                        {(() => {
+                          // Calcola ore contrattualizzate per questo giorno
+                          const employeeSetting = employeeSettings?.[employee.user_id];
+                          const contractedHours = getContractedHoursForDay(dateFilter, employeeSetting, companySettings);
+                          const workedHours = employee.total_hours;
+                          const showMissingHoursWarning = hasMissingHours(workedHours, contractedHours);
+                          const missingHours = contractedHours - workedHours;
+                          
+                          return (
+                            <>
+                              <Badge variant="secondary">{employee.total_hours.toFixed(1)}h totali</Badge>
+                              {contractedHours > 0 && (
+                                <Badge variant="outline" className="text-muted-foreground">
+                                  su {contractedHours.toFixed(1)}h contratt.
+                                </Badge>
+                              )}
+                              {showMissingHoursWarning && (
+                                <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
+                                  <AlertCircle className="h-3 w-3 mr-1 inline" />
+                                  {formatMissingHours(missingHours)}
+                                </Badge>
+                              )}
+                              <Badge variant="outline" className="text-purple-600 border-purple-200">
+                                {employee.total_sessions || employee.timesheets.length} sessioni
+                              </Badge>
+                              {employee.overtime_hours > 0 && (
+                                <Badge variant="outline" className="text-orange-600 border-orange-200">
+                                  {employee.overtime_hours.toFixed(1)}h straord.
+                                </Badge>
+                              )}
+                              {employee.night_hours > 0 && (
+                                <Badge variant="outline" className="text-blue-600 border-blue-200">
+                                  {employee.night_hours.toFixed(1)}h notturne
+                                </Badge>
+                              )}
+                              {employee.meal_vouchers > 0 && (
+                                <Badge variant="outline" className="text-green-600 border-green-200">
+                                  {employee.meal_vouchers} buoni pasto
+                                </Badge>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
 

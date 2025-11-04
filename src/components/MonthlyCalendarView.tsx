@@ -7,6 +7,8 @@ import { it } from 'date-fns/locale';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { AbsenceIndicator } from './AbsenceIndicator';
 import { sessionsForDay, utcToLocal } from '@/utils/timeSegments';
+import { getContractedHoursForDay, hasMissingHours, formatMissingHours } from '@/utils/contractedHours';
+import { AlertCircle } from 'lucide-react';
 
 interface MonthlyCalendarViewProps {
   timesheets: TimesheetWithProfile[];
@@ -251,6 +253,14 @@ export function MonthlyCalendarView({
     const dateStr = format(day, 'yyyy-MM-dd');
     const dayData = employee.days[dateStr];
     const isCurrentMonth = isSameMonth(day, currentMonth);
+    
+    // Calcola ore contrattualizzate per questo giorno
+    const employeeSetting = employeeSettings?.[employee.user_id];
+    const contractedHours = getContractedHoursForDay(dateStr, employeeSetting, companySettings);
+    const workedHours = dayData?.total_hours || 0;
+    const hasAbsence = dayData?.absences && dayData.absences.length > 0;
+    const showMissingHoursWarning = !hasAbsence && hasMissingHours(workedHours, contractedHours);
+    const missingHours = contractedHours - workedHours;
 
     if (!dayData || !isCurrentMonth) {
       return (
@@ -289,7 +299,7 @@ export function MonthlyCalendarView({
           </div>
         ) : dayData.total_hours > 0 ? (
           <div 
-            className="space-y-1 cursor-pointer hover:bg-gray-50 rounded p-1"
+            className={`space-y-1 cursor-pointer hover:bg-gray-50 rounded p-1 ${showMissingHoursWarning ? 'bg-orange-50 border border-orange-200' : ''}`}
             onClick={() => {
               if (onEditDay && dayData.timesheets.length > 0) {
                 const mainTimesheet = dayData.timesheets[0];
@@ -303,6 +313,13 @@ export function MonthlyCalendarView({
               }
             }}
           >
+            {showMissingHoursWarning && (
+              <div className="flex items-center gap-1 text-orange-600 mb-1">
+                <AlertCircle className="h-3 w-3" />
+                <span className="text-xs font-medium">{formatMissingHours(missingHours)}</span>
+              </div>
+            )}
+            
             <div className="text-xs">
               {dayData.sessions.length > 0 && (
                 <div className="text-gray-500 mb-1">
@@ -320,6 +337,7 @@ export function MonthlyCalendarView({
             
             <div className="text-xs font-medium flex items-center gap-1">
               Totale: {dayData.total_hours.toFixed(1)}h
+              {contractedHours > 0 && <span className="text-gray-400">/ {contractedHours.toFixed(1)}h</span>}
               {dayData.night_hours > 0 && (
                 <div className="w-2 h-2 bg-purple-600 rounded-full" title="Turno notturno" />
               )}

@@ -10,6 +10,8 @@ import { BenefitsService } from '@/services/BenefitsService';
 import { useWeeklyRealtimeHours } from '@/hooks/use-weekly-realtime-hours';
 import { AbsenceIndicator } from '@/components/AbsenceIndicator';
 import { sessionsForDay, utcToLocal } from '@/utils/timeSegments';
+import { getContractedHoursForDay, hasMissingHours, formatMissingHours } from '@/utils/contractedHours';
+import { AlertCircle } from 'lucide-react';
 
 interface WeeklyTimelineViewProps {
   timesheets: TimesheetWithProfile[];
@@ -517,20 +519,44 @@ export function WeeklyTimelineView({
                     </div>
 
                     {/* Days timeline */}
-                    {employee.days.map(day => (
-                      <div key={day.date} className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-medium min-w-[100px]">
-                            {format(parseISO(day.date), 'EEE dd/MM', { locale: it })}
-                          </h4>
-                          
-                          {/* Absences */}
-                          <div className="flex gap-1">
-                            <AbsenceIndicator absences={day.absences} />
-                          </div>
-                          
-                          {/* Pulsanti per aggiungere timbrature/assenze */}
-                          <div className="flex gap-1 ml-auto">
+                    {employee.days.map(day => {
+                      // Calcola ore contrattualizzate e lavorate per questo giorno
+                      const employeeSetting = employeeSettings?.[employee.user_id];
+                      const contractedHours = getContractedHoursForDay(day.date, employeeSetting, companySettings);
+                      const workedHours = day.entries.reduce((sum, entry) => sum + entry.duration, 0);
+                      const hasAbsence = day.absences && day.absences.length > 0;
+                      const showMissingHoursWarning = !hasAbsence && hasMissingHours(workedHours, contractedHours);
+                      const missingHours = contractedHours - workedHours;
+                      
+                      return (
+                        <div key={day.date} className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-medium min-w-[100px]">
+                              {format(parseISO(day.date), 'EEE dd/MM', { locale: it })}
+                            </h4>
+                            
+                            {/* Absences */}
+                            <div className="flex gap-1">
+                              <AbsenceIndicator absences={day.absences} />
+                            </div>
+                            
+                            {/* Missing hours warning */}
+                            {showMissingHoursWarning && (
+                              <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300 text-xs">
+                                <AlertCircle className="h-3 w-3 mr-1" />
+                                {formatMissingHours(missingHours)}
+                              </Badge>
+                            )}
+                            
+                            {/* Worked hours summary */}
+                            {workedHours > 0 && contractedHours > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                {workedHours.toFixed(1)}h / {contractedHours.toFixed(1)}h
+                              </span>
+                            )}
+                            
+                            {/* Pulsanti per aggiungere timbrature/assenze */}
+                            <div className="flex gap-1 ml-auto">
                             <Button
                               variant="outline"
                               size="sm"
@@ -568,7 +594,8 @@ export function WeeklyTimelineView({
                           {day.entries.map(renderTimelineEntryFixed)}
                         </div>
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 </CardContent>
               </Card>
