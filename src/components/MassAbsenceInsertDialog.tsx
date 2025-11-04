@@ -105,7 +105,7 @@ export function MassAbsenceInsertDialog({
         }));
       }
     }
-  }, [open, preSelectedEmployees, preSelectedDates]);
+  }, [open]); // Solo 'open' come dipendenza per evitare loop infiniti
 
   const loadEmployees = async () => {
     try {
