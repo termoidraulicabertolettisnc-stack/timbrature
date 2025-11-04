@@ -18,9 +18,10 @@ interface AbsenceInsertDialogProps {
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   selectedDate?: Date;
+  preSelectedEmployeeId?: string;
 }
 
-export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDate }: AbsenceInsertDialogProps) {
+export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDate, preSelectedEmployeeId }: AbsenceInsertDialogProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -37,9 +38,9 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
   useEffect(() => {
     if (open) {
       loadEmployees();
-      // Reset form
+      // Reset form e pre-seleziona dipendente se passato
       setFormData({
-        user_id: '',
+        user_id: preSelectedEmployeeId || '',
         absence_type: 'F',
         date_from: selectedDate || new Date(),
         date_to: selectedDate || new Date(),
@@ -47,7 +48,7 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
         notes: ''
       });
     }
-  }, [open]);
+  }, [open, selectedDate, preSelectedEmployeeId]);
 
   const loadEmployees = async () => {
     try {

@@ -19,6 +19,7 @@ interface TimesheetInsertDialogProps {
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   selectedDate?: Date;
+  preSelectedEmployeeId?: string;
 }
 
 // Funzione helper per conversione timezone
@@ -48,7 +49,7 @@ const localTimeToUtc = (dateString: string, timeString: string): string => {
   }
 };
 
-export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedDate }: TimesheetInsertDialogProps) {
+export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedDate, preSelectedEmployeeId }: TimesheetInsertDialogProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -67,8 +68,8 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
   useEffect(() => {
     if (open) {
       loadData();
-      // Reset form
-      setSelectedEmployee('');
+      // Reset form e pre-seleziona dipendente se passato
+      setSelectedEmployee(preSelectedEmployeeId || '');
       setLunchDuration(60);
       setFormData({
         project_id: '',
@@ -78,7 +79,7 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
         notes: ''
       });
     }
-  }, [open, selectedDate]);
+  }, [open, selectedDate, preSelectedEmployeeId]);
 
   const loadData = async () => {
     try {

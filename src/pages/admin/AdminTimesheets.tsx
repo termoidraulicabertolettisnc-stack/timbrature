@@ -487,6 +487,7 @@ export default function AdminTimesheets() {
   const [dayEditDialogOpen, setDayEditDialogOpen] = useState(false);
   const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
   const [selectedTimesheetDate, setSelectedTimesheetDate] = useState<string>("");
+  const [preSelectedEmployeeId, setPreSelectedEmployeeId] = useState<string>("");
   const [dayEditData, setDayEditData] = useState<{
     date: string;
     employee: any;
@@ -497,13 +498,13 @@ export default function AdminTimesheets() {
   // Funzioni per aggiungere timesheet e assenze da specifici giorni
   const handleAddTimesheet = (date: string, userId: string) => {
     setSelectedTimesheetDate(date);
-    setSelectedEmployee(userId); // Imposta l'utente selezionato
+    setPreSelectedEmployeeId(userId); // Preseleziona il dipendente nel dialog
     setInsertDialogOpen(true);
   };
 
   const handleAddAbsence = (date: string, userId: string) => {
     setSelectedTimesheetDate(date);
-    setSelectedEmployee(userId); // Imposta l'utente selezionato
+    setPreSelectedEmployeeId(userId); // Preseleziona il dipendente nel dialog
     setAbsenceDialogOpen(true);
   };
 
@@ -1314,18 +1315,28 @@ export default function AdminTimesheets() {
       {/* Dialog per inserimento */}
       <TimesheetInsertDialog
         open={insertDialogOpen}
-        onOpenChange={setInsertDialogOpen}
+        onOpenChange={(open) => {
+          setInsertDialogOpen(open);
+          if (!open) setPreSelectedEmployeeId(''); // Reset quando si chiude
+        }}
         selectedDate={selectedTimesheetDate ? parseISO(selectedTimesheetDate) : new Date()}
+        preSelectedEmployeeId={preSelectedEmployeeId}
         onSuccess={() => {
           invalidateTimesheets();
           setInsertDialogOpen(false);
+          setPreSelectedEmployeeId('');
         }}
       />
 
       {/* Dialog per inserimento assenza */}
       <AbsenceInsertDialog
         open={absenceDialogOpen}
-        onOpenChange={setAbsenceDialogOpen}
+        onOpenChange={(open) => {
+          setAbsenceDialogOpen(open);
+          if (!open) setPreSelectedEmployeeId(''); // Reset quando si chiude
+        }}
+        selectedDate={selectedTimesheetDate ? parseISO(selectedTimesheetDate) : undefined}
+        preSelectedEmployeeId={preSelectedEmployeeId}
         onSuccess={() => {
           invalidateTimesheets(); // Invalida cache timesheets e ricarica assenze
           setAbsenceDialogOpen(false);
