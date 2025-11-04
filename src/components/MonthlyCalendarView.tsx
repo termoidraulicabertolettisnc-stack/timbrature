@@ -302,11 +302,15 @@ export function MonthlyCalendarView({
 
     return (
       <div className={`min-h-[60px] p-1 ${!isCurrentMonth ? 'opacity-30' : ''}`}>
-        {dayData.absences.length > 0 ? (
-          <div className="space-y-1">
+        {/* Mostra assenze se presenti */}
+        {dayData.absences.length > 0 && (
+          <div className="mb-1">
             <AbsenceIndicator absences={dayData.absences} />
           </div>
-        ) : dayData.total_hours > 0 ? (
+        )}
+        
+        {/* Mostra ore lavorate se presenti */}
+        {dayData.total_hours > 0 && (
           <div 
             className={`space-y-1 cursor-pointer hover:bg-gray-50 rounded p-1 ${showMissingHoursWarning ? 'bg-orange-50 border border-orange-200' : ''}`}
             onClick={() => {
@@ -356,7 +360,10 @@ export function MonthlyCalendarView({
               <UtensilsCrossed className="h-3 w-3 text-green-600" />
             )}
           </div>
-        ) : (
+        )}
+        
+        {/* Mostra bottoni solo se non ci sono né timbrature né assenze */}
+        {dayData.total_hours === 0 && dayData.absences.length === 0 && (
           <div className="flex gap-1 mt-1">
             <Button
               variant="ghost"
