@@ -40,6 +40,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { BenefitsService } from '@/services/BenefitsService';
 import { protectTimesheetManualEdit } from '@/utils/temporalEmployeeSettings';
+import { getContractedHoursForDay } from '@/utils/contractedHours';
 
 interface Project {
   id: string;
@@ -424,6 +425,37 @@ export function DayEditDialog({
   };
 
   const addNewSession = (type: 'work' | 'absence' = 'work') => {
+    let suggestedHours = 8; // Default
+    
+    if (type === 'absence') {
+      // Calcola ore contrattualizzate per questo giorno
+      const contractedHours = getContractedHoursForDay(date, employeeSettings, companySettings);
+      
+      // Calcola ore già lavorate sommando tutte le sessioni di lavoro
+      const workedHours = sessions.reduce((total, session) => {
+        if (session.session_type === 'work' && session.start_time && session.end_time) {
+          const start = new Date(session.start_time);
+          const end = new Date(session.end_time);
+          const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+          return total + hours;
+        }
+        return total;
+      }, 0);
+      
+      // Calcola ore mancanti (contrattualizzate - lavorate)
+      const missingHours = Math.max(0, contractedHours - workedHours);
+      
+      // Arrotonda a 0.5 ore per praticità
+      suggestedHours = Math.round(missingHours * 2) / 2;
+      
+      console.log('🧮 Auto-calcolo ore assenza:', {
+        contractedHours,
+        workedHours,
+        missingHours,
+        suggestedHours
+      });
+    }
+    
     const newSession: SessionData = {
       session_order: nextSessionOrder,
       start_time: '',
@@ -432,7 +464,7 @@ export function DayEditDialog({
       absence_type: type === 'absence' ? 'F' : undefined,
       notes: '',
       isNew: true,
-      hours: type === 'absence' ? 8 : undefined,
+      hours: type === 'absence' ? suggestedHours : undefined,
     };
     
     setSessions(prev => [...prev, newSession]);
