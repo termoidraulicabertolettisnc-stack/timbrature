@@ -305,7 +305,20 @@ export function MonthlyCalendarView({
         {/* Mostra assenze se presenti */}
         {dayData.absences.length > 0 && (
           <div className="mb-1">
-            <AbsenceIndicator absences={dayData.absences} />
+            <AbsenceIndicator 
+              absences={dayData.absences}
+              onAbsenceClick={(absence) => {
+                if (onEditDay) {
+                  const employee = {
+                    user_id: absence.user_id,
+                    first_name: absence.profiles?.first_name || '',
+                    last_name: absence.profiles?.last_name || '',
+                    email: absence.profiles?.email || '',
+                  };
+                  onEditDay(dateStr, employee, null, []);
+                }
+              }}
+            />
           </div>
         )}
         

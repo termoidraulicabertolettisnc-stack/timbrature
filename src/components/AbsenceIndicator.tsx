@@ -6,9 +6,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 interface AbsenceIndicatorProps {
   absences: any[];
   className?: string;
+  onAbsenceClick?: (absence: any) => void;
 }
 
-export function AbsenceIndicator({ absences, className = "" }: AbsenceIndicatorProps) {
+export function AbsenceIndicator({ absences, className = "", onAbsenceClick }: AbsenceIndicatorProps) {
   if (!absences || absences.length === 0) return null;
 
   const getAbsenceIcon = (type: string) => {
@@ -48,6 +49,7 @@ export function AbsenceIndicator({ absences, className = "" }: AbsenceIndicatorP
           <TooltipTrigger asChild>
             <Badge 
               className={`${getAbsenceColor(absence.absence_type)} cursor-pointer flex items-center gap-1 text-xs px-2 py-1`}
+              onClick={() => onAbsenceClick?.(absence)}
             >
               {getAbsenceIcon(absence.absence_type)}
               <span className="hidden sm:inline">{getAbsenceLabel(absence.absence_type)}</span>
