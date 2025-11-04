@@ -1,11 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { toZonedTime } from 'date-fns-tz';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
 import { useAuth } from '@/contexts/AuthContext';
-import { applyEntryTolerance, shouldApplyEntryTolerance } from '@/utils/entryToleranceUtils';
-
-const TZ = 'Europe/Rome';
+import { 
+  applyEntryToleranceToTimesheet, 
+  determineAffectedDays, 
+  calculateLunchBreakMinutes,
+  calculateOrdinaryAndOvertime,
+  hasValidSegmentDuration,
+  getEffectiveTimezone
+} from '@/utils/timesheetProcessing';
 
 export interface BusinessTripData {
   employee_id: string;
@@ -172,6 +176,9 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
 
       const defaultSaturdayRate = companySettingsForEmployee?.saturday_hourly_rate || 10;
       const defaultMealVoucherAmount = companySettingsForEmployee?.meal_voucher_amount || 8.0;
+      
+      // Get effective timezone (hierarchy: company settings -> default)
+      const timezone = getEffectiveTimezone(companySettingsForEmployee);
 
       // Import session splitting utility
       const { sessionsForDay } = await import('@/utils/timeSegments');
@@ -182,110 +189,18 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         const effectiveSaturdayHandling = temporalSettings?.saturday_handling || companySettingsForEmployee?.saturday_handling || 'straordinario';
         const effectiveSaturdayRate = temporalSettings?.saturday_hourly_rate || defaultSaturdayRate;
 
-        // ✅ Apply entry tolerance BEFORE calculating hours
-        let processedTimesheet = { ...ts };
-        const toleranceConfig = shouldApplyEntryTolerance(temporalSettings, companySettingsForEmployee);
-        
-        // Check if we have sessions (new format) or legacy format
-        if (processedTimesheet.timesheet_sessions && processedTimesheet.timesheet_sessions.length > 0) {
-          // Apply tolerance to the first session's start time
-          if (toleranceConfig.enabled && toleranceConfig.standardTime && toleranceConfig.tolerance !== undefined) {
-            const sortedSessions = [...processedTimesheet.timesheet_sessions].sort((a, b) => 
-              (a.session_order || 0) - (b.session_order || 0)
-            );
-            
-            if (sortedSessions.length > 0 && sortedSessions[0].start_time) {
-              const adjustedStartTime = applyEntryTolerance(
-                new Date(sortedSessions[0].start_time),
-                toleranceConfig.standardTime,
-                toleranceConfig.tolerance
-              );
-              // Create a new sessions array with the adjusted first session
-              processedTimesheet.timesheet_sessions = sortedSessions.map((session, idx) => 
-                idx === 0 
-                  ? { ...session, start_time: adjustedStartTime.toISOString() }
-                  : session
-              );
-            }
-          }
-        } else if (processedTimesheet.start_time) {
-          // Legacy format - apply tolerance to main timesheet start_time
-          if (toleranceConfig.enabled && toleranceConfig.standardTime && toleranceConfig.tolerance !== undefined) {
-            const adjustedStartTime = applyEntryTolerance(
-              new Date(processedTimesheet.start_time),
-              toleranceConfig.standardTime,
-              toleranceConfig.tolerance
-            );
-            processedTimesheet.start_time = adjustedStartTime.toISOString();
-          }
-        }
+        // Apply entry tolerance BEFORE calculating hours (hierarchy: day -> employee -> company -> defaults)
+        const processedTimesheet = applyEntryToleranceToTimesheet(ts, temporalSettings, companySettingsForEmployee);
 
         // Determine which days this timesheet affects
-        const affectedDays = new Set<string>();
-        
-        // Check if we have sessions (new format) or legacy format
-        if (processedTimesheet.timesheet_sessions && processedTimesheet.timesheet_sessions.length > 0) {
-          // New format with sessions
-          for (const session of processedTimesheet.timesheet_sessions) {
-            if (session.start_time && session.end_time) {
-              // Convert UTC to local timezone to determine which local days are affected
-              const sessionStart = toZonedTime(new Date(session.start_time), TZ);
-              const sessionEnd = toZonedTime(new Date(session.end_time), TZ);
-              
-              // Extract local date using local methods (NOT .toISOString() which uses UTC)
-              let currentDate = new Date(sessionStart);
-              currentDate.setHours(0, 0, 0, 0);
-              const endDate = new Date(sessionEnd);
-              endDate.setHours(0, 0, 0, 0);
-              
-              while (currentDate <= endDate) {
-                const dayISO = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
-                if (dayISO >= `${year}-${month}-01` && dayISO <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
-                  affectedDays.add(dayISO);
-                }
-                currentDate.setDate(currentDate.getDate() + 1);
-              }
-            }
-          }
-        } else if (processedTimesheet.start_time && processedTimesheet.end_time) {
-          // Legacy format with ZONED dates (with tolerance applied)
-          const startDate = toZonedTime(new Date(processedTimesheet.start_time), TZ);
-          const endDate = toZonedTime(new Date(processedTimesheet.end_time), TZ);
-          
-          let currentDate = new Date(startDate);
-          currentDate.setHours(0, 0, 0, 0);
-          const endDateNormalized = new Date(endDate);
-          endDateNormalized.setHours(0, 0, 0, 0);
-          
-          while (currentDate <= endDateNormalized) {
-            const dayISO = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
-            if (dayISO >= `${year}-${month}-01` && dayISO <= `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`) {
-              affectedDays.add(dayISO);
-            }
-            currentDate.setDate(currentDate.getDate() + 1);
-          }
-        }
-        
-        // Fallback: if no days were added (sessions without times), use timesheet.date
-        if (affectedDays.size === 0) {
-          affectedDays.add(processedTimesheet.date);
-        }
+        const affectedDays = determineAffectedDays(processedTimesheet, year, month, timezone);
 
         // Process each affected day (use processedTimesheet with tolerance applied)
         for (const dayISO of affectedDays) {
           const segments = sessionsForDay(processedTimesheet, dayISO);
-          // Skip if no valid segments or if all segments have 0 duration
-          if (segments.length === 0) continue;
           
-          const hasValidDuration = segments.some(seg => {
-            const start = new Date(seg.startUtc);
-            const end = new Date(seg.endUtc);
-            return (end.getTime() - start.getTime()) > 0;
-          });
-          if (!hasValidDuration) {
-            console.warn(`⚠️ Skipping day ${dayISO} for ${profile.first_name} - all sessions have 0 duration`);
-            continue;
-          }
+          // Skip if no valid segments or if all segments have 0 duration
+          if (!hasValidSegmentDuration(segments)) continue;
 
           const date = new Date(`${dayISO}T00:00:00`);
           const dayKey = String(date.getDate()).padStart(2, '0');
@@ -299,31 +214,9 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
             dayHours += (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
           }
 
-          // ✅ Subtract lunch break if applicable (regardless of number of sessions)
-          // Admin can manually adjust if the lunch break was already accounted for in the gap
-          if (processedTimesheet.lunch_duration_minutes && processedTimesheet.lunch_duration_minutes > 0) {
-            dayHours -= processedTimesheet.lunch_duration_minutes / 60;
-          } else if (processedTimesheet.lunch_start_time && processedTimesheet.lunch_end_time) {
-            const lunchStart = new Date(processedTimesheet.lunch_start_time);
-            const lunchEnd = new Date(processedTimesheet.lunch_end_time);
-            if (!isNaN(lunchStart.getTime()) && !isNaN(lunchEnd.getTime())) {
-              dayHours -= (lunchEnd.getTime() - lunchStart.getTime()) / (1000 * 60 * 60);
-            }
-          } else {
-            // Apply default lunch break from settings only if no explicit lunch break
-            if (!processedTimesheet.lunch_duration_minutes && !processedTimesheet.lunch_start_time) {
-              const minHoursForLunch = companySettingsForEmployee?.lunch_break_min_hours || 6;
-              if (dayHours > minHoursForLunch) {
-                const lunchBreakType = temporalSettings?.lunch_break_type || companySettingsForEmployee?.lunch_break_type || '60_minuti';
-                if (lunchBreakType !== '0_minuti' && lunchBreakType !== 'libera') {
-                  const lunchMinutes = parseInt(lunchBreakType.split('_')[0]) || 60;
-                  dayHours -= lunchMinutes / 60;
-                }
-              }
-            }
-          }
-
-          dayHours = Math.max(0, dayHours);
+          // Subtract lunch break (hierarchy: explicit lunch -> manual lunch -> default lunch)
+          const lunchMinutes = calculateLunchBreakMinutes(processedTimesheet, dayHours, temporalSettings, companySettingsForEmployee);
+          dayHours = Math.max(0, dayHours - (lunchMinutes / 60));
 
           if (isSaturday && effectiveSaturdayHandling === 'trasferta') {
             // Saturday as business trip
@@ -331,8 +224,7 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
             saturdayTrips.amount += dayHours * effectiveSaturdayRate;
             saturdayTrips.daily_data[dayKey] += dayHours;
           } else {
-            // ✅ Always recalculate ordinary and overtime based on dayHours vs contractualHours
-            // This ensures lunch breaks are properly accounted for
+            // Calculate ordinary and overtime (hierarchy: employee settings -> company settings -> defaults)
             const dayOfWeek = date.getDay();
             const dayNames = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
             const dayKey_it = dayNames[dayOfWeek];
@@ -340,9 +232,7 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
                                      companySettingsForEmployee?.standard_weekly_hours?.[dayKey_it] ?? 
                                      8) as number;
             
-            // Recalculate ordinary and overtime based on segments
-            const ordinaryForDay = Math.min(dayHours, contractualHours);
-            const overtimeForDay = Math.max(0, dayHours - contractualHours);
+            const { ordinary: ordinaryForDay, overtime: overtimeForDay } = calculateOrdinaryAndOvertime(dayHours, contractualHours);
             
             dailyData[dayKey].ordinary += ordinaryForDay;
             dailyData[dayKey].overtime += overtimeForDay;
