@@ -70,11 +70,15 @@ export function MassAbsenceInsertDialog({
     notes: '',
     exclude_weekends: true,
     exclude_saturdays: false,
+    exclude_holidays: true,
+    exclude_non_working_days: true,
   });
 
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const [customHours, setCustomHours] = useState<Map<string, number>>(new Map());
   const [showConflicts, setShowConflicts] = useState(true);
+  const [companyHolidays, setCompanyHolidays] = useState<Set<string>>(new Set());
+  const [employeeSettings, setEmployeeSettings] = useState<Map<string, any>>(new Map());
 
   useEffect(() => {
     if (open) {
@@ -113,6 +117,19 @@ export function MassAbsenceInsertDialog({
 
       if (employeesError) throw employeesError;
       setEmployees(employeesData || []);
+      
+      // Carica i festivi aziendali
+      if (employeesData && employeesData.length > 0) {
+        const companyId = employeesData[0].company_id;
+        const { data: holidaysData, error: holidaysError } = await supabase
+          .from('company_holidays')
+          .select('date')
+          .eq('company_id', companyId);
+        
+        if (!holidaysError && holidaysData) {
+          setCompanyHolidays(new Set(holidaysData.map(h => h.date)));
+        }
+      }
     } catch (error) {
       console.error('Error loading employees:', error);
       toast({
@@ -147,17 +164,50 @@ export function MassAbsenceInsertDialog({
       // Escludi domenica (0) se exclude_weekends è true
       if (formData.exclude_weekends && dayOfWeek === 0) return false;
       
+      // Escludi festivi aziendali se exclude_holidays è true
+      if (formData.exclude_holidays) {
+        const dateStr = format(day, 'yyyy-MM-dd');
+        if (companyHolidays.has(dateStr)) return false;
+      }
+      
       return true;
     });
-  }, [formData.date_from, formData.date_to, formData.exclude_weekends, formData.exclude_saturdays]);
+  }, [formData.date_from, formData.date_to, formData.exclude_weekends, formData.exclude_saturdays, formData.exclude_holidays, companyHolidays]);
 
   const [conflictsData, setConflictsData] = useState<Map<string, { date: string; absence_type: string }[]>>(new Map());
 
   useEffect(() => {
     if (step === 'preview' && selectedEmployees.size > 0) {
       loadConflicts();
+      loadEmployeeSettings();
     }
   }, [step, selectedEmployees, workingDays]);
+  
+  const loadEmployeeSettings = async () => {
+    try {
+      const employeeIds = Array.from(selectedEmployees);
+      
+      const { data: settingsData, error } = await supabase
+        .from('employee_settings')
+        .select('user_id, standard_weekly_hours, valid_from, valid_to')
+        .in('user_id', employeeIds)
+        .order('valid_from', { ascending: false });
+      
+      if (error) throw error;
+      
+      // Crea una mappa di settings per dipendente
+      const settingsMap = new Map<string, any[]>();
+      settingsData?.forEach(setting => {
+        const existing = settingsMap.get(setting.user_id) || [];
+        existing.push(setting);
+        settingsMap.set(setting.user_id, existing);
+      });
+      
+      setEmployeeSettings(settingsMap);
+    } catch (error) {
+      console.error('Error loading employee settings:', error);
+    }
+  };
 
   const loadConflicts = async () => {
     try {
@@ -185,6 +235,41 @@ export function MassAbsenceInsertDialog({
     }
   };
 
+  // Funzione helper per verificare se un dipendente lavora in un dato giorno
+  const isWorkingDayForEmployee = (userId: string, date: Date): boolean => {
+    if (!formData.exclude_non_working_days) return true;
+    
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const settings = employeeSettings.get(userId);
+    
+    if (!settings || settings.length === 0) {
+      // Nessuna configurazione: assume giorni lavorativi standard (lun-ven)
+      const dayOfWeek = getDay(date);
+      return dayOfWeek >= 1 && dayOfWeek <= 5; // lun-ven
+    }
+    
+    // Trova la configurazione valida per questa data
+    const validSetting = settings.find(s => {
+      const validFrom = s.valid_from ? new Date(s.valid_from) : new Date('1900-01-01');
+      const validTo = s.valid_to ? new Date(s.valid_to) : new Date('2100-12-31');
+      return date >= validFrom && date <= validTo;
+    });
+    
+    if (!validSetting || !validSetting.standard_weekly_hours) {
+      // Nessuna configurazione valida: assume giorni standard
+      const dayOfWeek = getDay(date);
+      return dayOfWeek >= 1 && dayOfWeek <= 5;
+    }
+    
+    // Mappa giorno settimana a chiave italiana
+    const dayNames = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
+    const dayOfWeek = getDay(date);
+    const dayKey = dayNames[dayOfWeek];
+    
+    const hoursForDay = validSetting.standard_weekly_hours[dayKey];
+    return hoursForDay && hoursForDay > 0;
+  };
+
   const employeeAbsenceData: EmployeeAbsenceData[] = useMemo(() => {
     return Array.from(selectedEmployees).map(userId => {
       const employee = employees.find(e => e.user_id === userId);
@@ -193,7 +278,14 @@ export function MassAbsenceInsertDialog({
       const hours = customHours.get(userId) || formData.default_hours;
       const conflicts = conflictsData.get(userId) || [];
       const conflictDates = new Set(conflicts.map(c => c.date));
-      const daysToInsert = workingDays.filter(day => !conflictDates.has(format(day, 'yyyy-MM-dd')));
+      
+      // Filtra i giorni lavorativi specifici per questo dipendente
+      const daysToInsert = workingDays.filter(day => {
+        const dateStr = format(day, 'yyyy-MM-dd');
+        if (conflictDates.has(dateStr)) return false;
+        return isWorkingDayForEmployee(userId, day);
+      });
+      
       const totalHours = daysToInsert.length * hours;
 
       return {
@@ -205,7 +297,7 @@ export function MassAbsenceInsertDialog({
         totalHours,
       };
     }).filter(Boolean) as EmployeeAbsenceData[];
-  }, [selectedEmployees, employees, customHours, formData.default_hours, workingDays, conflictsData]);
+  }, [selectedEmployees, employees, customHours, formData.default_hours, workingDays, conflictsData, employeeSettings, formData.exclude_non_working_days]);
 
   const totalRecordsToInsert = useMemo(() => {
     return employeeAbsenceData.reduce((sum, data) => sum + data.daysToInsert.length, 0);
@@ -487,10 +579,39 @@ export function MassAbsenceInsertDialog({
                 Escludi sabati
               </Label>
             </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="exclude-holidays"
+                checked={formData.exclude_holidays}
+                onCheckedChange={(checked) => 
+                  setFormData(prev => ({ ...prev, exclude_holidays: checked as boolean }))
+                }
+              />
+              <Label htmlFor="exclude-holidays" className="cursor-pointer">
+                Escludi festivi aziendali ({companyHolidays.size})
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="exclude-non-working-days"
+                checked={formData.exclude_non_working_days}
+                onCheckedChange={(checked) => 
+                  setFormData(prev => ({ ...prev, exclude_non_working_days: checked as boolean }))
+                }
+              />
+              <Label htmlFor="exclude-non-working-days" className="cursor-pointer">
+                Escludi giorni non lavorativi per contratto
+              </Label>
+            </div>
           </div>
 
-          <div className="p-3 bg-muted rounded-lg text-sm">
-            <strong>Giorni lavorativi selezionati:</strong> {workingDays.length}
+          <div className="p-3 bg-muted rounded-lg text-sm space-y-1">
+            <div><strong>Giorni nel periodo:</strong> {eachDayOfInterval({ start: formData.date_from, end: formData.date_to }).length}</div>
+            <div><strong>Giorni lavorativi (base):</strong> {workingDays.length}</div>
+            <div className="text-xs text-muted-foreground">
+              {formData.exclude_holidays && `• Esclusi ${companyHolidays.size} festivi aziendali`}
+              {formData.exclude_non_working_days && ` • Verranno esclusi i giorni non lavorativi per contratto di ogni dipendente`}
+            </div>
           </div>
         </div>
 
