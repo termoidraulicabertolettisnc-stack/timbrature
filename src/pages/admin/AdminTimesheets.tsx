@@ -1371,7 +1371,7 @@ export default function AdminTimesheets() {
           employee={dayEditData.employee}
           timesheet={dayEditData.timesheet}
           sessions={dayEditData.sessions}
-          employeeSettings={employeeSettings}
+          employeeSettings={employeeSettings[dayEditData.employee.user_id]}
           companySettings={companySettings}
           onSuccess={() => {
             invalidateTimesheets();

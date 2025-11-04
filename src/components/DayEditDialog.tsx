@@ -428,6 +428,16 @@ export function DayEditDialog({
     let suggestedHours = 8; // Default
     
     if (type === 'absence') {
+      console.log('🔍 CALCOLO ORE ASSENZA - Inizio', {
+        date,
+        employeeSettings,
+        companySettings,
+        hasEmployeeSettings: !!employeeSettings,
+        hasCompanySettings: !!companySettings,
+        employeeWeeklyHours: employeeSettings?.standard_weekly_hours,
+        companyWeeklyHours: companySettings?.standard_weekly_hours
+      });
+      
       // Calcola ore contrattualizzate per questo giorno
       const contractedHours = getContractedHoursForDay(date, employeeSettings, companySettings);
       
@@ -448,11 +458,12 @@ export function DayEditDialog({
       // Arrotonda a 0.5 ore per praticità
       suggestedHours = Math.round(missingHours * 2) / 2;
       
-      console.log('🧮 Auto-calcolo ore assenza:', {
+      console.log('🔍 CALCOLO ORE ASSENZA - Risultato', {
         contractedHours,
         workedHours,
         missingHours,
-        suggestedHours
+        suggestedHours,
+        isNaN: isNaN(suggestedHours)
       });
     }
     
@@ -1158,18 +1169,26 @@ export function DayEditDialog({
                                   step="0.5"
                                   value={session.hours ?? ''}
                                   onChange={(e) => updateSession(index, 'hours', parseFloat(e.target.value) || 0)}
-                                  placeholder={session.hours && session.hours > 0 ? `${session.hours.toFixed(1)} ore (suggerite)` : "Inserisci ore"}
+                                  placeholder={
+                                    session.hours && !isNaN(session.hours) && session.hours > 0 
+                                      ? `${session.hours.toFixed(1)} ore (suggerite)` 
+                                      : "Inserisci ore"
+                                  }
                                   className="pr-16"
                                 />
-                                {session.hours && session.hours > 0 && (
+                                {session.hours && !isNaN(session.hours) && session.hours > 0 && (
                                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-primary">
                                     ✓ Auto
                                   </span>
                                 )}
                               </div>
-                              {session.hours && session.hours > 0 ? (
+                              {session.hours && !isNaN(session.hours) && session.hours > 0 ? (
                                 <p className="text-xs text-primary font-medium">
                                   ✓ {session.hours.toFixed(1)} ore calcolate automaticamente (ore mancanti rispetto al contratto)
+                                </p>
+                              ) : isNaN(session.hours as number) ? (
+                                <p className="text-xs text-destructive">
+                                  ⚠️ Errore nel calcolo delle ore - verificare le impostazioni del contratto
                                 </p>
                               ) : (
                                 <p className="text-xs text-muted-foreground">

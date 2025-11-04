@@ -30,15 +30,36 @@ export function getContractedHoursForDay(
   const dayOfWeek = dateObj.getDay();
   const dayKey = DAY_KEYS[dayOfWeek];
   
+  console.log('🔍 getContractedHoursForDay', {
+    date,
+    dayOfWeek,
+    dayKey,
+    employeeSettings,
+    companySettings,
+    employeeWeeklyHours: employeeSettings?.standard_weekly_hours,
+    companyWeeklyHours: companySettings?.standard_weekly_hours
+  });
+  
   // Priorità: employee_settings > company_settings
   const weeklyHours = employeeSettings?.standard_weekly_hours || companySettings?.standard_weekly_hours;
   
   if (!weeklyHours || typeof weeklyHours !== 'object') {
+    console.warn('⚠️ getContractedHoursForDay - No valid weekly hours found, using default');
     // Default: 8h per giorni lavorativi (lun-ven), 0 per sabato/domenica
-    return dayOfWeek >= 1 && dayOfWeek <= 5 ? 8 : 0;
+    const defaultHours = dayOfWeek >= 1 && dayOfWeek <= 5 ? 8 : 0;
+    return defaultHours;
   }
   
-  return weeklyHours[dayKey] || 0;
+  const contractedHours = Number(weeklyHours[dayKey]) || 0;
+  
+  console.log('✅ getContractedHoursForDay - Result', {
+    dayKey,
+    weeklyHoursValue: weeklyHours[dayKey],
+    contractedHours,
+    isNaN: isNaN(contractedHours)
+  });
+  
+  return contractedHours;
 }
 
 /**
