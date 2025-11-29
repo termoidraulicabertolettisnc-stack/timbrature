@@ -86,16 +86,59 @@ export default function AdminCompanies() {
           description: "Azienda aggiornata con successo",
         });
       } else {
-        const { error } = await supabase
+        // Crea la nuova azienda
+        const { data: newCompany, error } = await supabase
           .from('companies')
-          .insert([submitData]);
+          .insert([submitData])
+          .select()
+          .single();
 
         if (error) throw error;
 
-        toast({
-          title: "Successo",
-          description: "Azienda creata con successo",
-        });
+        // Crea automaticamente le configurazioni di default per la nuova azienda
+        const defaultSettings = {
+          company_id: newCompany.id,
+          standard_weekly_hours: { lun: 8, mar: 8, mer: 8, gio: 8, ven: 8, sab: 0, dom: 0 },
+          lunch_break_type: '60_minuti' as const,
+          lunch_break_min_hours: 6.0,
+          saturday_handling: 'trasferta' as const,
+          meal_voucher_policy: 'oltre_6_ore' as const,
+          night_shift_start: '20:00:00',
+          night_shift_end: '05:00:00',
+          overtime_monthly_compensation: false,
+          business_trip_rate_with_meal: 30.98,
+          business_trip_rate_without_meal: 46.48,
+          saturday_hourly_rate: 10.00,
+          meal_voucher_amount: 8.00,
+          daily_allowance_amount: 10.00,
+          daily_allowance_policy: 'disabled' as const,
+          daily_allowance_min_hours: 6,
+          meal_voucher_min_hours: 6,
+          enable_entry_tolerance: false,
+          standard_start_time: '08:00:00',
+          entry_tolerance_minutes: 10,
+          enable_overtime_conversion: false,
+          default_overtime_conversion_rate: 12.00,
+        };
+
+        const { error: settingsError } = await supabase
+          .from('company_settings')
+          .insert([defaultSettings]);
+
+        if (settingsError) {
+          console.error('Error creating default settings:', settingsError);
+          // Non blocchiamo la creazione dell'azienda, ma avvisiamo l'utente
+          toast({
+            title: "Attenzione",
+            description: "Azienda creata, ma le configurazioni di default non sono state create. Vai nelle impostazioni per configurarle.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Successo",
+            description: "Azienda e configurazioni create con successo",
+          });
+        }
       }
 
       setDialogOpen(false);

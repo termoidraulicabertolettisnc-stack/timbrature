@@ -162,7 +162,51 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
         .maybeSingle();
 
       if (companyError) throw companyError;
-      setCompanySettings(companyData);
+      
+      // Se l'azienda non ha configurazioni, le creiamo automaticamente
+      if (!companyData) {
+        console.log('Company settings not found, creating defaults for:', selectedCompanyId);
+        const defaultSettings = {
+          company_id: selectedCompanyId,
+          standard_weekly_hours: { lun: 8, mar: 8, mer: 8, gio: 8, ven: 8, sab: 0, dom: 0 },
+          lunch_break_type: '60_minuti' as const,
+          lunch_break_min_hours: 6.0,
+          saturday_handling: 'trasferta' as const,
+          meal_voucher_policy: 'oltre_6_ore' as const,
+          night_shift_start: '20:00:00',
+          night_shift_end: '05:00:00',
+          overtime_monthly_compensation: false,
+          business_trip_rate_with_meal: 30.98,
+          business_trip_rate_without_meal: 46.48,
+          saturday_hourly_rate: 10.00,
+          meal_voucher_amount: 8.00,
+          daily_allowance_amount: 10.00,
+          daily_allowance_policy: 'disabled' as const,
+          daily_allowance_min_hours: 6,
+          meal_voucher_min_hours: 6,
+          enable_entry_tolerance: false,
+          standard_start_time: '08:00:00',
+          entry_tolerance_minutes: 10,
+          enable_overtime_conversion: false,
+          default_overtime_conversion_rate: 12.00,
+        };
+
+        const { data: newCompanySettings, error: createError } = await supabase
+          .from('company_settings')
+          .insert([defaultSettings])
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Error creating company settings:', createError);
+          toast.error('Impossibile creare le configurazioni per questa azienda');
+        } else {
+          setCompanySettings(newCompanySettings);
+          toast.success('Configurazioni di default create per questa azienda');
+        }
+      } else {
+        setCompanySettings(companyData);
+      }
 
       // Load employee specific settings (only active record)
       const { data: employeeData, error: employeeError } = await supabase
