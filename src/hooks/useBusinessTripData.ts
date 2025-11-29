@@ -150,6 +150,8 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
       const hasMonthlyOvertimeCompensation = employeeSetting?.overtime_monthly_compensation === true;
 
       const dailyData: BusinessTripData['daily_data'] = {};
+      // Track contracted hours per day for deficit calculation
+      const dailyContractedHours: { [day: string]: number } = {};
       let totalOrdinary = 0;
       let totalOvertime = 0;
       let absenceTotals: Record<string, number> = {};
@@ -181,6 +183,7 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
       for (let day = 1; day <= daysInMonth; day++) {
         const dayKey = String(day).padStart(2, '0');
         dailyData[dayKey] = { ordinary: 0, overtime: 0, absence: null };
+        dailyContractedHours[dayKey] = 0;
         saturdayTrips.daily_data[dayKey] = 0;
         dailyAllowances.daily_data[dayKey] = false;
         mealVoucherConversions.daily_data[dayKey] = false;
@@ -251,6 +254,8 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
             
             dailyData[dayKey].ordinary += ordinaryForDay;
             dailyData[dayKey].overtime += overtimeForDay;
+            // Track contracted hours for this day (for deficit calculation)
+            dailyContractedHours[dayKey] = contractualHours;
             totalOrdinary += ordinaryForDay;
             totalOvertime += overtimeForDay;
           }
@@ -320,19 +325,38 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
 
       // COMPENSAZIONE STRAORDINARI MENSILE
       // Per dipendenti con overtime_monthly_compensation = true:
-      // Gli straordinari vengono compensati automaticamente con le assenze (escluse malattie/infortuni)
+      // Gli straordinari vengono compensati con il DEFICIT di ore (ore contrattuali - ore ordinarie lavorate)
+      // PLUS le assenze compensabili (escluse malattie/infortuni)
       let finalOvertimeTotal = totalOvertime;
-      if (hasMonthlyOvertimeCompensation && compensableAbsenceHours > 0 && totalOvertime > 0) {
-        const hoursToCompensate = Math.min(compensableAbsenceHours, totalOvertime);
-        finalOvertimeTotal = Math.max(0, totalOvertime - hoursToCompensate);
-        
-        console.log(`🔄 [BusinessTripData] Compensazione mensile per ${profile.first_name} ${profile.last_name}:`, {
-          hasMonthlyOvertimeCompensation,
-          totalOvertime,
-          compensableAbsenceHours,
-          hoursToCompensate,
-          finalOvertime: finalOvertimeTotal
+      if (hasMonthlyOvertimeCompensation && totalOvertime > 0) {
+        // Calculate monthly deficit: sum of (contracted - ordinary) for each worked day where ordinary < contracted
+        let monthlyDeficit = 0;
+        Object.keys(dailyData).forEach(dayKey => {
+          const contracted = dailyContractedHours[dayKey] || 0;
+          const ordinary = dailyData[dayKey].ordinary || 0;
+          // Only count deficit if the employee worked that day (ordinary > 0) and worked less than contracted
+          if (ordinary > 0 && ordinary < contracted) {
+            monthlyDeficit += (contracted - ordinary);
+          }
         });
+        
+        // Total compensable hours = deficit + compensable absences (excluding M and I)
+        const totalCompensableHours = monthlyDeficit + compensableAbsenceHours;
+        
+        if (totalCompensableHours > 0) {
+          const hoursToCompensate = Math.min(totalCompensableHours, totalOvertime);
+          finalOvertimeTotal = Math.max(0, totalOvertime - hoursToCompensate);
+          
+          console.log(`🔄 [BusinessTripData] Compensazione mensile per ${profile.first_name} ${profile.last_name}:`, {
+            hasMonthlyOvertimeCompensation,
+            totalOvertime,
+            monthlyDeficit,
+            compensableAbsenceHours,
+            totalCompensableHours,
+            hoursToCompensate,
+            finalOvertime: finalOvertimeTotal
+          });
+        }
       }
 
       // Calculate overtime conversions (monthly) - for economic compensation (manual conversions)
