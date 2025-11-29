@@ -278,13 +278,44 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
       finalTotalOrdinary = compensationResult.totalOrdinary;
       finalOvertimeTotal = compensationResult.totalOvertime;
       
+      // Remove absences from fully compensated days
+      // When a day's deficit is fully covered by overtime, the absence should not be shown/counted
+      const compensableAbsenceTypes = ['F', 'FS', 'PR', 'PNR', 'A']; // Exclude M (malattia) and I (infortunio)
+      
+      for (const dayKey of compensationResult.fullyCompensatedDays) {
+        const absence = finalDailyData[dayKey]?.absence;
+        if (absence && compensableAbsenceTypes.includes(absence)) {
+          // Find the corresponding absence to get its hours
+          const absenceDate = `${year}-${month}-${dayKey}`;
+          const matchingAbsence = employeeAbsences.find(
+            abs => abs.date === absenceDate && abs.absence_type === absence
+          );
+          const absenceHours = matchingAbsence?.hours || 8;
+          
+          // Remove from totals
+          if (absenceTotals[absence]) {
+            absenceTotals[absence] -= absenceHours;
+            if (absenceTotals[absence] <= 0) {
+              delete absenceTotals[absence];
+            }
+          }
+          
+          // Clear the absence from the day
+          finalDailyData[dayKey].absence = null;
+          
+          console.log(`🔄 [PayrollData] Rimossa assenza ${absence} dal giorno ${dayKey} (completamente compensato)`);
+        }
+      }
+      
       console.log(`🔄 [PayrollData] Compensazione mensile per ${profile.first_name} ${profile.last_name}:`, {
         hasMonthlyOvertimeCompensation,
         originalOrdinary: totalOrdinary,
         originalOvertime: totalOvertime,
         ...compensationResult.compensationDetails,
+        fullyCompensatedDays: compensationResult.fullyCompensatedDays,
         finalOrdinary: finalTotalOrdinary,
-        finalOvertime: finalOvertimeTotal
+        finalOvertime: finalOvertimeTotal,
+        absenceTotalsAfter: absenceTotals
       });
     }
     
