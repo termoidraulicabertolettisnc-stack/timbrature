@@ -36,9 +36,11 @@ export const useWeeklyRealtimeHours = (timesheets: TimesheetWithProfile[]): Week
           
           totalHours += diffHours;
           
-          // Calcolo approssimativo per straordinari (se > 8 ore)
-          if (diffHours > 8) {
-            overtimeHours += (diffHours - 8);
+          // Calcolo approssimativo per straordinari (basato su 8h default per real-time)
+          // TODO: Per calcolo più preciso, passare employeeSettings/companySettings al hook
+          const defaultContractedHours = 8;
+          if (diffHours > defaultContractedHours) {
+            overtimeHours += (diffHours - defaultContractedHours);
           }
           
           // Calcolo per ore notturne (se inizia prima delle 6 o dopo le 22) - usando UTC+1 (Europa/Roma)
