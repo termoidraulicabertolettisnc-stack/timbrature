@@ -76,16 +76,23 @@ export default function AdminSettings() {
     enable_overtime_conversion: null,
     default_overtime_conversion_rate: null,
   });
+  const [companies, setCompanies] = useState<Array<{id: string, name: string}>>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
-    loadSettings();
+    loadCompanies();
   }, []);
 
-  const loadSettings = async () => {
-    setLoading(true);
+  useEffect(() => {
+    if (selectedCompanyId) {
+      loadSettings(selectedCompanyId);
+    }
+  }, [selectedCompanyId]);
+
+  const loadCompanies = async () => {
     try {
       // Get current user's company
       const { data: user } = await supabase.auth.getUser();
@@ -99,11 +106,36 @@ export default function AdminSettings() {
 
       if (profileError) throw profileError;
 
-      // Load company settings
+      // Load all companies
+      const { data: companiesData, error: companiesError } = await supabase
+        .from('companies')
+        .select('id, name')
+        .order('name');
+
+      if (companiesError) throw companiesError;
+      setCompanies(companiesData || []);
+
+      // Set default selected company to user's company
+      if (profile.company_id) {
+        setSelectedCompanyId(profile.company_id);
+      } else if (companiesData && companiesData.length > 0) {
+        setSelectedCompanyId(companiesData[0].id);
+      }
+    } catch (error) {
+      console.error('Error loading companies:', error);
+      toast.error('Errore nel caricamento delle aziende');
+      setLoading(false);
+    }
+  };
+
+  const loadSettings = async (companyId: string) => {
+    setLoading(true);
+    try {
+      // Load company settings for selected company
       const { data, error } = await supabase
         .from('company_settings')
         .select('*')
-        .eq('company_id', profile.company_id)
+        .eq('company_id', companyId)
         .maybeSingle();
 
       if (error) throw error;
@@ -112,9 +144,10 @@ export default function AdminSettings() {
         setSettings(data as CompanySettings);
       } else {
         // Create default settings if none exist
-        await createDefaultSettings(profile.company_id);
+        await createDefaultSettings(companyId);
       }
-
+      
+      setHasChanges(false);
     } catch (error) {
       console.error('Error loading settings:', error);
       toast.error('Errore nel caricamento delle configurazioni');
@@ -253,6 +286,8 @@ export default function AdminSettings() {
     );
   }
 
+  const selectedCompanyName = companies.find(c => c.id === selectedCompanyId)?.name || '';
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -271,6 +306,49 @@ export default function AdminSettings() {
           {saving ? 'Salvando...' : 'Salva Modifiche'}
         </Button>
       </div>
+
+      {/* Company Selector */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="h-5 w-5" />
+            Seleziona Azienda
+          </CardTitle>
+          <CardDescription>
+            Scegli l'azienda di cui vuoi gestire le configurazioni
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Select
+            value={selectedCompanyId}
+            onValueChange={(value) => {
+              if (hasChanges) {
+                if (confirm('Hai modifiche non salvate. Vuoi cambiare azienda e perdere le modifiche?')) {
+                  setSelectedCompanyId(value);
+                }
+              } else {
+                setSelectedCompanyId(value);
+              }
+            }}
+          >
+            <SelectTrigger className="w-full md:w-[400px]">
+              <SelectValue placeholder="Seleziona un'azienda" />
+            </SelectTrigger>
+            <SelectContent>
+              {companies.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectedCompanyName && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Stai configurando: <strong>{selectedCompanyName}</strong>
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {hasChanges && (
         <Alert>
