@@ -131,16 +131,32 @@ export function TimesheetImportDialog({
         dateNF: 'yyyy-mm-dd hh:mm:ss'
       });
       
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      // LEGGI TUTTI I FOGLI DEL WORKBOOK (ogni dipendente ha il suo foglio)
+      let allJsonData: any[] = [];
+      let globalRowIndex = 0;
       
-      if (jsonData.length === 0) {
+      for (const sheetName of workbook.SheetNames) {
+        const worksheet = workbook.Sheets[sheetName];
+        const sheetData = XLSX.utils.sheet_to_json(worksheet);
+        
+        // Aggiungi info sul foglio di origine per debugging
+        sheetData.forEach((row: any) => {
+          (row as any).__sheetName = sheetName;
+          (row as any).__globalRowIndex = ++globalRowIndex;
+        });
+        
+        allJsonData = [...allJsonData, ...sheetData];
+      }
+      
+      console.log(`📊 Letti ${workbook.SheetNames.length} fogli, ${allJsonData.length} righe totali`);
+      console.log(`📋 Fogli trovati: ${workbook.SheetNames.join(', ')}`);
+      
+      if (allJsonData.length === 0) {
         throw new Error('File vuoto');
       }
 
-      // MAPPATURA AUTOMATICA PER FILE BERTOLETTI
-      const mappedData = jsonData.map((row: any, index) => {
+      // MAPPATURA AUTOMATICA PER FILE BERTOLETTI (MULTI-FOGLIO)
+      const mappedData = allJsonData.map((row: any) => {
         // Estrai data e ore dal formato Bertoletti
         let date = '';
         let start_time = '';
@@ -189,9 +205,25 @@ export function TimesheetImportDialog({
           notes: row['Note'] || '',
           site_code: sede,
           project_code: row['Progetto'] || '',
-          source_row_index: index + 2
+          source_row_index: row.__globalRowIndex || 0
         };
       }).filter((row: ImportRow) => row.employee_code && row.date && row.start_time && row.end_time);
+      
+      // Log riepilogo per dipendente
+      const employeeCounts = mappedData.reduce((acc: Record<string, number>, row) => {
+        acc[row.employee_code] = (acc[row.employee_code] || 0) + 1;
+        return acc;
+      }, {});
+      const numEmployees = Object.keys(employeeCounts).length;
+      console.log(`👥 Dipendenti trovati: ${numEmployees}`);
+      Object.entries(employeeCounts).forEach(([code, count]) => {
+        console.log(`   - ${code}: ${count} sessioni`);
+      });
+      
+      toast({
+        title: `📊 Letti ${workbook.SheetNames.length} fogli`,
+        description: `Trovati ${numEmployees} dipendenti, ${mappedData.length} sessioni totali`,
+      });
 
       setMappedData(mappedData);
       
