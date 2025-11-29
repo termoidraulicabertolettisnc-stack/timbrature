@@ -22,6 +22,8 @@ export interface CompensationResult {
     totalCompensableHours: number;
     hoursCompensated: number;
   };
+  // Days where the deficit was fully compensated (ordinary >= contracted after compensation)
+  fullyCompensatedDays: string[];
 }
 
 /**
@@ -69,7 +71,8 @@ export function applyMonthlyOvertimeCompensation(
         compensableAbsenceHours,
         totalCompensableHours,
         hoursCompensated: 0
-      }
+      },
+      fullyCompensatedDays: []
     };
   }
 
@@ -124,6 +127,17 @@ export function applyMonthlyOvertimeCompensation(
   const finalTotalOrdinary = Object.values(result).reduce((sum, d) => sum + (d.ordinary || 0), 0);
   const finalTotalOvertime = Object.values(result).reduce((sum, d) => sum + (d.overtime || 0), 0);
 
+  // Identify fully compensated days (ordinary >= contracted after compensation)
+  const fullyCompensatedDays: string[] = [];
+  for (const { day } of deficitDays) {
+    const contracted = dailyContractedHours[day] || 0;
+    const ordinaryAfter = result[day].ordinary || 0;
+    // If ordinary hours now meet or exceed contracted hours, this day is fully compensated
+    if (ordinaryAfter >= contracted - 0.01) { // Small tolerance for floating point
+      fullyCompensatedDays.push(day);
+    }
+  }
+
   return {
     dailyData: result,
     totalOrdinary: finalTotalOrdinary,
@@ -133,6 +147,7 @@ export function applyMonthlyOvertimeCompensation(
       compensableAbsenceHours,
       totalCompensableHours,
       hoursCompensated: hoursToCompensate
-    }
+    },
+    fullyCompensatedDays
   };
 }
