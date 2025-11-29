@@ -112,6 +112,14 @@ export function applyMonthlyOvertimeCompensation(
     });
   }
 
+  // Apply minimum threshold: overtime below 0.1 should be set to 0
+  const OVERTIME_MIN_THRESHOLD = 0.1;
+  Object.keys(result).forEach(day => {
+    if (result[day].overtime > 0 && result[day].overtime < OVERTIME_MIN_THRESHOLD) {
+      result[day].overtime = 0;
+    }
+  });
+
   // Calculate final totals
   const finalTotalOrdinary = Object.values(result).reduce((sum, d) => sum + (d.ordinary || 0), 0);
   const finalTotalOvertime = Object.values(result).reduce((sum, d) => sum + (d.overtime || 0), 0);
