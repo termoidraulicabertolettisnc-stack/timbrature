@@ -67,22 +67,10 @@ export default function AdminEmployees() {
   const loadEmployees = async () => {
     setLoading(true);
     try {
-      // Get current user's company first
-      const { data: me, error: profileError } = await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
-        .single();
-
-      if (profileError || !me?.company_id) {
-        throw new Error('Impossibile determinare l\'azienda di appartenenza');
-      }
-
-      // Load only employees from the same company
+      // Admin vede tutti i dipendenti di tutte le aziende
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('company_id', me.company_id)
         .order('first_name');
 
       if (error) throw error;
