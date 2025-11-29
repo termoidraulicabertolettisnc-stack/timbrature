@@ -23,10 +23,16 @@ const BusinessTripsDashboard = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
 
   const { data, isLoading: loading } = useBusinessTripData(selectedMonth);
   const businessTripData = data?.data || [];
   const holidays = data?.holidays || [];
+  
+  // Filter employees based on selection
+  const filteredBusinessTripData = selectedEmployee === 'all' 
+    ? businessTripData 
+    : businessTripData.filter(emp => emp.employee_id === selectedEmployee);
 
   // Italian holidays (fallback for standard holidays)
   const getItalianHolidays = (year: number) => {
@@ -193,7 +199,7 @@ const BusinessTripsDashboard = () => {
       return candidateUniformity > currentUniformity ? candidate : current;
     };
 
-    return businessTripData.map(emp => {
+    return filteredBusinessTripData.map(emp => {
       // Totale R = TS + TI + CS + CB
       const TS_total = emp.saturday_trips.amount || 0;
       const TI_total = emp.daily_allowances.amount || 0;
@@ -420,6 +426,20 @@ const BusinessTripsDashboard = () => {
           <p className="text-muted-foreground">Panoramica separata per tipologia di trasferta</p>
         </div>
         <div className="flex items-center gap-4">
+          <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+            <SelectTrigger className="w-[200px]">
+              <Users className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Tutti i dipendenti" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tutti i dipendenti</SelectItem>
+              {businessTripData.map(emp => (
+                <SelectItem key={emp.employee_id} value={emp.employee_id}>
+                  {emp.employee_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Selezione mese" />
@@ -448,9 +468,9 @@ const BusinessTripsDashboard = () => {
       {/* Summary Cards - Per Employee Breakdown */}
       <div className="space-y-4">
         <h2 className="text-xl font-semibold">Riepilogo per Dipendente</h2>
-        <div className="grid grid-cols-1 gap-4">
-          {employeeBreakdowns.map(breakdown => (
-            <Card key={breakdown.employee_id} className="p-4">
+        <div className="grid grid-cols-1 gap-6">
+          {employeeBreakdowns.map((breakdown, index) => (
+            <Card key={breakdown.employee_id} className={`p-4 ${index > 0 ? 'border-t-4 border-primary/20' : ''}`}>
               <div className="flex justify-between items-start mb-4">
                 <h3 className="text-lg font-semibold">{breakdown.employee_name}</h3>
                 <div className="text-right">

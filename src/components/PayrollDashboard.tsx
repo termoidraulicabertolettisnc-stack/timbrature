@@ -22,8 +22,14 @@ export default function PayrollDashboard() {
   });
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportMode, setExportMode] = useState<'sheets' | 'files'>('sheets');
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
 
   const { data: payrollData = [], isLoading: loading } = usePayrollData(selectedMonth);
+  
+  // Filter employees based on selection
+  const filteredPayrollData = selectedEmployee === 'all' 
+    ? payrollData 
+    : payrollData.filter(emp => emp.employee_id === selectedEmployee);
 
   // Italian holidays for 2024 (you can expand this)
   const getItalianHolidays = (year: number) => {
@@ -293,6 +299,20 @@ export default function PayrollDashboard() {
             <span className="hidden sm:inline">Esporta Excel</span>
             <span className="sm:hidden">Excel</span>
           </Button>
+          <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+            <SelectTrigger className="w-40 sm:w-48">
+              <Users className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Tutti i dipendenti" />
+            </SelectTrigger>
+            <SelectContent className="z-50 bg-popover">
+              <SelectItem value="all">Tutti i dipendenti</SelectItem>
+              {payrollData.map(emp => (
+                <SelectItem key={emp.employee_id} value={emp.employee_id}>
+                  {emp.employee_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
             <SelectTrigger className="w-32 sm:w-40">
               <SelectValue />
@@ -398,8 +418,14 @@ export default function PayrollDashboard() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {payrollData.map((employee) => (
+                {filteredPayrollData.map((employee, employeeIndex) => (
                   <React.Fragment key={employee.employee_id}>
+                    {/* Separatore tra dipendenti */}
+                    {employeeIndex > 0 && (
+                      <TableRow className="border-t-4 border-primary/20">
+                        <TableCell colSpan={getDaysInMonth() + 3} className="h-1 p-0 bg-primary/5" />
+                      </TableRow>
+                    )}
                     {/* Riga Ore Ordinarie */}
                     <TableRow className="hover:bg-green-50/50">
                       <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
