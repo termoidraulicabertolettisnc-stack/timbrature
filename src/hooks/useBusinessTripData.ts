@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
 import { useAuth } from '@/contexts/AuthContext';
+import { applyMonthlyOvertimeCompensation } from '@/utils/monthlyOvertimeCompensation';
 import { 
   applyEntryToleranceToTimesheet, 
   determineAffectedDays, 
@@ -326,37 +327,30 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
       // COMPENSAZIONE STRAORDINARI MENSILE
       // Per dipendenti con overtime_monthly_compensation = true:
       // Gli straordinari vengono compensati con il DEFICIT di ore (ore contrattuali - ore ordinarie lavorate)
-      // PLUS le assenze compensabili (escluse malattie/infortuni)
+      // Le ore ordinarie in deficit vengono "riempite" con le ore di straordinario
       let finalOvertimeTotal = totalOvertime;
+      let finalTotalOrdinary = totalOrdinary;
+      let finalDailyData = { ...dailyData };
+      
       if (hasMonthlyOvertimeCompensation && totalOvertime > 0) {
-        // Calculate monthly deficit: sum of (contracted - ordinary) for each worked day where ordinary < contracted
-        let monthlyDeficit = 0;
-        Object.keys(dailyData).forEach(dayKey => {
-          const contracted = dailyContractedHours[dayKey] || 0;
-          const ordinary = dailyData[dayKey].ordinary || 0;
-          // Only count deficit if the employee worked that day (ordinary > 0) and worked less than contracted
-          if (ordinary > 0 && ordinary < contracted) {
-            monthlyDeficit += (contracted - ordinary);
-          }
+        const compensationResult = applyMonthlyOvertimeCompensation(
+          dailyData,
+          dailyContractedHours,
+          compensableAbsenceHours
+        );
+        
+        finalDailyData = compensationResult.dailyData;
+        finalTotalOrdinary = compensationResult.totalOrdinary;
+        finalOvertimeTotal = compensationResult.totalOvertime;
+        
+        console.log(`🔄 [BusinessTripData] Compensazione mensile per ${profile.first_name} ${profile.last_name}:`, {
+          hasMonthlyOvertimeCompensation,
+          originalOrdinary: totalOrdinary,
+          originalOvertime: totalOvertime,
+          ...compensationResult.compensationDetails,
+          finalOrdinary: finalTotalOrdinary,
+          finalOvertime: finalOvertimeTotal
         });
-        
-        // Total compensable hours = deficit + compensable absences (excluding M and I)
-        const totalCompensableHours = monthlyDeficit + compensableAbsenceHours;
-        
-        if (totalCompensableHours > 0) {
-          const hoursToCompensate = Math.min(totalCompensableHours, totalOvertime);
-          finalOvertimeTotal = Math.max(0, totalOvertime - hoursToCompensate);
-          
-          console.log(`🔄 [BusinessTripData] Compensazione mensile per ${profile.first_name} ${profile.last_name}:`, {
-            hasMonthlyOvertimeCompensation,
-            totalOvertime,
-            monthlyDeficit,
-            compensableAbsenceHours,
-            totalCompensableHours,
-            hoursToCompensate,
-            finalOvertime: finalOvertimeTotal
-          });
-        }
       }
 
       // Calculate overtime conversions (monthly) - for economic compensation (manual conversions)
@@ -398,10 +392,10 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         employee_id: profile.user_id,
         employee_name: `${profile.first_name} ${profile.last_name}`,
         company_id: profile.company_id,
-        daily_data: dailyData,
+        daily_data: finalDailyData,
         totals: {
-          ordinary: totalOrdinary,
-          overtime: finalOvertimeTotal, // Use compensated overtime
+          ordinary: finalTotalOrdinary,
+          overtime: finalOvertimeTotal,
           absence_totals: absenceTotals,
         },
         meal_vouchers: mealVoucherDays,

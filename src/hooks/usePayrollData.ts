@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { distributePayrollOvertime, applyPayrollOvertimeDistribution } from '@/utils/payrollOvertimeDistribution';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
+import { applyMonthlyOvertimeCompensation } from '@/utils/monthlyOvertimeCompensation';
 import { 
   applyEntryToleranceToTimesheet, 
   determineAffectedDays, 
@@ -259,56 +260,32 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
 
     // Apply overtime conversions and monthly compensation
     let finalOvertimeTotal = totalOvertime;
+    let finalTotalOrdinary = totalOrdinary;
     let finalDailyData = { ...dailyData };
     
     // COMPENSAZIONE STRAORDINARI MENSILE
     // Per dipendenti con overtime_monthly_compensation = true:
     // Gli straordinari vengono compensati con il DEFICIT di ore (ore contrattuali - ore ordinarie lavorate)
-    // PLUS le assenze compensabili (escluse malattie/infortuni)
+    // Le ore ordinarie in deficit vengono "riempite" con le ore di straordinario
     if (hasMonthlyOvertimeCompensation && totalOvertime > 0) {
-      // Calculate monthly deficit: sum of (contracted - ordinary) for each worked day where ordinary < contracted
-      let monthlyDeficit = 0;
-      Object.keys(dailyData).forEach(dayKey => {
-        const contracted = dailyContractedHours[dayKey] || 0;
-        const ordinary = dailyData[dayKey].ordinary || 0;
-        // Only count deficit if the employee worked that day (ordinary > 0) and worked less than contracted
-        if (ordinary > 0 && ordinary < contracted) {
-          monthlyDeficit += (contracted - ordinary);
-        }
+      const compensationResult = applyMonthlyOvertimeCompensation(
+        dailyData,
+        dailyContractedHours,
+        compensableAbsenceHours
+      );
+      
+      finalDailyData = compensationResult.dailyData;
+      finalTotalOrdinary = compensationResult.totalOrdinary;
+      finalOvertimeTotal = compensationResult.totalOvertime;
+      
+      console.log(`🔄 [PayrollData] Compensazione mensile per ${profile.first_name} ${profile.last_name}:`, {
+        hasMonthlyOvertimeCompensation,
+        originalOrdinary: totalOrdinary,
+        originalOvertime: totalOvertime,
+        ...compensationResult.compensationDetails,
+        finalOrdinary: finalTotalOrdinary,
+        finalOvertime: finalOvertimeTotal
       });
-      
-      // Total compensable hours = deficit + compensable absences (excluding M and I)
-      const totalCompensableHours = monthlyDeficit + compensableAbsenceHours;
-      
-      if (totalCompensableHours > 0) {
-        const hoursToCompensate = Math.min(totalCompensableHours, totalOvertime);
-        
-        console.log(`🔄 [PayrollData] Compensazione mensile per ${profile.first_name} ${profile.last_name}:`, {
-          hasMonthlyOvertimeCompensation,
-          totalOvertime,
-          monthlyDeficit,
-          compensableAbsenceHours,
-          totalCompensableHours,
-          hoursToCompensate,
-          finalOvertime: totalOvertime - hoursToCompensate
-        });
-        
-        // Distribute the compensation across days with overtime
-        const dailyDataForDistribution: { [day: string]: { ordinary: number; overtime: number; absence: string | null } } = {};
-        Object.keys(dailyData).forEach(day => {
-          dailyDataForDistribution[day] = {
-            ordinary: dailyData[day].ordinary,
-            overtime: dailyData[day].overtime,
-            absence: dailyData[day].absence
-          };
-        });
-        
-        const distributions = distributePayrollOvertime(dailyDataForDistribution, hoursToCompensate);
-        finalDailyData = applyPayrollOvertimeDistribution(dailyDataForDistribution, distributions);
-        
-        // Recalculate total overtime after monthly compensation
-        finalOvertimeTotal = Object.values(finalDailyData).reduce((sum, data) => sum + (data.overtime || 0), 0);
-      }
     }
     
     // Then apply manual overtime conversions (for economic compensation)
@@ -375,7 +352,7 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
       company_name: companyName,
       daily_data: finalDailyData,
       totals: { 
-        ordinary: totalOrdinary ?? 0, 
+        ordinary: finalTotalOrdinary ?? 0, 
         overtime: finalOvertimeTotal ?? 0,
         absence_totals: absenceTotals ?? {} 
       },
