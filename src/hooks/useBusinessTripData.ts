@@ -175,7 +175,8 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
       }
 
       const defaultSaturdayRate = companySettingsForEmployee?.saturday_hourly_rate || 10;
-      const defaultMealVoucherAmount = companySettingsForEmployee?.meal_voucher_amount || 8.0;
+      // NOTE: mealVoucherAmount will be calculated per-employee using temporal settings
+      const companyMealVoucherAmount = companySettingsForEmployee?.meal_voucher_amount || 8.0;
       
       // Get effective timezone (hierarchy: company settings -> default)
       const timezone = getEffectiveTimezone(companySettingsForEmployee);
@@ -276,12 +277,13 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
           }
         }
 
-        // Meal voucher conversions
+        // Meal voucher conversions - use employee settings amount if available
         const isConverted = employeeConversions.some(conv => conv.date === processedTimesheet.date && conv.converted_to_allowance);
         if (isConverted) {
           mealVoucherConversions.days += 1;
           mealVoucherConversions.daily_data[primaryDayKey] = true;
-          mealVoucherConversions.amount += defaultMealVoucherAmount;
+          const effectiveMealVoucherAmountForConversion = temporalSettings?.meal_voucher_amount ?? companyMealVoucherAmount;
+          mealVoucherConversions.amount += effectiveMealVoucherAmountForConversion;
         }
       }
 
@@ -318,6 +320,17 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         // Continue with empty overtimeConversions - don't exclude employee from results
       }
 
+      // Calculate effective meal voucher amount respecting hierarchy: employee settings -> company settings -> default
+      const latestEmployeeSettings = await getEmployeeSettingsForDate(profile.user_id, endDate);
+      const effectiveMealVoucherAmount = latestEmployeeSettings?.meal_voucher_amount ?? companyMealVoucherAmount;
+
+      console.log('💰 [BusinessTripData] Importo buono pasto per', profile.first_name, profile.last_name, ':', {
+        employeeAmount: latestEmployeeSettings?.meal_voucher_amount,
+        companyAmount: companyMealVoucherAmount,
+        effectiveAmount: effectiveMealVoucherAmount,
+        mealVoucherDays,
+      });
+
       return {
         employee_id: profile.user_id,
         employee_name: `${profile.first_name} ${profile.last_name}`,
@@ -329,7 +342,7 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
           absence_totals: absenceTotals,
         },
         meal_vouchers: mealVoucherDays,
-        meal_voucher_amount: mealVoucherDays * defaultMealVoucherAmount,
+        meal_voucher_amount: mealVoucherDays * effectiveMealVoucherAmount,
         saturday_trips: saturdayTrips,
         daily_allowances: dailyAllowances,
         overtime_conversions: overtimeConversions,

@@ -92,7 +92,7 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
     
     // Get company settings for default values
     const companySettingsForEmployee = companySettings?.find(cs => cs.company_id === profile.company_id);
-    const mealVoucherAmount = companySettingsForEmployee?.meal_voucher_amount || 8.00;
+    // NOTE: mealVoucherAmount will be calculated per-employee using temporal settings later
     
     // Get effective timezone (hierarchy: company settings -> default)
     const timezone = getEffectiveTimezone(companySettingsForEmployee);
@@ -253,6 +253,20 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
       // Continue with non-converted data - don't exclude employee from results
     }
 
+    // Calculate meal voucher amount respecting hierarchy: employee settings -> company settings -> default
+    // Get the most recent temporal settings for the employee to determine their meal voucher amount
+    const currentEmployeeSettings = await getEmployeeSettingsForDate(profile.user_id, endDate);
+    const effectiveMealVoucherAmount = 
+      currentEmployeeSettings?.meal_voucher_amount ?? 
+      companySettingsForEmployee?.meal_voucher_amount ?? 
+      8.00;
+
+    console.log('💰 [PayrollData] Importo buono pasto per', profile.first_name, profile.last_name, ':', {
+      employeeAmount: currentEmployeeSettings?.meal_voucher_amount,
+      companyAmount: companySettingsForEmployee?.meal_voucher_amount,
+      effectiveAmount: effectiveMealVoucherAmount,
+    });
+
     return {
       employee_id: profile.user_id,
       employee_name: `${profile.first_name} ${profile.last_name}`,
@@ -263,7 +277,7 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
         absence_totals: absenceTotals ?? {} 
       },
       meal_vouchers: mealVoucherDays ?? 0,
-      meal_voucher_amount: mealVoucherAmount ?? 8.00
+      meal_voucher_amount: effectiveMealVoucherAmount
     };
   }));
 
