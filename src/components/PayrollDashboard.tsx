@@ -125,34 +125,44 @@ export default function PayrollDashboard() {
     });
     
     employees.forEach((employee) => {
-      const baseRowTypes = ['O', 'S'];
-      const baseRowColors = ['FFE6F7E6', 'FFE6F2FF'];
+      // Riga ore ordinarie
+      const ordinaryRowData = [`O - ${employee.employee_name}`];
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayKey = String(day).padStart(2, '0');
+        const ordinary = employee.daily_data[dayKey]?.ordinary || 0;
+        ordinaryRowData.push(ordinary > 0 ? ordinary.toFixed(1) : '');
+      }
+      ordinaryRowData.push((employee.totals.ordinary ?? 0).toFixed(1));
+      ordinaryRowData.push((employee.meal_vouchers ?? 0) > 0 ? `${employee.meal_vouchers} x €${(employee.meal_voucher_amount ?? 0).toFixed(2)}` : '-');
       
-      baseRowTypes.forEach((type, typeIndex) => {
-        const rowData = [`${type} - ${employee.employee_name}`];
+      const ordinaryRow = worksheet.addRow(ordinaryRowData);
+      ordinaryRow.eachCell((cell, colNumber) => {
+        let bgColor = 'FFE6F7E6';
+        if (colNumber >= 2 && colNumber <= daysInMonth + 1) {
+          const dayNum = colNumber - 1;
+          const date = new Date(parseInt(year), parseInt(month) - 1, dayNum);
+          if (date.getDay() === 0 || isHoliday(dayNum)) bgColor = 'FFFFCCCC';
+        }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+        cell.font = { size: 10 };
+        cell.alignment = { vertical: 'middle', horizontal: colNumber === 1 ? 'left' : 'center' };
+        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+      });
+
+      // Riga ore straordinarie - solo se ci sono straordinari
+      if ((employee.totals.overtime ?? 0) > 0) {
+        const overtimeRowData = [`S - ${employee.employee_name}`];
         for (let day = 1; day <= daysInMonth; day++) {
           const dayKey = String(day).padStart(2, '0');
-          let value = '';
-          if (type === 'O') {
-            const ordinary = employee.daily_data[dayKey]?.ordinary || 0;
-            value = ordinary > 0 ? ordinary.toFixed(1) : '';
-          } else {
-            const overtime = employee.daily_data[dayKey]?.overtime || 0;
-            value = overtime > 0 ? overtime.toFixed(1) : '';
-          }
-          rowData.push(value);
+          const overtime = employee.daily_data[dayKey]?.overtime || 0;
+          overtimeRowData.push(overtime > 0 ? overtime.toFixed(1) : '');
         }
-        if (type === 'O') {
-          rowData.push((employee.totals.ordinary ?? 0).toFixed(1));
-          rowData.push((employee.meal_vouchers ?? 0) > 0 ? `${employee.meal_vouchers} x €${(employee.meal_voucher_amount ?? 0).toFixed(2)}` : '-');
-        } else {
-          rowData.push((employee.totals.overtime ?? 0).toFixed(1));
-          rowData.push('-');
-        }
+        overtimeRowData.push((employee.totals.overtime ?? 0).toFixed(1));
+        overtimeRowData.push('-');
         
-        const row = worksheet.addRow(rowData);
-        row.eachCell((cell, colNumber) => {
-          let bgColor = baseRowColors[typeIndex];
+        const overtimeRow = worksheet.addRow(overtimeRowData);
+        overtimeRow.eachCell((cell, colNumber) => {
+          let bgColor = 'FFE6F2FF';
           if (colNumber >= 2 && colNumber <= daysInMonth + 1) {
             const dayNum = colNumber - 1;
             const date = new Date(parseInt(year), parseInt(month) - 1, dayNum);
@@ -163,7 +173,7 @@ export default function PayrollDashboard() {
           cell.alignment = { vertical: 'middle', horizontal: colNumber === 1 ? 'left' : 'center' };
           cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
         });
-      });
+      }
 
       Object.entries(employee.totals.absence_totals).forEach(([absenceType, hours]) => {
         if (hours > 0) {
@@ -435,34 +445,36 @@ export default function PayrollDashboard() {
                       </TableCell>
                     </TableRow>
 
-                    {/* Riga Ore Straordinarie */}
-                    <TableRow className="hover:bg-blue-50/50">
-                      <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
-                        <span className="text-blue-700 font-bold">S</span> - {employee.employee_name}
-                      </TableCell>
-                      {Array.from({ length: getDaysInMonth() }, (_, i) => {
-                        const day = i + 1;
-                        const dayKey = String(day).padStart(2, '0');
-                        const overtime = employee.daily_data[dayKey]?.overtime || 0;
-                        const isHol = isHoliday(day);
-                        const isSun = isSunday(day);
-                        
-                        return (
-                          <TableCell 
-                            key={day} 
-                            className={`text-center p-1 text-xs ${
-                              isHol || isSun ? 'bg-red-50' : ''
-                            } ${overtime > 0 ? 'text-blue-700 font-medium' : 'text-muted-foreground'}`}
-                          >
-                            {overtime > 0 ? overtime.toFixed(1) : ''}
-                          </TableCell>
-                        );
-                      })}
-                      <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-gray-50 border-l">
-                        {(employee.totals.overtime ?? 0).toFixed(1)}
-                      </TableCell>
-                      <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
-                    </TableRow>
+                    {/* Riga Ore Straordinarie - solo se ci sono straordinari */}
+                    {(employee.totals.overtime ?? 0) > 0 && (
+                      <TableRow className="hover:bg-blue-50/50">
+                        <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                          <span className="text-blue-700 font-bold">S</span> - {employee.employee_name}
+                        </TableCell>
+                        {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                          const day = i + 1;
+                          const dayKey = String(day).padStart(2, '0');
+                          const overtime = employee.daily_data[dayKey]?.overtime || 0;
+                          const isHol = isHoliday(day);
+                          const isSun = isSunday(day);
+                          
+                          return (
+                            <TableCell 
+                              key={day} 
+                              className={`text-center p-1 text-xs ${
+                                isHol || isSun ? 'bg-red-50' : ''
+                              } ${overtime > 0 ? 'text-blue-700 font-medium' : 'text-muted-foreground'}`}
+                            >
+                              {overtime > 0 ? overtime.toFixed(1) : ''}
+                            </TableCell>
+                          );
+                        })}
+                        <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-gray-50 border-l">
+                          {(employee.totals.overtime ?? 0).toFixed(1)}
+                        </TableCell>
+                        <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                      </TableRow>
+                    )}
 
                     {/* Righe Assenze Dinamiche */}
                     {Object.entries(employee.totals.absence_totals).map(([absenceType, hours]) => {
