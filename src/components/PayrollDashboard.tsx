@@ -138,7 +138,7 @@ export default function PayrollDashboard() {
             value = ordinary > 0 ? ordinary.toFixed(1) : '';
           } else {
             const overtime = employee.daily_data[dayKey]?.overtime || 0;
-            value = overtime > 0 ? overtime.toFixed(1) : '';
+            value = overtime >= 0.1 ? overtime.toFixed(1) : '';
           }
           rowData.push(value);
         }
@@ -147,7 +147,7 @@ export default function PayrollDashboard() {
           rowData.push((employee.meal_vouchers ?? 0) > 0 ? `${employee.meal_vouchers} x €${(employee.meal_voucher_amount ?? 0).toFixed(2)}` : '-');
         } else {
           const overtimeTotal = employee.totals.overtime ?? 0;
-          rowData.push(overtimeTotal > 0 ? overtimeTotal.toFixed(1) : '');
+          rowData.push(overtimeTotal >= 0.1 ? overtimeTotal.toFixed(1) : '');
           rowData.push('-');
         }
         
@@ -453,14 +453,14 @@ export default function PayrollDashboard() {
                             key={day} 
                             className={`text-center p-1 text-xs ${
                               isHol || isSun ? 'bg-red-50' : ''
-                            } ${overtime > 0 ? 'text-blue-700 font-medium' : 'text-muted-foreground'}`}
+                            } ${overtime >= 0.1 ? 'text-blue-700 font-medium' : 'text-muted-foreground'}`}
                           >
-                            {overtime > 0 ? overtime.toFixed(1) : ''}
+                            {overtime >= 0.1 ? overtime.toFixed(1) : ''}
                           </TableCell>
                         );
                       })}
                       <TableCell className="text-center font-bold text-blue-700 text-xs p-1 bg-gray-50 border-l">
-                        {(employee.totals.overtime ?? 0) > 0 ? (employee.totals.overtime ?? 0).toFixed(1) : ''}
+                        {(employee.totals.overtime ?? 0) >= 0.1 ? (employee.totals.overtime ?? 0).toFixed(1) : ''}
                       </TableCell>
                       <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
                     </TableRow>
