@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Plus, UtensilsCrossed } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, CalendarX, UtensilsCrossed } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { TimesheetWithProfile } from '@/types/timesheet';
@@ -292,7 +292,7 @@ export function MonthlyCalendarView({
                 onClick={() => onAddAbsence(dateStr, employee.user_id)}
                 title="Aggiungi assenza"
               >
-                <Plus className="h-3 w-3" />
+                <CalendarX className="h-3 w-3" />
               </Button>
             </div>
           )}
@@ -394,7 +394,7 @@ export function MonthlyCalendarView({
               onClick={() => onAddAbsence(dateStr, employee.user_id)}
               title="Aggiungi assenza"
             >
-              <Plus className="h-3 w-3" />
+              <CalendarX className="h-3 w-3" />
             </Button>
           </div>
         )}
