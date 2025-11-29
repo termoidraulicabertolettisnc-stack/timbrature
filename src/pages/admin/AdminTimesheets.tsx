@@ -1092,14 +1092,10 @@ export default function AdminTimesheets() {
     });
 
     // Calcola ore regolari per ogni dipendente
+    // NOTA: I buoni pasto sono già contati nel loop principale sopra (righe 1089-1091)
+    // basandosi sul timesheet originale, NON sulle sessioni espanse
     employeeMap.forEach((employee) => {
       employee.regular_hours = Math.max(0, employee.total_hours - employee.overtime_hours);
-      // Calcola buoni pasto basandosi su meal_voucher_earned
-      employee.timesheets.forEach((t) => {
-        if (t.meal_voucher_earned) {
-          employee.meal_vouchers++;
-        }
-      });
     });
 
     return Array.from(employeeMap.values());
