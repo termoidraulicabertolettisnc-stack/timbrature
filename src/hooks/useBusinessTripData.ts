@@ -127,6 +127,12 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
   // Load all meal voucher conversions for the period
   const allConversionsData = await MealVoucherConversionService.getConversionsForUsers(userIds, startDate, endDate);
 
+  // Get employee settings for monthly compensation check
+  const { data: employeeSettingsData } = await supabase
+    .from('employee_settings')
+    .select('user_id, overtime_monthly_compensation, valid_from, valid_to')
+    .in('user_id', userIds);
+
   // Build simplified per-employee dataset
   const processedData: BusinessTripData[] = await Promise.all(
     profiles.map(async (profile) => {
@@ -134,6 +140,14 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
       const employeeAbsences = (absences || []).filter((a) => a.user_id === profile.user_id);
       const companySettingsForEmployee = companySettings?.find((cs) => cs.company_id === profile.company_id);
       const employeeConversions = allConversionsData[profile.user_id] || [];
+
+      // Check if employee has monthly overtime compensation enabled
+      const employeeSetting = employeeSettingsData?.find(es => 
+        es.user_id === profile.user_id && 
+        (es.valid_from === null || es.valid_from <= endDate) &&
+        (es.valid_to === null || es.valid_to >= startDate)
+      );
+      const hasMonthlyOvertimeCompensation = employeeSetting?.overtime_monthly_compensation === true;
 
       const dailyData: BusinessTripData['daily_data'] = {};
       let totalOrdinary = 0;
@@ -288,15 +302,40 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
       }
 
       // Process absences
+      let compensableAbsenceHours = 0; // Ore di assenza compensabili (escluse malattie/infortuni)
+      
       for (const abs of employeeAbsences) {
         const day = new Date(`${abs.date}T00:00:00`).getDate();
         const dayKey = String(day).padStart(2, '0');
         dailyData[dayKey].absence = abs.absence_type;
         if (!absenceTotals[abs.absence_type]) absenceTotals[abs.absence_type] = 0;
-        absenceTotals[abs.absence_type] += abs.hours || 8;
+        const absenceHours = abs.hours || 8;
+        absenceTotals[abs.absence_type] += absenceHours;
+        
+        // Accumulate compensable absence hours (exclude malattia=M and infortunio=I)
+        if (abs.absence_type !== 'M' && abs.absence_type !== 'I') {
+          compensableAbsenceHours += absenceHours;
+        }
       }
 
-      // Calculate overtime conversions (monthly) - NON modificano i dati visualizzati
+      // COMPENSAZIONE STRAORDINARI MENSILE
+      // Per dipendenti con overtime_monthly_compensation = true:
+      // Gli straordinari vengono compensati automaticamente con le assenze (escluse malattie/infortuni)
+      let finalOvertimeTotal = totalOvertime;
+      if (hasMonthlyOvertimeCompensation && compensableAbsenceHours > 0 && totalOvertime > 0) {
+        const hoursToCompensate = Math.min(compensableAbsenceHours, totalOvertime);
+        finalOvertimeTotal = Math.max(0, totalOvertime - hoursToCompensate);
+        
+        console.log(`🔄 [BusinessTripData] Compensazione mensile per ${profile.first_name} ${profile.last_name}:`, {
+          hasMonthlyOvertimeCompensation,
+          totalOvertime,
+          compensableAbsenceHours,
+          hoursToCompensate,
+          finalOvertime: finalOvertimeTotal
+        });
+      }
+
+      // Calculate overtime conversions (monthly) - for economic compensation (manual conversions)
       let overtimeConversions = {
         hours: 0,
         amount: 0,
@@ -307,7 +346,7 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         const conversionCalc = await OvertimeConversionService.calculateConversionDetails(
           profile.user_id,
           selectedMonth,
-          totalOvertime,
+          finalOvertimeTotal, // Use the already-compensated overtime
         );
         
         if (conversionCalc.converted_hours > 0) {
@@ -338,7 +377,7 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         daily_data: dailyData,
         totals: {
           ordinary: totalOrdinary,
-          overtime: totalOvertime,
+          overtime: finalOvertimeTotal, // Use compensated overtime
           absence_totals: absenceTotals,
         },
         meal_vouchers: mealVoucherDays,
