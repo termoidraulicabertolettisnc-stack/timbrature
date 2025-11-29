@@ -14,6 +14,8 @@ import {
 export interface PayrollData {
   employee_id: string;
   employee_name: string;
+  company_id: string;
+  company_name: string;
   daily_data: {
     [day: string]: {
       ordinary: number;
@@ -35,10 +37,10 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
   const startDate = `${year}-${month}-01`;
   const endDate = `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`;
 
-  // Get all employees in the company first
+  // Get all employees with company information
   const { data: profilesData, error: profilesError } = await supabase
     .from('profiles')
-    .select('user_id, first_name, last_name, company_id')
+    .select('user_id, first_name, last_name, company_id, companies:company_id(name)')
     .eq('is_active', true);
 
   if (profilesError) throw profilesError;
@@ -267,9 +269,15 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
       effectiveAmount: effectiveMealVoucherAmount,
     });
 
+    // Get company name from joined data
+    const companyData = profile.companies as { name: string } | null;
+    const companyName = companyData?.name || 'Azienda sconosciuta';
+
     return {
       employee_id: profile.user_id,
       employee_name: `${profile.first_name} ${profile.last_name}`,
+      company_id: profile.company_id || '',
+      company_name: companyName,
       daily_data: finalDailyData,
       totals: { 
         ordinary: totalOrdinary ?? 0, 
