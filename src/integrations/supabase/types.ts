@@ -2060,6 +2060,7 @@ export type Database = {
         Returns: number
       }
       is_admin: { Args: never; Returns: boolean }
+      is_super_admin: { Args: never; Returns: boolean }
       is_user_admin: { Args: never; Returns: boolean }
       is_user_admin_in_company: {
         Args: { target_company_id?: string }
