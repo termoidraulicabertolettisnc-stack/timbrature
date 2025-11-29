@@ -40,7 +40,15 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
   // Get all employees with company information
   const { data: profilesData, error: profilesError } = await supabase
     .from('profiles')
-    .select('user_id, first_name, last_name, company_id, companies:company_id(name)')
+    .select(`
+      user_id, 
+      first_name, 
+      last_name, 
+      company_id,
+      companies (
+        name
+      )
+    `)
     .eq('is_active', true);
 
   if (profilesError) throw profilesError;
@@ -270,8 +278,17 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
     });
 
     // Get company name from joined data
-    const companyData = profile.companies as { name: string } | null;
-    const companyName = companyData?.name || 'Azienda sconosciuta';
+    const companyData = profile.companies as { name: string } | { name: string }[] | null;
+    // Handle both single object and array cases from Supabase
+    const companyName = Array.isArray(companyData) 
+      ? (companyData[0]?.name || 'Azienda sconosciuta')
+      : (companyData?.name || 'Azienda sconosciuta');
+    
+    console.log('🏢 [PayrollData] Company data for', profile.first_name, profile.last_name, ':', {
+      rawCompanyData: profile.companies,
+      companyId: profile.company_id,
+      resolvedName: companyName,
+    });
 
     return {
       employee_id: profile.user_id,
