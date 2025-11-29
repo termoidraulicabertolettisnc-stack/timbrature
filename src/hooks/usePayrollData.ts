@@ -168,13 +168,14 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
       // Calculate meal benefits dynamically using BenefitsService (same as BusinessTripsDashboard)
       // This ensures consistency between the two dashboards
       const mealBenefits = await BenefitsService.calculateMealBenefits(
-        processedTimesheet,
+        { ...processedTimesheet, user_id: ts.user_id },
         temporalSettings ? {
           meal_allowance_policy: temporalSettings.meal_allowance_policy,
           meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
           daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
           lunch_break_type: temporalSettings.lunch_break_type,
           saturday_handling: temporalSettings.saturday_handling,
+          meal_voucher_enabled: temporalSettings.meal_voucher_enabled,
         } : undefined,
         companySettingsForEmployee,
         processedTimesheet.date,
