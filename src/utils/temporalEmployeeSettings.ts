@@ -9,6 +9,7 @@ export interface TemporalEmployeeSettings {
   saturday_handling?: any;
   meal_voucher_policy?: any;
   meal_allowance_policy?: any;
+  meal_voucher_enabled?: boolean;
   night_shift_start?: string;
   night_shift_end?: string;
   meal_voucher_amount?: number;

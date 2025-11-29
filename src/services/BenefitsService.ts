@@ -19,6 +19,7 @@ export interface EmployeeSettings {
   daily_allowance_min_hours?: number;
   lunch_break_type?: string;
   saturday_handling?: string;
+  meal_voucher_enabled?: boolean;
   // Entry tolerance fields
   enable_entry_tolerance?: boolean;
   standard_start_time?: string;
@@ -31,6 +32,7 @@ export interface CompanySettings {
   default_daily_allowance_min_hours?: number;
   lunch_break_type?: string;
   saturday_handling?: string;
+  meal_voucher_enabled?: boolean;
   // Entry tolerance fields
   enable_entry_tolerance?: boolean;
   standard_start_time?: string;

@@ -17,6 +17,7 @@ interface EmployeeSettings {
   daily_allowance_min_hours?: number;
   lunch_break_type?: string;
   saturday_handling?: string;
+  meal_voucher_enabled?: boolean;
 }
 
 interface CompanySettings {
@@ -25,6 +26,7 @@ interface CompanySettings {
   default_daily_allowance_min_hours?: number;
   lunch_break_type?: string;
   saturday_handling?: string;
+  meal_voucher_enabled?: boolean;
 }
 
 export interface MealBenefits {
@@ -82,10 +84,20 @@ export function calculateMealBenefits(
     }
   }
 
-  // Determine effective policy
-  const policy = employeeSettings?.meal_allowance_policy || 
-                 companySettings?.meal_allowance_policy || 
-                 'disabled';
+  // Determine effective policy - consider both meal_allowance_policy AND meal_voucher_enabled
+  let policy = employeeSettings?.meal_allowance_policy || 
+               companySettings?.meal_allowance_policy || 
+               'disabled';
+
+  // CRITICAL FIX: If meal_voucher_enabled is true but policy is 'disabled', 
+  // treat it as 'meal_vouchers_only' for backward compatibility
+  const mealVoucherEnabled = employeeSettings?.meal_voucher_enabled ?? 
+                             companySettings?.meal_voucher_enabled ?? 
+                             false;
+  
+  if (policy === 'disabled' && mealVoucherEnabled) {
+    policy = 'meal_vouchers_only';
+  }
 
   if (policy === 'disabled') {
     return { 
@@ -158,7 +170,8 @@ function mapTemporalToEmployeeSettings(temporal: TemporalEmployeeSettings): Empl
     meal_voucher_min_hours: temporal.meal_voucher_min_hours,
     daily_allowance_min_hours: temporal.daily_allowance_min_hours,
     lunch_break_type: temporal.lunch_break_type,
-    saturday_handling: temporal.saturday_handling
+    saturday_handling: temporal.saturday_handling,
+    meal_voucher_enabled: temporal.meal_voucher_enabled
   };
 }
 
