@@ -221,10 +221,11 @@ export function WeeklyTimelineView({
             );
           }
 
-          // Calcola totale ordinarie per il giorno (max 8h)
+          // Usa le ore contrattualizzate per il giorno dalla gerarchia employee_settings > company_settings
+          const contractedHoursForDay = getContractedHoursForDay(dayISO, employeeSetting, companySettings);
           const dayTotalHours = netHoursForDay;
-          const dayOvertimeHours = Math.max(0, dayTotalHours - 8);
-          const dayRegularHours = Math.min(dayTotalHours, 8);
+          const dayOvertimeHours = Math.max(0, dayTotalHours - contractedHoursForDay);
+          const dayRegularHours = Math.min(dayTotalHours, contractedHoursForDay);
 
           // Calcola ore cumulative delle sessioni precedenti
           let cumulativeHoursBeforeThisSession = 0;

@@ -184,8 +184,11 @@ export function MonthlyCalendarView({
           netHours: dayTotalHours.toFixed(2)
         });
         
-        const regularHours = Math.min(dayTotalHours, 8);
-        const overtimeHours = Math.max(0, dayTotalHours - 8);
+        // Usa le ore contrattualizzate per il giorno dalla gerarchia employee_settings > company_settings
+        const empSettings = employeeSettings[timesheet.user_id];
+        const contractedHoursForDay = getContractedHoursForDay(dayISO, empSettings, companySettings);
+        const regularHours = Math.min(dayTotalHours, contractedHoursForDay);
+        const overtimeHours = Math.max(0, dayTotalHours - contractedHoursForDay);
         
         employee.days[dayISO].regular_hours += regularHours;
         employee.days[dayISO].overtime_hours += overtimeHours;
