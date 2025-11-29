@@ -51,7 +51,20 @@ export function calculateMealBenefits(
   // Calculate worked hours
   const workedHours = calculateWorkedHours(timesheet, employeeSettings, companySettings);
   
+  // DEBUG: Log meal voucher calculation
+  console.log('🍽️ [MealBenefits] Calcolo buoni pasto:', {
+    date: timesheet.date,
+    start_time: timesheet.start_time,
+    end_time: timesheet.end_time,
+    workedHours,
+    employeePolicy: employeeSettings?.meal_allowance_policy,
+    employeeMealVoucherEnabled: employeeSettings?.meal_voucher_enabled,
+    companyPolicy: companySettings?.meal_allowance_policy,
+    companyMealVoucherEnabled: companySettings?.meal_voucher_enabled,
+  });
+  
   if (workedHours === 0) {
+    console.log('🍽️ [MealBenefits] ❌ workedHours = 0, nessun buono pasto');
     return { 
       mealVoucher: false, 
       dailyAllowance: false, 
@@ -95,11 +108,19 @@ export function calculateMealBenefits(
                              companySettings?.meal_voucher_enabled ?? 
                              false;
   
+  console.log('🍽️ [MealBenefits] Policy check:', {
+    initialPolicy: policy,
+    mealVoucherEnabled,
+    willOverride: policy === 'disabled' && mealVoucherEnabled,
+  });
+  
   if (policy === 'disabled' && mealVoucherEnabled) {
     policy = 'meal_vouchers_only';
+    console.log('🍽️ [MealBenefits] ✅ Policy overridden to meal_vouchers_only');
   }
 
   if (policy === 'disabled') {
+    console.log('🍽️ [MealBenefits] ❌ Policy disabled, nessun buono pasto');
     return { 
       mealVoucher: false, 
       dailyAllowance: false, 
@@ -125,6 +146,15 @@ export function calculateMealBenefits(
   // Calculate benefits based on policy
   const mealVoucher = (policy === 'meal_vouchers_only' || policy === 'both') && meetsMealVoucherMinimum;
   const dailyAllowance = (policy === 'daily_allowance' || policy === 'both') && meetsDailyAllowanceMinimum;
+
+  console.log('🍽️ [MealBenefits] Risultato finale:', {
+    policy,
+    mealVoucherMinHours,
+    workedHours,
+    meetsMealVoucherMinimum,
+    mealVoucher,
+    dailyAllowance,
+  });
 
   return { 
     mealVoucher, 
@@ -177,13 +207,21 @@ function mapTemporalToEmployeeSettings(temporal: TemporalEmployeeSettings): Empl
 
 /**
  * Calculate worked hours for a timesheet
+ * Uses total_hours if available (already calculated), otherwise calculates from times
  */
 function calculateWorkedHours(
   timesheet: TimesheetData,
   employeeSettings?: EmployeeSettings,
   companySettings?: CompanySettings
 ): number {
+  // CRITICAL FIX: Use total_hours if available (for session-based timesheets)
+  if (timesheet.total_hours && timesheet.total_hours > 0) {
+    console.log('🕐 [WorkedHours] Using total_hours:', timesheet.total_hours);
+    return timesheet.total_hours;
+  }
+  
   if (!timesheet.start_time || !timesheet.end_time) {
+    console.log('🕐 [WorkedHours] ❌ No start_time/end_time and no total_hours');
     return 0;
   }
 

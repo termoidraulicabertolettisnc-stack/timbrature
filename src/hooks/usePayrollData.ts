@@ -165,6 +165,18 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
         totalOvertime += overtimeForDay;
       }
 
+      // DEBUG: Log timesheet data before meal benefits calculation
+      console.log('📊 [PayrollData] Calcolo buoni pasto per timesheet:', {
+        user_id: ts.user_id,
+        date: processedTimesheet.date,
+        start_time: processedTimesheet.start_time,
+        end_time: processedTimesheet.end_time,
+        temporalSettingsPolicy: temporalSettings?.meal_allowance_policy,
+        temporalSettingsMealVoucherEnabled: temporalSettings?.meal_voucher_enabled,
+        companyPolicy: companySettingsForEmployee?.meal_allowance_policy,
+        companyMealVoucherEnabled: companySettingsForEmployee?.meal_voucher_enabled,
+      });
+
       // Calculate meal benefits dynamically using BenefitsService (same as BusinessTripsDashboard)
       // This ensures consistency between the two dashboards
       const mealBenefits = await BenefitsService.calculateMealBenefits(
@@ -181,8 +193,15 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
         processedTimesheet.date,
       );
 
+      console.log('📊 [PayrollData] Risultato mealBenefits:', {
+        mealVoucher: mealBenefits.mealVoucher,
+        workedHours: mealBenefits.workedHours,
+        date: processedTimesheet.date,
+      });
+
       if (mealBenefits.mealVoucher) {
         mealVoucherDays++;
+        console.log('📊 [PayrollData] ✅ Buono pasto contato! Totale:', mealVoucherDays);
       }
     }
 
