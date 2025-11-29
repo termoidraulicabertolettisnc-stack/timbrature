@@ -107,7 +107,7 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
     // Import utilities for session splitting and temporal settings
     const { sessionsForDay } = await import('@/utils/timeSegments');
     const { getEmployeeSettingsForDate } = await import('@/utils/temporalEmployeeSettings');
-    const { calculateMealBenefitsTemporal } = await import('@/utils/mealBenefitsCalculator');
+    const { BenefitsService } = await import('@/services/BenefitsService');
 
     // Process each timesheet once - determine which days it affects
     for (const ts of employeeTimesheets) {
@@ -165,9 +165,22 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
         totalOvertime += overtimeForDay;
       }
 
-      // Use the meal_voucher_earned value already saved in the database
-      // This is more reliable than recalculating dynamically
-      if (ts.meal_voucher_earned) {
+      // Calculate meal benefits dynamically using BenefitsService (same as BusinessTripsDashboard)
+      // This ensures consistency between the two dashboards
+      const mealBenefits = await BenefitsService.calculateMealBenefits(
+        processedTimesheet,
+        temporalSettings ? {
+          meal_allowance_policy: temporalSettings.meal_allowance_policy,
+          meal_voucher_min_hours: temporalSettings.meal_voucher_min_hours,
+          daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
+          lunch_break_type: temporalSettings.lunch_break_type,
+          saturday_handling: temporalSettings.saturday_handling,
+        } : undefined,
+        companySettingsForEmployee,
+        processedTimesheet.date,
+      );
+
+      if (mealBenefits.mealVoucher) {
         mealVoucherDays++;
       }
     }
