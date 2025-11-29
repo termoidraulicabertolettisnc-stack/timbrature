@@ -8,6 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Calendar, Download, Users, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import * as ExcelJS from 'exceljs';
 
 export default function PayrollDashboard() {
@@ -17,6 +20,8 @@ export default function PayrollDashboard() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportMode, setExportMode] = useState<'sheets' | 'files'>('sheets');
 
   const { data: payrollData = [], isLoading: loading } = usePayrollData(selectedMonth);
 
@@ -81,262 +86,127 @@ export default function PayrollDashboard() {
     return labels[type] || type.charAt(0).toUpperCase();
   };
 
-  const exportToExcel = async () => {
-    const [year, month] = selectedMonth.split('-');
-    const daysInMonth = getDaysInMonth();
+  // Helper function to create worksheet content for a company
+  const createCompanyWorksheet = (
+    workbook: ExcelJS.Workbook,
+    companyName: string,
+    employees: PayrollData[],
+    year: string,
+    month: string,
+    monthName: string,
+    daysInMonth: number
+  ) => {
+    const sheetName = companyName.substring(0, 31).replace(/[\\/*?:[\]]/g, '');
+    const worksheet = workbook.addWorksheet(sheetName);
     
-    // Create workbook
-    const workbook = new ExcelJS.Workbook();
+    const headers = ['Dipendente'];
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(parseInt(year), parseInt(month) - 1, day);
+      const dayOfWeek = date.getDay();
+      const dayNames = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
+      headers.push(`${day} ${dayNames[dayOfWeek]}`);
+    }
+    headers.push('Tot', 'Buoni Pasto');
     
-    // Calculate Italian month name
-    const monthNames = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
-                       'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
-    const monthName = monthNames[parseInt(month) - 1];
+    // Title row
+    const monthTitleRow = worksheet.addRow([`${companyName.toUpperCase()} - ${monthName.toUpperCase()} ${year}`]);
+    monthTitleRow.getCell(1).font = { bold: true, size: 14 };
+    monthTitleRow.getCell(1).alignment = { horizontal: 'center' };
+    worksheet.mergeCells(`A1:${String.fromCharCode(65 + Math.min(headers.length - 1, 25))}1`);
     
-    // Group employees by company
-    const employeesByCompany = payrollData.reduce((acc, employee) => {
-      const companyKey = employee.company_id || 'unknown';
-      const companyName = employee.company_name || 'Azienda sconosciuta';
-      if (!acc[companyKey]) {
-        acc[companyKey] = { name: companyName, employees: [] };
-      }
-      acc[companyKey].employees.push(employee);
-      return acc;
-    }, {} as { [key: string]: { name: string; employees: PayrollData[] } });
-
-    // Create one worksheet per company
-    Object.entries(employeesByCompany).forEach(([companyId, companyData]) => {
-      // Sanitize worksheet name (max 31 chars, no special chars)
-      const sheetName = companyData.name.substring(0, 31).replace(/[\\/*?:[\]]/g, '');
-      const worksheet = workbook.addWorksheet(sheetName);
+    worksheet.addRow([]);
+    
+    const headerRow = worksheet.addRow(headers);
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    });
+    
+    employees.forEach((employee) => {
+      const baseRowTypes = ['O', 'S'];
+      const baseRowColors = ['FFE6F7E6', 'FFE6F2FF'];
       
-      // Create headers
-      const headers = ['Dipendente'];
-      
-      // Add day headers with weekday names
-      for (let day = 1; day <= daysInMonth; day++) {
-        const date = new Date(parseInt(year), parseInt(month) - 1, day);
-        const dayOfWeek = date.getDay();
-        const dayNames = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
-        const dayName = dayNames[dayOfWeek];
-        headers.push(`${day} ${dayName}`);
-      }
-      headers.push('Tot', 'Buoni Pasto');
-      
-      // Add month title
-      const monthTitleRow = worksheet.addRow([`${companyData.name.toUpperCase()} - ${monthName.toUpperCase()} ${year}`]);
-      monthTitleRow.getCell(1).font = { bold: true, size: 14 };
-      monthTitleRow.getCell(1).alignment = { horizontal: 'center' };
-      worksheet.mergeCells(`A1:${String.fromCharCode(65 + headers.length - 1)}1`);
-      
-      // Add empty row
-      worksheet.addRow([]);
-      
-      // Add headers row
-      const headerRow = worksheet.addRow(headers);
-      
-      // Style headers
-      headerRow.eachCell((cell, colNumber) => {
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FF4472C4' }
-        };
-        cell.font = { 
-          bold: true, 
-          color: { argb: 'FFFFFFFF' },
-          size: 11
-        };
-        cell.alignment = { 
-          vertical: 'middle', 
-          horizontal: 'center' 
-        };
-        cell.border = {
-          top: { style: 'thin' },
-          left: { style: 'thin' },
-          bottom: { style: 'thin' },
-          right: { style: 'thin' }
-        };
-      });
-      
-      let currentRowIndex = 2;
-      
-      // Add data rows for this company's employees
-      companyData.employees.forEach((employee, empIndex) => {
-        const baseRowTypes = ['O', 'S'];
-        const baseRowColors = ['FFE6F7E6', 'FFE6F2FF']; // Light green, light blue
+      baseRowTypes.forEach((type, typeIndex) => {
+        const rowData = [`${type} - ${employee.employee_name}`];
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dayKey = String(day).padStart(2, '0');
+          let value = '';
+          if (type === 'O') {
+            const ordinary = employee.daily_data[dayKey]?.ordinary || 0;
+            value = ordinary > 0 ? ordinary.toFixed(1) : '';
+          } else {
+            const overtime = employee.daily_data[dayKey]?.overtime || 0;
+            value = overtime > 0 ? overtime.toFixed(1) : '';
+          }
+          rowData.push(value);
+        }
+        if (type === 'O') {
+          rowData.push((employee.totals.ordinary ?? 0).toFixed(1));
+          rowData.push((employee.meal_vouchers ?? 0) > 0 ? `${employee.meal_vouchers} x €${(employee.meal_voucher_amount ?? 0).toFixed(2)}` : '-');
+        } else {
+          rowData.push((employee.totals.overtime ?? 0).toFixed(1));
+          rowData.push('-');
+        }
         
-        // First add ordinary and overtime rows
-        baseRowTypes.forEach((type, typeIndex) => {
-          const rowData = [`${type} - ${employee.employee_name}`];
-          
-          // Add daily data
+        const row = worksheet.addRow(rowData);
+        row.eachCell((cell, colNumber) => {
+          let bgColor = baseRowColors[typeIndex];
+          if (colNumber >= 2 && colNumber <= daysInMonth + 1) {
+            const dayNum = colNumber - 1;
+            const date = new Date(parseInt(year), parseInt(month) - 1, dayNum);
+            if (date.getDay() === 0 || isHoliday(dayNum)) bgColor = 'FFFFCCCC';
+          }
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+          cell.font = { size: 10 };
+          cell.alignment = { vertical: 'middle', horizontal: colNumber === 1 ? 'left' : 'center' };
+          cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        });
+      });
+
+      Object.entries(employee.totals.absence_totals).forEach(([absenceType, hours]) => {
+        if (hours > 0) {
+          const rowData = [`${getAbsenceTypeLabel(absenceType)} - ${employee.employee_name}`];
           for (let day = 1; day <= daysInMonth; day++) {
             const dayKey = String(day).padStart(2, '0');
-            const date = new Date(parseInt(year), parseInt(month) - 1, day);
-            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-            const isHolidayDay = isHoliday(day);
-            
-            let value = '';
-            if (type === 'O') {
-              const ordinary = employee.daily_data[dayKey]?.ordinary || 0;
-              value = ordinary > 0 ? ordinary.toFixed(1) : '';
-            } else if (type === 'S') {
-              const overtime = employee.daily_data[dayKey]?.overtime || 0;
-              value = overtime > 0 ? overtime.toFixed(1) : '';
-            }
-            
-            rowData.push(value);
+            const absence = employee.daily_data[dayKey]?.absence;
+            rowData.push(absence === absenceType ? getAbsenceTypeLabel(absence) : '');
           }
-          
-          // Add totals
-          if (type === 'O') {
-            rowData.push((employee.totals.ordinary ?? 0).toFixed(1));
-            rowData.push((employee.meal_vouchers ?? 0) > 0 ? 
-              `${employee.meal_vouchers} x €${(employee.meal_voucher_amount ?? 0).toFixed(2)}` : '-');
-          } else if (type === 'S') {
-            rowData.push((employee.totals.overtime ?? 0).toFixed(1));
-            rowData.push('-');
-          }
+          rowData.push((hours ?? 0).toFixed(1));
+          rowData.push('-');
           
           const row = worksheet.addRow(rowData);
-          
-          // Style row
           row.eachCell((cell, colNumber) => {
-            // Background color for row type
-            let bgColor = baseRowColors[typeIndex];
-            
-            // Check if it's a weekend/holiday cell (columns 2 to daysInMonth+1)
+            let bgColor = 'FFFFE6E6';
             if (colNumber >= 2 && colNumber <= daysInMonth + 1) {
               const dayNum = colNumber - 1;
               const date = new Date(parseInt(year), parseInt(month) - 1, dayNum);
-              const isWeekend = date.getDay() === 0;
-              const isHolidayDay = isHoliday(dayNum);
-              
-              if (isWeekend || isHolidayDay) {
-                bgColor = 'FFFFCCCC'; // Light red for holidays/Sundays
-              }
+              if (date.getDay() === 0 || isHoliday(dayNum)) bgColor = 'FFFFCCCC';
             }
-            
-            cell.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: bgColor }
-            };
-            
-            cell.font = { 
-              size: 10
-            };
-            
-            cell.alignment = { 
-              vertical: 'middle', 
-              horizontal: colNumber === 1 ? 'left' : 'center'
-            };
-            
-            cell.border = {
-              top: { style: 'thin' },
-              left: { style: 'thin' },
-              bottom: { style: 'thin' },
-              right: { style: 'thin' }
-            };
-            
-            // Format numbers
-            if (colNumber > 1 && colNumber <= daysInMonth + 2 && 
-                typeof cell.value === 'string' && 
-                /^\d+\.\d$/.test(cell.value)) {
-              cell.numFmt = '0.0';
-            }
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+            cell.font = { size: 10 };
+            cell.alignment = { vertical: 'middle', horizontal: colNumber === 1 ? 'left' : 'center' };
+            cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
           });
-          
-          currentRowIndex++;
-        });
-
-        // Then add dynamic absence rows
-        Object.entries(employee.totals.absence_totals).forEach(([absenceType, hours]) => {
-          if (hours > 0) {
-            const rowData = [`${getAbsenceTypeLabel(absenceType)} - ${employee.employee_name}`];
-            
-            // Add daily data
-            for (let day = 1; day <= daysInMonth; day++) {
-              const dayKey = String(day).padStart(2, '0');
-              const absence = employee.daily_data[dayKey]?.absence;
-              const value = absence === absenceType ? getAbsenceTypeLabel(absence) : '';
-              rowData.push(value);
-            }
-            
-            // Add totals
-            rowData.push((hours ?? 0).toFixed(1));
-            rowData.push('-');
-            
-            const row = worksheet.addRow(rowData);
-            
-            // Style row
-            row.eachCell((cell, colNumber) => {
-              // Background color for absence rows
-              let bgColor = 'FFFFE6E6'; // Light red
-              
-              // Check if it's a weekend/holiday cell (columns 2 to daysInMonth+1)
-              if (colNumber >= 2 && colNumber <= daysInMonth + 1) {
-                const dayNum = colNumber - 1;
-                const date = new Date(parseInt(year), parseInt(month) - 1, dayNum);
-                const isWeekend = date.getDay() === 0;
-                const isHolidayDay = isHoliday(dayNum);
-                
-                if (isWeekend || isHolidayDay) {
-                  bgColor = 'FFFFCCCC'; // Light red for holidays/Sundays
-                }
-              }
-              
-              cell.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: bgColor }
-              };
-              
-              cell.font = { 
-                size: 10
-              };
-              
-              cell.alignment = { 
-                vertical: 'middle', 
-                horizontal: colNumber === 1 ? 'left' : 'center'
-              };
-              
-              cell.border = {
-                top: { style: 'thin' },
-                left: { style: 'thin' },
-                bottom: { style: 'thin' },
-                right: { style: 'thin' }
-              };
-            });
-            
-            currentRowIndex++;
-          }
-        });
-      });
-      
-      // Auto-fit columns
-      worksheet.columns.forEach((column, index) => {
-        if (index === 0) {
-          column.width = 25; // Employee name column
-        } else if (index <= daysInMonth) {
-          column.width = 8; // Day columns
-        } else if (index === daysInMonth + 1) {
-          column.width = 10; // Tot column
-        } else {
-          column.width = 15; // Buoni Pasto column
         }
       });
-      
-      // Add legend at the end of each sheet
-      worksheet.addRow([]);
-      worksheet.addRow(['LEGENDA:']);
-      worksheet.addRow(['A: Assenza Ingiustificata', '', 'F: Ferie', '', 'FS: Festività']);
-      worksheet.addRow(['I: Infortunio', '', 'M: Malattia', '', 'PR: Permesso Retribuito', '', 'PNR: Permesso non retribuito']);
     });
     
-    // Generate filename and save
-    const fileName = `Buste_Pago_${monthName}_${year}.xlsx`;
+    worksheet.columns.forEach((column, index) => {
+      if (index === 0) column.width = 25;
+      else if (index <= daysInMonth) column.width = 8;
+      else if (index === daysInMonth + 1) column.width = 10;
+      else column.width = 15;
+    });
+    
+    worksheet.addRow([]);
+    worksheet.addRow(['LEGENDA:']);
+    worksheet.addRow(['A: Assenza Ingiustificata', '', 'F: Ferie', '', 'FS: Festività']);
+    worksheet.addRow(['I: Infortunio', '', 'M: Malattia', '', 'PR: Permesso Retribuito', '', 'PNR: Permesso non retribuito']);
+  };
+
+  const downloadWorkbook = async (workbook: ExcelJS.Workbook, fileName: string) => {
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = window.URL.createObjectURL(blob);
@@ -345,6 +215,41 @@ export default function PayrollDashboard() {
     link.download = fileName;
     link.click();
     window.URL.revokeObjectURL(url);
+  };
+
+  const exportToExcel = async (mode: 'sheets' | 'files') => {
+    const [year, month] = selectedMonth.split('-');
+    const daysInMonth = getDaysInMonth();
+    const monthNames = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+                       'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+    const monthName = monthNames[parseInt(month) - 1];
+    
+    const employeesByCompany = payrollData.reduce((acc, employee) => {
+      const companyKey = employee.company_id || 'unknown';
+      const companyName = employee.company_name || 'Azienda sconosciuta';
+      if (!acc[companyKey]) acc[companyKey] = { name: companyName, employees: [] };
+      acc[companyKey].employees.push(employee);
+      return acc;
+    }, {} as { [key: string]: { name: string; employees: PayrollData[] } });
+
+    if (mode === 'sheets') {
+      // Single file with multiple sheets
+      const workbook = new ExcelJS.Workbook();
+      Object.values(employeesByCompany).forEach(companyData => {
+        createCompanyWorksheet(workbook, companyData.name, companyData.employees, year, month, monthName, daysInMonth);
+      });
+      await downloadWorkbook(workbook, `${month}_${year}_Buste_Paga.xlsx`);
+    } else {
+      // Multiple files, one per company
+      for (const companyData of Object.values(employeesByCompany)) {
+        const workbook = new ExcelJS.Workbook();
+        createCompanyWorksheet(workbook, companyData.name, companyData.employees, year, month, monthName, daysInMonth);
+        const sanitizedCompanyName = companyData.name.replace(/[\\/*?:"<>|]/g, '_');
+        await downloadWorkbook(workbook, `${month}_${year}_Buste_Paga_${sanitizedCompanyName}.xlsx`);
+      }
+    }
+    
+    setExportDialogOpen(false);
   };
 
   if (loading) {
@@ -378,7 +283,7 @@ export default function PayrollDashboard() {
             <span className="hidden sm:inline">Aggiorna</span>
           </Button>
           <Button
-            onClick={exportToExcel}
+            onClick={() => setExportDialogOpen(true)}
             variant="outline"
             size="sm"
             className="gap-2 flex-shrink-0"
@@ -634,6 +539,51 @@ export default function PayrollDashboard() {
           </div>
         </div>
       </Card>
+
+      {/* Export Dialog */}
+      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Esporta Buste Paga</DialogTitle>
+            <DialogDescription>
+              Scegli come esportare i dati delle buste paga
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <RadioGroup value={exportMode} onValueChange={(value) => setExportMode(value as 'sheets' | 'files')}>
+              <div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-muted/50 cursor-pointer">
+                <RadioGroupItem value="sheets" id="sheets" className="mt-1" />
+                <Label htmlFor="sheets" className="flex-1 cursor-pointer">
+                  <div className="font-medium">File unico con fogli separati</div>
+                  <div className="text-sm text-muted-foreground">
+                    Un file Excel con un foglio per ogni azienda<br />
+                    <code className="text-xs bg-muted px-1 rounded">MM_YYYY_Buste_Paga.xlsx</code>
+                  </div>
+                </Label>
+              </div>
+              <div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-muted/50 cursor-pointer mt-2">
+                <RadioGroupItem value="files" id="files" className="mt-1" />
+                <Label htmlFor="files" className="flex-1 cursor-pointer">
+                  <div className="font-medium">File separati per azienda</div>
+                  <div className="text-sm text-muted-foreground">
+                    Un file Excel per ogni azienda<br />
+                    <code className="text-xs bg-muted px-1 rounded">MM_YYYY_Buste_Paga_NomeAzienda.xlsx</code>
+                  </div>
+                </Label>
+              </div>
+            </RadioGroup>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportDialogOpen(false)}>
+              Annulla
+            </Button>
+            <Button onClick={() => exportToExcel(exportMode)}>
+              <Download className="h-4 w-4 mr-2" />
+              Esporta
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
