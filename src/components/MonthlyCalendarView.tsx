@@ -8,6 +8,7 @@ import { TimesheetWithProfile } from '@/types/timesheet';
 import { AbsenceIndicator } from './AbsenceIndicator';
 import { sessionsForDay, utcToLocal } from '@/utils/timeSegments';
 import { getContractedHoursForDay, hasMissingHours, formatMissingHours } from '@/utils/contractedHours';
+import { calculateNetHours } from '@/utils/lunchBreakUtils';
 import { AlertCircle } from 'lucide-react';
 
 interface MonthlyCalendarViewProps {
@@ -149,13 +150,13 @@ export function MonthlyCalendarView({
         }
         
         // ✅ Calcola le ore per questo giorno dai segmenti filtrati
-        let dayTotalHours = 0;
+        let grossHours = 0;
         segments.forEach(segment => {
           const localStart = utcToLocal(segment.startUtc);
           const localEnd = utcToLocal(segment.endUtc);
           const durationMs = localEnd.getTime() - localStart.getTime();
           const durationHours = durationMs / (1000 * 60 * 60);
-          dayTotalHours += durationHours;
+          grossHours += durationHours;
           
           // Aggiungi le sessioni
           employee.days[dayISO].sessions.push({
@@ -164,6 +165,23 @@ export function MonthlyCalendarView({
             end_time: segment.endUtc,
             duration: durationHours
           });
+        });
+        
+        // ✅ Sottrai la pausa pranzo usando le impostazioni dipendente/azienda
+        const employeeSetting = employeeSettings?.[timesheet.user_id];
+        const { netHours: dayTotalHours, lunchMinutesDeducted } = calculateNetHours(
+          grossHours,
+          timesheet,
+          employeeSetting,
+          companySettings
+        );
+        
+        console.log('🍽️ MonthlyCalendarView - Lunch deduction:', {
+          userId: timesheet.user_id,
+          date: dayISO,
+          grossHours: grossHours.toFixed(2),
+          lunchMinutesDeducted,
+          netHours: dayTotalHours.toFixed(2)
         });
         
         const regularHours = Math.min(dayTotalHours, 8);

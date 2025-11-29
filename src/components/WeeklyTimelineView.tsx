@@ -11,6 +11,7 @@ import { useWeeklyRealtimeHours } from '@/hooks/use-weekly-realtime-hours';
 import { AbsenceIndicator } from '@/components/AbsenceIndicator';
 import { sessionsForDay, utcToLocal } from '@/utils/timeSegments';
 import { getContractedHoursForDay, hasMissingHours, formatMissingHours } from '@/utils/contractedHours';
+import { calculateNetHours } from '@/utils/lunchBreakUtils';
 import { AlertCircle } from 'lucide-react';
 
 interface WeeklyTimelineViewProps {
@@ -170,26 +171,48 @@ export function WeeklyTimelineView({
         
         if (segments.length === 0) return;
 
+        // ✅ Calcola ore lorde totali per questo giorno dai segmenti
+        let grossHoursForDay = 0;
+        segments.forEach(segment => {
+          const localStart = utcToLocal(segment.startUtc);
+          const localEnd = utcToLocal(segment.endUtc);
+          grossHoursForDay += (localEnd.getTime() - localStart.getTime()) / (1000 * 60 * 60);
+        });
+
+        // ✅ Calcola la deduzione pausa pranzo per questo giorno
+        const employeeSetting = employeeSettings[timesheet.user_id];
+        const { netHours: netHoursForDay, lunchMinutesDeducted } = calculateNetHours(
+          grossHoursForDay,
+          timesheet,
+          employeeSetting,
+          companySettings
+        );
+        
+        // Calcola il fattore di riduzione per distribuire la pausa su tutte le sessioni
+        const reductionFactor = grossHoursForDay > 0 ? netHoursForDay / grossHoursForDay : 1;
+
+        console.log('🍽️ WeeklyTimelineView - Lunch deduction:', {
+          userId: timesheet.user_id,
+          date: dayISO,
+          grossHours: grossHoursForDay.toFixed(2),
+          lunchMinutesDeducted,
+          netHours: netHoursForDay.toFixed(2),
+          reductionFactor: reductionFactor.toFixed(4)
+        });
+
         segments.forEach((segment, segmentIndex) => {
           const localStart = utcToLocal(segment.startUtc);
           const localEnd = utcToLocal(segment.endUtc);
           
-          // Use timesheet.total_hours when available (closed timesheet), otherwise calculate duration
-          let sessionDuration: number;
-          if (timesheet.end_time && timesheet.total_hours !== null) {
-            // For closed timesheets, use the calculated total_hours from database
-            sessionDuration = timesheet.total_hours;
-          } else {
-            // For open timesheets, calculate duration in real-time
-            sessionDuration = (localEnd.getTime() - localStart.getTime()) / (1000 * 60 * 60);
-          }
+          // ✅ Calcola durata della sessione con riduzione proporzionale per la pausa pranzo
+          const rawDuration = (localEnd.getTime() - localStart.getTime()) / (1000 * 60 * 60);
+          const sessionDuration = rawDuration * reductionFactor;
           
           if (sessionDuration <= 0) return;
 
           // Calculate meal benefits only for the first segment of each day
           let mealBenefits = { mealVoucher: false };
           if (segmentIndex === 0) {
-            const employeeSetting = employeeSettings[timesheet.user_id];
             BenefitsService.validateTemporalUsage('WeeklyTimelineView');
             mealBenefits = BenefitsService.calculateMealBenefitsSync(
               timesheet,
@@ -199,9 +222,9 @@ export function WeeklyTimelineView({
           }
 
           // Calcola totale ordinarie per il giorno (max 8h)
-          const dayTotalHours = timesheet.total_hours || sessionDuration;
-          const dayOvertimeHours = timesheet.overtime_hours || 0;
-          const dayRegularHours = Math.min(dayTotalHours - dayOvertimeHours, 8);
+          const dayTotalHours = netHoursForDay;
+          const dayOvertimeHours = Math.max(0, dayTotalHours - 8);
+          const dayRegularHours = Math.min(dayTotalHours, 8);
 
           // Calcola ore cumulative delle sessioni precedenti
           let cumulativeHoursBeforeThisSession = 0;
@@ -209,15 +232,8 @@ export function WeeklyTimelineView({
             const prevSegment = segments[i];
             const prevStart = utcToLocal(prevSegment.startUtc);
             const prevEnd = utcToLocal(prevSegment.endUtc);
-            let prevDuration: number;
-            if (timesheet.end_time && timesheet.total_hours !== null) {
-              // Per timesheet chiusi, usa proporzione
-              const totalSegments = segments.length;
-              prevDuration = (timesheet.total_hours - dayOvertimeHours) / totalSegments;
-            } else {
-              prevDuration = (prevEnd.getTime() - prevStart.getTime()) / (1000 * 60 * 60);
-            }
-            cumulativeHoursBeforeThisSession += prevDuration;
+            const prevRawDuration = (prevEnd.getTime() - prevStart.getTime()) / (1000 * 60 * 60);
+            cumulativeHoursBeforeThisSession += prevRawDuration * reductionFactor;
           }
 
           // Distribuisci ordinarie/straordinari per questa sessione
@@ -238,6 +254,7 @@ export function WeeklyTimelineView({
           }
 
           console.log(`📊 Session ${segmentIndex} overtime:`, {
+            raw_dur: rawDuration.toFixed(2),
             session_dur: sessionDuration.toFixed(2),
             cumulative: cumulativeHoursBeforeThisSession.toFixed(2),
             remaining_reg: remainingRegularHours.toFixed(2),
@@ -265,11 +282,11 @@ export function WeeklyTimelineView({
 
           employee.days[dayIndex].entries.push(entry);
           
-          // Update totals only once per segment
+          // Update totals only once per day (first segment)
           if (segmentIndex === 0) {
-            employee.totals.total_hours += sessionDuration;
-            employee.totals.overtime_hours += sessionOvertimeHours;
-            employee.totals.night_hours += (timesheet.night_hours || 0) * (sessionDuration / (timesheet.total_hours || sessionDuration));
+            employee.totals.total_hours += netHoursForDay;
+            employee.totals.overtime_hours += dayOvertimeHours;
+            employee.totals.night_hours += (timesheet.night_hours || 0) * (netHoursForDay / (timesheet.total_hours || netHoursForDay));
           }
         });
       });

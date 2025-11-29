@@ -86,4 +86,70 @@ export const debugLunchBreakConfig = async (userId: string) => {
   }
 };
 
+/**
+ * Estrae i minuti dalla stringa lunch_break_type (es. "60_minuti" -> 60)
+ */
+export const getLunchBreakMinutesFromType = (lunchType: string | null | undefined): number => {
+  if (!lunchType) return 0;
+  if (lunchType === '0_minuti' || lunchType === 'libera') return 0;
+  
+  const match = lunchType.match(/^(\d+)_minuti$/);
+  if (match) {
+    return parseInt(match[1], 10);
+  }
+  return 0;
+};
+
+/**
+ * Calcola i minuti di pausa pranzo da sottrarre per un timesheet
+ * Segue la gerarchia: timesheet.lunch_duration_minutes > employee_settings > company_settings
+ */
+export const calculateLunchDeduction = (
+  grossHours: number,
+  timesheet: { lunch_duration_minutes?: number | null; lunch_manually_set?: boolean | null } | null,
+  employeeSettings: any | null,
+  companySettings: any | null
+): number => {
+  // 1. Se il timesheet ha lunch_duration_minutes esplicito, usa quello
+  if (timesheet?.lunch_duration_minutes !== null && timesheet?.lunch_duration_minutes !== undefined) {
+    return timesheet.lunch_duration_minutes;
+  }
+  
+  // 2. Determina la soglia minima di ore per applicare la pausa
+  const minHoursForLunch = 
+    employeeSettings?.lunch_break_min_hours ?? 
+    companySettings?.lunch_break_min_hours ?? 
+    6;
+  
+  // 3. Se le ore lorde non superano la soglia, nessuna deduzione
+  if (grossHours < minHoursForLunch) {
+    return 0;
+  }
+  
+  // 4. Determina i minuti di pausa dalle impostazioni
+  const lunchType = employeeSettings?.lunch_break_type ?? companySettings?.lunch_break_type;
+  
+  // Se è "libera" o "0_minuti", niente deduzione automatica
+  if (lunchType === 'libera' || lunchType === '0_minuti') {
+    return 0;
+  }
+  
+  return getLunchBreakMinutesFromType(lunchType);
+};
+
+/**
+ * Calcola le ore nette da ore lorde sottraendo la pausa pranzo
+ */
+export const calculateNetHours = (
+  grossHours: number,
+  timesheet: { lunch_duration_minutes?: number | null; lunch_manually_set?: boolean | null } | null,
+  employeeSettings: any | null,
+  companySettings: any | null
+): { netHours: number; lunchMinutesDeducted: number } => {
+  const lunchMinutes = calculateLunchDeduction(grossHours, timesheet, employeeSettings, companySettings);
+  const netHours = Math.max(0, grossHours - (lunchMinutes / 60));
+  
+  return { netHours, lunchMinutesDeducted: lunchMinutes };
+};
+
 export { LUNCH_BREAK_OPTIONS };
