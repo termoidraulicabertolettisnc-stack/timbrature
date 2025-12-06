@@ -24,6 +24,8 @@ export interface CompensationResult {
   };
   // Days where the deficit was fully compensated (ordinary >= contracted after compensation)
   fullyCompensatedDays: string[];
+  // Days with residual deficit after compensation (need automatic absence)
+  residualDeficitDays: { day: string; deficit: number }[];
 }
 
 /**
@@ -62,6 +64,9 @@ export function applyMonthlyOvertimeCompensation(
   const totalCompensableHours = monthlyDeficit + compensableAbsenceHours;
   
   if (totalCompensableHours <= 0 || totalOvertimeAvailable <= 0) {
+    // Even without overtime, we need to report residual deficits
+    const residualDeficitDays: { day: string; deficit: number }[] = deficitDays.map(({ day, deficit }) => ({ day, deficit }));
+    
     return {
       dailyData: result,
       totalOrdinary: Object.values(result).reduce((sum, d) => sum + (d.ordinary || 0), 0),
@@ -72,7 +77,8 @@ export function applyMonthlyOvertimeCompensation(
         totalCompensableHours,
         hoursCompensated: 0
       },
-      fullyCompensatedDays: []
+      fullyCompensatedDays: [],
+      residualDeficitDays
     };
   }
 
@@ -127,14 +133,21 @@ export function applyMonthlyOvertimeCompensation(
   const finalTotalOrdinary = Object.values(result).reduce((sum, d) => sum + (d.ordinary || 0), 0);
   const finalTotalOvertime = Object.values(result).reduce((sum, d) => sum + (d.overtime || 0), 0);
 
-  // Identify fully compensated days (ordinary >= contracted after compensation)
+  // Identify fully compensated days and residual deficit days
   const fullyCompensatedDays: string[] = [];
+  const residualDeficitDays: { day: string; deficit: number }[] = [];
+  
   for (const { day } of deficitDays) {
     const contracted = dailyContractedHours[day] || 0;
     const ordinaryAfter = result[day].ordinary || 0;
+    const residualDeficit = contracted - ordinaryAfter;
+    
     // If ordinary hours now meet or exceed contracted hours, this day is fully compensated
-    if (ordinaryAfter >= contracted - 0.01) { // Small tolerance for floating point
+    if (residualDeficit <= 0.01) { // Small tolerance for floating point
       fullyCompensatedDays.push(day);
+    } else {
+      // This day still has a deficit after compensation
+      residualDeficitDays.push({ day, deficit: Math.round(residualDeficit * 100) / 100 });
     }
   }
 
@@ -148,6 +161,7 @@ export function applyMonthlyOvertimeCompensation(
       totalCompensableHours,
       hoursCompensated: hoursToCompensate
     },
-    fullyCompensatedDays
+    fullyCompensatedDays,
+    residualDeficitDays
   };
 }

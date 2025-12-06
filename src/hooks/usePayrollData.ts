@@ -307,12 +307,29 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
         }
       }
       
+      // Create automatic absences for residual deficit days (PR = Permesso Retribuito)
+      for (const { day, deficit } of compensationResult.residualDeficitDays) {
+        // Only create absence if no absence already exists for this day
+        if (!finalDailyData[day]?.absence && deficit > 0) {
+          finalDailyData[day].absence = 'PR';
+          
+          // Add to absence totals
+          if (!absenceTotals['PR']) {
+            absenceTotals['PR'] = 0;
+          }
+          absenceTotals['PR'] += deficit;
+          
+          console.log(`🔄 [PayrollData] Creata assenza automatica PR per giorno ${day} (deficit residuo: ${deficit}h)`);
+        }
+      }
+      
       console.log(`🔄 [PayrollData] Compensazione mensile per ${profile.first_name} ${profile.last_name}:`, {
         hasMonthlyOvertimeCompensation,
         originalOrdinary: totalOrdinary,
         originalOvertime: totalOvertime,
         ...compensationResult.compensationDetails,
         fullyCompensatedDays: compensationResult.fullyCompensatedDays,
+        residualDeficitDays: compensationResult.residualDeficitDays,
         finalOrdinary: finalTotalOrdinary,
         finalOvertime: finalOvertimeTotal,
         absenceTotalsAfter: absenceTotals
