@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Building, Edit, MapPin, Trash2 } from "lucide-react";
 import { useForm } from "react-hook-form";
-import AddressPicker, { AddressData } from "@/components/AddressPicker";
+import { AddressData } from "@/components/AddressPicker";
 
 interface Company {
   id: string;
@@ -274,18 +274,65 @@ export default function AdminCompanies() {
                 )}
               </div>
 
-              <div>
-                <Label htmlFor="address">Indirizzo Sede</Label>
-                <AddressPicker
-                  value={addressData?.formatted_address || ''}
-                  onAddressSelect={setAddressData}
-                  placeholder="Cerca l'indirizzo della sede..."
-                />
-                {addressData?.city && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="city">Città *</Label>
+                  <Input
+                    id="city"
+                    value={addressData?.city || ''}
+                    onChange={(e) => setAddressData(prev => ({
+                      ...prev,
+                      address: prev?.address || '',
+                      formatted_address: prev?.formatted_address || '',
+                      latitude: prev?.latitude || 0,
+                      longitude: prev?.longitude || 0,
+                      city: e.target.value,
+                      province: prev?.province,
+                      country: prev?.country || 'Italia'
+                    }))}
+                    placeholder="es. Milano"
+                  />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Città: {addressData.city}{addressData.province ? ` (${addressData.province})` : ''}
+                    Necessaria per le festività del santo patrono
                   </p>
-                )}
+                </div>
+                <div>
+                  <Label htmlFor="province">Provincia</Label>
+                  <Input
+                    id="province"
+                    value={addressData?.province || ''}
+                    onChange={(e) => setAddressData(prev => ({
+                      ...prev,
+                      address: prev?.address || '',
+                      formatted_address: prev?.formatted_address || '',
+                      latitude: prev?.latitude || 0,
+                      longitude: prev?.longitude || 0,
+                      city: prev?.city,
+                      province: e.target.value,
+                      country: prev?.country || 'Italia'
+                    }))}
+                    placeholder="es. MI"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="address">Indirizzo Completo (opzionale)</Label>
+                <Input
+                  id="address"
+                  value={addressData?.formatted_address || ''}
+                  onChange={(e) => setAddressData(prev => ({
+                    ...prev,
+                    address: e.target.value,
+                    formatted_address: e.target.value,
+                    latitude: prev?.latitude || 0,
+                    longitude: prev?.longitude || 0,
+                    city: prev?.city,
+                    province: prev?.province,
+                    country: prev?.country || 'Italia'
+                  }))}
+                  placeholder="es. Via Roma 1, 20121 Milano MI"
+                />
               </div>
 
               <div className="flex justify-end gap-2">
