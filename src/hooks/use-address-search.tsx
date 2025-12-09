@@ -14,6 +14,9 @@ interface GeocodeResult {
   latitude: number;
   longitude: number;
   formatted_address: string;
+  city?: string;
+  province?: string;
+  country?: string;
 }
 
 export const useAddressSearch = () => {
@@ -96,7 +99,7 @@ export const useAddressSearch = () => {
         body: {
           action: 'geocode',
           query: address,
-          place_id: placeId
+          placeId: placeId
         }
       });
 
@@ -104,11 +107,34 @@ export const useAddressSearch = () => {
         throw new Error(`Geocoding error: ${error.message}`);
       }
 
-      if (data?.result) {
+      if (data) {
+        // Extract city and province from address_components
+        let city: string | undefined;
+        let province: string | undefined;
+        let country: string | undefined;
+
+        if (data.address_components) {
+          for (const component of data.address_components) {
+            if (component.types.includes('locality')) {
+              city = component.long_name;
+            } else if (component.types.includes('administrative_area_level_3') && !city) {
+              // Fallback to administrative_area_level_3 if no locality
+              city = component.long_name;
+            } else if (component.types.includes('administrative_area_level_2')) {
+              province = component.short_name; // Province usually abbreviated (e.g., "MI", "RM")
+            } else if (component.types.includes('country')) {
+              country = component.long_name;
+            }
+          }
+        }
+
         return {
-          latitude: data.result.latitude,
-          longitude: data.result.longitude,
-          formatted_address: data.result.formatted_address
+          latitude: data.latitude,
+          longitude: data.longitude,
+          formatted_address: data.formatted_address,
+          city,
+          province,
+          country
         };
       }
 
