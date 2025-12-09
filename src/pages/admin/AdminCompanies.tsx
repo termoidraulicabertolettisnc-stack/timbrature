@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Building, Edit, MapPin, Trash2 } from "lucide-react";
 import { useForm } from "react-hook-form";
-import AddressPicker from "@/components/AddressPicker";
+import AddressPicker, { AddressData } from "@/components/AddressPicker";
 
 interface Company {
   id: string;
@@ -18,6 +18,9 @@ interface Company {
   formatted_address?: string;
   latitude?: number;
   longitude?: number;
+  city?: string;
+  province?: string;
+  country?: string;
   created_at: string;
   updated_at: string;
 }
@@ -31,12 +34,7 @@ export default function AdminCompanies() {
   const [loading, setLoading] = useState(true);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [addressData, setAddressData] = useState<{
-    address: string;
-    formatted_address: string;
-    latitude: number;
-    longitude: number;
-  } | null>(null);
+  const [addressData, setAddressData] = useState<AddressData | null>(null);
   const { toast } = useToast();
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<CompanyFormData>();
@@ -68,10 +66,20 @@ export default function AdminCompanies() {
 
   const onSubmit = async (data: CompanyFormData) => {
     try {
-      const submitData = {
-        ...data,
-        ...addressData
+      const submitData: any = {
+        name: data.name,
       };
+
+      // Add address data if available
+      if (addressData) {
+        submitData.address = addressData.address;
+        submitData.formatted_address = addressData.formatted_address;
+        submitData.latitude = addressData.latitude;
+        submitData.longitude = addressData.longitude;
+        submitData.city = addressData.city;
+        submitData.province = addressData.province;
+        submitData.country = addressData.country;
+      }
 
       if (editingCompany) {
         const { error } = await supabase
@@ -127,7 +135,6 @@ export default function AdminCompanies() {
 
         if (settingsError) {
           console.error('Error creating default settings:', settingsError);
-          // Non blocchiamo la creazione dell'azienda, ma avvisiamo l'utente
           toast({
             title: "Attenzione",
             description: "Azienda creata, ma le configurazioni di default non sono state create. Vai nelle impostazioni per configurarle.",
@@ -166,8 +173,13 @@ export default function AdminCompanies() {
         address: company.address || '',
         formatted_address: company.formatted_address || '',
         latitude: company.latitude || 0,
-        longitude: company.longitude || 0
+        longitude: company.longitude || 0,
+        city: company.city,
+        province: company.province,
+        country: company.country
       });
+    } else {
+      setAddressData(null);
     }
     setDialogOpen(true);
   };
@@ -189,7 +201,7 @@ export default function AdminCompanies() {
         .from('companies')
         .delete()
         .eq('id', company.id)
-        .select(); // Aggiunge select per vedere se qualcosa viene eliminato
+        .select();
 
       console.log('Delete result:', { data, error });
 
@@ -263,12 +275,17 @@ export default function AdminCompanies() {
               </div>
 
               <div>
-                <Label htmlFor="address">Indirizzo</Label>
+                <Label htmlFor="address">Indirizzo Sede</Label>
                 <AddressPicker
-                  value={addressData?.address || ''}
+                  value={addressData?.formatted_address || ''}
                   onAddressSelect={setAddressData}
-                  placeholder="Cerca l'indirizzo dell'azienda..."
+                  placeholder="Cerca l'indirizzo della sede..."
                 />
+                {addressData?.city && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Città: {addressData.city}{addressData.province ? ` (${addressData.province})` : ''}
+                  </p>
+                )}
               </div>
 
               <div className="flex justify-end gap-2">
@@ -334,9 +351,16 @@ export default function AdminCompanies() {
             <CardContent>
               <div className="space-y-2">
                 {(company.formatted_address || company.address) && (
-                  <div className="flex items-center text-sm text-muted-foreground">
-                    <MapPin className="h-4 w-4 mr-2" />
-                    {company.formatted_address || company.address}
+                  <div className="flex items-start text-sm text-muted-foreground">
+                    <MapPin className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <div>{company.formatted_address || company.address}</div>
+                      {company.city && (
+                        <div className="text-xs">
+                          {company.city}{company.province ? ` (${company.province})` : ''}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
                 <div className="text-xs text-muted-foreground">

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { OvertimeConversionService } from '@/services/OvertimeConversionService';
+import { getHolidayDates } from '@/services/ItalianHolidaysService';
 import { useAuth } from '@/contexts/AuthContext';
 import { applyMonthlyOvertimeCompensation } from '@/utils/monthlyOvertimeCompensation';
 import { 
@@ -60,16 +61,24 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
   const startDate = `${year}-${month}-01`;
   const endDate = `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`;
 
-  // Multi-tenant safety: scope by current user's company
+  // Multi-tenant safety: scope by current user's company and get company city for holidays
   const { data: me, error: meError } = await supabase
     .from('profiles')
-    .select('company_id')
+    .select('company_id, companies(city)')
     .eq('user_id', userId)
     .single();
   if (meError) throw meError;
 
-  // Fetch holidays for the selected month
-  const { data: holidayData, error: holidayError } = await supabase
+  // Get company city for patron saint holiday
+  const companyCity = (me as any)?.companies?.city as string | undefined;
+
+  // Get holidays using the Italian holidays service (includes national + patron saint)
+  const holidayDates = getHolidayDates(parseInt(year), companyCity).filter(
+    date => date >= startDate && date <= endDate
+  );
+
+  // Also fetch any manually added company holidays
+  const { data: manualHolidayData, error: holidayError } = await supabase
     .from('company_holidays')
     .select('date')
     .eq('company_id', me!.company_id)
@@ -77,10 +86,12 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
     .lte('date', endDate);
   
   if (holidayError) {
-    console.warn('Error fetching holidays:', holidayError);
+    console.warn('Error fetching manual holidays:', holidayError);
   }
   
-  const holidayDates = holidayData?.map(h => h.date) || [];
+  // Merge automatic and manual holidays
+  const manualHolidays = manualHolidayData?.map(h => h.date) || [];
+  const allHolidayDates = [...new Set([...holidayDates, ...manualHolidays])];
 
   const { data: profilesData, error: profilesError } = await supabase
     .from('profiles')
@@ -92,7 +103,7 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
   const profiles = profilesData || [];
   const userIds = profiles.map((p) => p.user_id);
   if (userIds.length === 0) {
-    return { data: [], holidays: holidayDates };
+    return { data: [], holidays: allHolidayDates };
   }
 
   const { data: timesheets, error: timesheetError } = await supabase
@@ -459,7 +470,7 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
     })
   );
 
-  return { data: processedData, holidays: holidayDates };
+  return { data: processedData, holidays: allHolidayDates };
 };
 
 export const useBusinessTripData = (selectedMonth: string) => {

@@ -6,14 +6,19 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useAddressSearch } from '@/hooks/use-address-search';
 import { cn } from '@/lib/utils';
 
+export interface AddressData {
+  address: string;
+  formatted_address: string;
+  latitude: number;
+  longitude: number;
+  city?: string;
+  province?: string;
+  country?: string;
+}
+
 interface AddressPickerProps {
   value?: string;
-  onAddressSelect: (data: {
-    address: string;
-    formatted_address: string;
-    latitude: number;
-    longitude: number;
-  }) => void;
+  onAddressSelect: (data: AddressData) => void;
   placeholder?: string;
   className?: string;
 }
@@ -25,15 +30,6 @@ interface AddressSearchResult {
   secondary_text?: string;
   lat?: string;
   lon?: string;
-  address?: {
-    road?: string;
-    house_number?: string;
-    city?: string;
-    town?: string;
-    village?: string;
-    country?: string;
-    postcode?: string;
-  };
 }
 
 const AddressPicker = ({ 
@@ -55,21 +51,18 @@ const AddressPicker = ({
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       if (query && query.length >= 3 && query !== selectedAddress) {
-        console.log('🔍 AddressPicker: Starting search for:', query, 'selectedAddress:', selectedAddress);
         searchAddresses(query);
         setShowSuggestions(true);
       } else {
-        console.log('🔍 AddressPicker: Hiding suggestions. query:', query, 'selectedAddress:', selectedAddress);
         setShowSuggestions(false);
       }
-    }, 500); // Aumentato debounce per stabilità
+    }, 500);
 
     return () => clearTimeout(timeoutId);
   }, [query, selectedAddress, searchAddresses]);
 
   const handleSelectAddress = async (result: AddressSearchResult) => {
     try {
-      // Use the geocoding function to get precise coordinates
       const geocodeResult = await geocodeAddress(result.display_name, result.place_id);
       
       if (geocodeResult) {
@@ -81,7 +74,10 @@ const AddressPicker = ({
           address: geocodeResult.formatted_address,
           formatted_address: geocodeResult.formatted_address,
           latitude: geocodeResult.latitude,
-          longitude: geocodeResult.longitude
+          longitude: geocodeResult.longitude,
+          city: geocodeResult.city,
+          province: geocodeResult.province,
+          country: geocodeResult.country
         });
       } else {
         // Fallback to using the suggestion data directly
@@ -139,29 +135,22 @@ const AddressPicker = ({
       {showSuggestions && suggestions.length > 0 && (
         <Card className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto">
           <CardContent className="p-0">
-            {suggestions.map((result, index) => {
-              console.log('🔍 Rendering suggestion:', result);
-              return (
-                <Button
-                  key={index}
-                  variant="ghost"
-                  className="w-full justify-start h-auto p-3 rounded-none"
-                  onClick={() => handleSelectAddress(result)}
-                >
-                  <MapPin className="h-4 w-4 mr-2 flex-shrink-0" />
-                  <div className="text-left">
-                    <div className="font-medium">{result.display_name}</div>
-                  </div>
-                </Button>
-              );
-            })}
+            {suggestions.map((result, index) => (
+              <Button
+                key={index}
+                variant="ghost"
+                className="w-full justify-start h-auto p-3 rounded-none"
+                onClick={() => handleSelectAddress(result)}
+              >
+                <MapPin className="h-4 w-4 mr-2 flex-shrink-0" />
+                <div className="text-left">
+                  <div className="font-medium">{result.display_name}</div>
+                </div>
+              </Button>
+            ))}
           </CardContent>
         </Card>
       )}
-      {/* Debug info */}
-      <div className="text-xs text-gray-500 mt-1">
-        Debug: showSuggestions={showSuggestions.toString()}, suggestions={suggestions.length}, loading={loading.toString()}
-      </div>
     </div>
   );
 };

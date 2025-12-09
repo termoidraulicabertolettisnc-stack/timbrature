@@ -282,23 +282,44 @@ export type Database = {
       }
       companies: {
         Row: {
+          address: string | null
+          city: string | null
+          country: string | null
           created_at: string | null
+          formatted_address: string | null
           id: string
+          latitude: number | null
+          longitude: number | null
           name: string
+          province: string | null
           updated_at: string | null
           vat_number: string | null
         }
         Insert: {
+          address?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string | null
+          formatted_address?: string | null
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           name: string
+          province?: string | null
           updated_at?: string | null
           vat_number?: string | null
         }
         Update: {
+          address?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string | null
+          formatted_address?: string | null
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           name?: string
+          province?: string | null
           updated_at?: string | null
           vat_number?: string | null
         }
@@ -310,6 +331,7 @@ export type Database = {
           created_at: string
           date: string
           id: string
+          is_location_based: boolean | null
           is_recurring: boolean | null
           name: string
           updated_at: string
@@ -319,6 +341,7 @@ export type Database = {
           created_at?: string
           date: string
           id?: string
+          is_location_based?: boolean | null
           is_recurring?: boolean | null
           name: string
           updated_at?: string
@@ -328,6 +351,7 @@ export type Database = {
           created_at?: string
           date?: string
           id?: string
+          is_location_based?: boolean | null
           is_recurring?: boolean | null
           name?: string
           updated_at?: string
