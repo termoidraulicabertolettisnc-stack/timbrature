@@ -89,15 +89,20 @@ export default function AdminConsolidation() {
 
   const loadSettings = async () => {
     try {
-      // Load company settings
+      // Load company settings with city from companies table
       const { data: companyData, error: companyError } = await supabase
         .from('company_settings')
-        .select('*')
+        .select('*, companies!company_settings_company_id_fkey(city)')
         .limit(1)
         .single();
       
       if (!companyError && companyData) {
-        setCompanySettings(companyData);
+        // Aggiungi la città alle impostazioni per le festività locali
+        const settingsWithCity = {
+          ...companyData,
+          city: companyData.companies?.city || null
+        };
+        setCompanySettings(settingsWithCity);
       }
 
       // Load employee settings for all employees
