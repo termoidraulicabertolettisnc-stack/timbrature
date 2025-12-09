@@ -273,14 +273,26 @@ export function MonthlyCalendarView({
     return weeks;
   };
 
-  // Ottieni le festività per il mese corrente
+// Ottieni la città dell'azienda dalle impostazioni (per festività patronali)
+  const companyCity = useMemo(() => {
+    // Cerca la città dalle props companySettings o dai primi dati disponibili
+    if (companySettings?.city) return companySettings.city;
+    // Prova a cercare nelle impostazioni dei dipendenti
+    const firstEmployeeId = Object.keys(employeeSettings || {})[0];
+    if (firstEmployeeId && employeeSettings?.[firstEmployeeId]?.company_city) {
+      return employeeSettings[firstEmployeeId].company_city;
+    }
+    return undefined;
+  }, [companySettings, employeeSettings]);
+
+  // Ottieni le festività per il mese corrente (incluse locali se c'è la città)
   const holidaysMap = useMemo(() => {
     const year = currentMonth.getFullYear();
-    const holidays = getAllHolidays(year);
+    const holidays = getAllHolidays(year, companyCity);
     const map = new Map<string, string>();
     holidays.forEach(h => map.set(h.date, h.name));
     return map;
-  }, [currentMonth]);
+  }, [currentMonth, companyCity]);
 
   const renderDayContent = (day: Date, employee: EmployeeMonthData) => {
     const dateStr = format(day, 'yyyy-MM-dd');

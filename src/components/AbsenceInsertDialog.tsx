@@ -30,6 +30,7 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
   const [employees, setEmployees] = useState<any[]>([]);
   const [employeeSettings, setEmployeeSettings] = useState<any>(null);
   const [companySettings, setCompanySettings] = useState<any>(null);
+  const [companyCity, setCompanyCity] = useState<string | undefined>(undefined);
   
   const [formData, setFormData] = useState({
     user_id: '',
@@ -94,7 +95,7 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
 
       setEmployeeSettings(empSettings);
 
-      // Carica company_settings
+      // Carica company_settings e città azienda
       const employee = employees.find(e => e.user_id === userId);
       if (employee?.company_id) {
         const { data: compSettings } = await supabase
@@ -104,6 +105,15 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
           .maybeSingle();
 
         setCompanySettings(compSettings);
+        
+        // Carica la città dell'azienda per le festività locali
+        const { data: companyData } = await supabase
+          .from('companies')
+          .select('city')
+          .eq('id', employee.company_id)
+          .maybeSingle();
+        
+        setCompanyCity(companyData?.city || undefined);
       }
 
       // Calcola ore contrattualizzate per il giorno
@@ -168,7 +178,7 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
         end: formData.date_to
       });
       
-      // Filtra i giorni escludendo festivi nazionali e domeniche
+      // Filtra i giorni escludendo festivi nazionali/locali e domeniche
       const days = allDays.filter(day => {
         const dateStr = format(day, 'yyyy-MM-dd');
         const dayOfWeek = getDay(day);
@@ -176,8 +186,8 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
         // Escludi domeniche
         if (dayOfWeek === 0) return false;
         
-        // Escludi festività nazionali italiane
-        if (checkIsHoliday(dateStr)) return false;
+        // Escludi festività nazionali e locali italiane
+        if (checkIsHoliday(dateStr, companyCity)) return false;
         
         return true;
       });
@@ -311,7 +321,7 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
       const dateStr = format(day, 'yyyy-MM-dd');
       const dayOfWeek = getDay(day);
       if (dayOfWeek === 0) return false; // domenica
-      if (checkIsHoliday(dateStr)) return false; // festivo nazionale
+      if (checkIsHoliday(dateStr, companyCity)) return false; // festivo nazionale/locale
       return true;
     }).length;
   };
