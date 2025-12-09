@@ -80,6 +80,7 @@ export function MassAbsenceInsertDialog({
   const [showConflicts, setShowConflicts] = useState(true);
   const [companyHolidays, setCompanyHolidays] = useState<Set<string>>(new Set());
   const [employeeSettings, setEmployeeSettings] = useState<Map<string, any>>(new Map());
+  const [companyCity, setCompanyCity] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (open) {
@@ -119,9 +120,11 @@ export function MassAbsenceInsertDialog({
       if (employeesError) throw employeesError;
       setEmployees(employeesData || []);
       
-      // Carica i festivi aziendali
+      // Carica i festivi aziendali e la città dell'azienda
       if (employeesData && employeesData.length > 0) {
         const companyId = employeesData[0].company_id;
+        
+        // Carica festivi aziendali
         const { data: holidaysData, error: holidaysError } = await supabase
           .from('company_holidays')
           .select('date')
@@ -130,6 +133,15 @@ export function MassAbsenceInsertDialog({
         if (!holidaysError && holidaysData) {
           setCompanyHolidays(new Set(holidaysData.map(h => h.date)));
         }
+        
+        // Carica la città dell'azienda per le festività patronali
+        const { data: companyData } = await supabase
+          .from('companies')
+          .select('city')
+          .eq('id', companyId)
+          .maybeSingle();
+        
+        setCompanyCity(companyData?.city || undefined);
       }
     } catch (error) {
       console.error('Error loading employees:', error);
@@ -171,13 +183,13 @@ export function MassAbsenceInsertDialog({
         // Controlla festivi aziendali
         if (companyHolidays.has(dateStr)) return false;
         
-        // Controlla festività nazionali italiane
-        if (checkIsNationalHoliday(dateStr)) return false;
+        // Controlla festività nazionali e locali italiane
+        if (checkIsNationalHoliday(dateStr, companyCity)) return false;
       }
       
       return true;
     });
-  }, [formData.date_from, formData.date_to, formData.exclude_weekends, formData.exclude_saturdays, formData.exclude_holidays, companyHolidays]);
+  }, [formData.date_from, formData.date_to, formData.exclude_weekends, formData.exclude_saturdays, formData.exclude_holidays, companyHolidays, companyCity]);
 
   const [conflictsData, setConflictsData] = useState<Map<string, { date: string; absence_type: string }[]>>(new Map());
 
