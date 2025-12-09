@@ -9,10 +9,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon } from 'lucide-react';
-import { format, addDays, eachDayOfInterval } from 'date-fns';
+import { CalendarIcon, AlertCircle } from 'lucide-react';
+import { format, addDays, eachDayOfInterval, getDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { getContractedHoursForDay } from '@/utils/contractedHours';
+import { isHoliday as checkIsHoliday, getAllHolidays } from '@/services/ItalianHolidaysService';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface AbsenceInsertDialogProps {
   open: boolean;
@@ -160,10 +162,24 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
         throw new Error('Company ID non trovato per il dipendente');
       }
 
-      // Ottieni tutti i giorni nel periodo selezionato
-      const days = eachDayOfInterval({
+      // Ottieni tutti i giorni nel periodo selezionato (escludi festivi nazionali e domeniche)
+      const allDays = eachDayOfInterval({
         start: formData.date_from,
         end: formData.date_to
+      });
+      
+      // Filtra i giorni escludendo festivi nazionali e domeniche
+      const days = allDays.filter(day => {
+        const dateStr = format(day, 'yyyy-MM-dd');
+        const dayOfWeek = getDay(day);
+        
+        // Escludi domeniche
+        if (dayOfWeek === 0) return false;
+        
+        // Escludi festività nazionali italiane
+        if (checkIsHoliday(dateStr)) return false;
+        
+        return true;
       });
 
       // Controlla se esistono già assenze dello stesso tipo per le stesse date
@@ -278,12 +294,29 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
   };
 
   const getTotalDays = () => {
-    const days = eachDayOfInterval({
+    const allDays = eachDayOfInterval({
       start: formData.date_from,
       end: formData.date_to
     });
-    return days.length;
+    return allDays.length;
   };
+
+  // Conta i giorni effettivi (esclusi festivi e domeniche)
+  const getEffectiveDays = () => {
+    const allDays = eachDayOfInterval({
+      start: formData.date_from,
+      end: formData.date_to
+    });
+    return allDays.filter(day => {
+      const dateStr = format(day, 'yyyy-MM-dd');
+      const dayOfWeek = getDay(day);
+      if (dayOfWeek === 0) return false; // domenica
+      if (checkIsHoliday(dateStr)) return false; // festivo nazionale
+      return true;
+    }).length;
+  };
+
+  const excludedDays = getTotalDays() - getEffectiveDays();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -430,10 +463,25 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
             <div className="text-sm">
               <p><strong>Riepilogo:</strong></p>
               <p>Tipo: {getAbsenceTypeLabel(formData.absence_type)}</p>
-              <p>Giorni: {getTotalDays()}</p>
-              <p>Ore totali: {(getTotalDays() * formData.hours).toFixed(1)}</p>
+              <p>Giorni selezionati: {getTotalDays()}</p>
+              <p>Giorni effettivi: {getEffectiveDays()}</p>
+              {excludedDays > 0 && (
+                <p className="text-muted-foreground text-xs">
+                  ({excludedDays} {excludedDays === 1 ? 'giorno escluso' : 'giorni esclusi'}: festivi/domeniche)
+                </p>
+              )}
+              <p>Ore totali: {(getEffectiveDays() * formData.hours).toFixed(1)}</p>
             </div>
           </div>
+          
+          {excludedDays > 0 && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                I giorni festivi nazionali e le domeniche verranno esclusi automaticamente.
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="notes">Note</Label>

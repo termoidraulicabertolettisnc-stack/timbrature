@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Calendar, ChevronLeft, ChevronRight, Clock, CalendarX, UtensilsCrossed } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, parseISO } from 'date-fns';
+import { Calendar, ChevronLeft, ChevronRight, Clock, CalendarX, UtensilsCrossed, PartyPopper } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, parseISO, getDay } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { AbsenceIndicator } from './AbsenceIndicator';
@@ -10,6 +10,9 @@ import { sessionsForDay, utcToLocal } from '@/utils/timeSegments';
 import { getContractedHoursForDay, hasMissingHours, formatMissingHours } from '@/utils/contractedHours';
 import { calculateNetHours } from '@/utils/lunchBreakUtils';
 import { AlertCircle } from 'lucide-react';
+import { isHoliday as checkIsHoliday, getAllHolidays } from '@/services/ItalianHolidaysService';
+import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface MonthlyCalendarViewProps {
   timesheets: TimesheetWithProfile[];
@@ -270,23 +273,82 @@ export function MonthlyCalendarView({
     return weeks;
   };
 
+  // Ottieni le festività per il mese corrente
+  const holidaysMap = useMemo(() => {
+    const year = currentMonth.getFullYear();
+    const holidays = getAllHolidays(year);
+    const map = new Map<string, string>();
+    holidays.forEach(h => map.set(h.date, h.name));
+    return map;
+  }, [currentMonth]);
+
   const renderDayContent = (day: Date, employee: EmployeeMonthData) => {
     const dateStr = format(day, 'yyyy-MM-dd');
     const dayData = employee.days[dateStr];
     const isCurrentMonth = isSameMonth(day, currentMonth);
+    const dayOfWeek = getDay(day);
+    const isSunday = dayOfWeek === 0;
+    const holidayName = holidaysMap.get(dateStr);
+    const isHolidayDay = !!holidayName;
     
     // Calcola ore contrattualizzate per questo giorno
     const employeeSetting = employeeSettings?.[employee.user_id];
     const contractedHours = getContractedHoursForDay(dateStr, employeeSetting, companySettings);
     const workedHours = dayData?.total_hours || 0;
     const hasAbsence = dayData?.absences && dayData.absences.length > 0;
-    const showMissingHoursWarning = !hasAbsence && hasMissingHours(workedHours, contractedHours);
+    
+    // Non mostrare warning di ore mancanti per festivi e domeniche
+    const showMissingHoursWarning = !hasAbsence && !isHolidayDay && !isSunday && hasMissingHours(workedHours, contractedHours);
     const missingHours = contractedHours - workedHours;
 
-    if (!dayData || !isCurrentMonth) {
+    // Giorno festivo o domenica senza dati
+    if ((isHolidayDay || isSunday) && !dayData) {
       return (
         <div className={`min-h-[60px] p-1 ${!isCurrentMonth ? 'opacity-30' : ''}`}>
-          {isCurrentMonth && contractedHours > 0 && (
+          {isCurrentMonth && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="bg-amber-50 border border-amber-200 rounded p-1 text-center">
+                    <PartyPopper className="h-4 w-4 text-amber-600 mx-auto" />
+                    <span className="text-xs text-amber-700 font-medium">
+                      {holidayName || 'Domenica'}
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{holidayName || 'Domenica - giorno di riposo'}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
+      );
+    }
+
+    if (!dayData || !isCurrentMonth) {
+      // Non mostrare warning ore mancanti per festivi e domeniche
+      const shouldShowMissingWarning = isCurrentMonth && contractedHours > 0 && !isHolidayDay && !isSunday;
+      
+      return (
+        <div className={`min-h-[60px] p-1 ${!isCurrentMonth ? 'opacity-30' : ''}`}>
+          {/* Indicatore festivo anche se non ci sono dati */}
+          {isCurrentMonth && isHolidayDay && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="bg-amber-50 border border-amber-200 rounded p-1 mb-1 text-center">
+                    <PartyPopper className="h-3 w-3 text-amber-600 mx-auto" />
+                    <span className="text-xs text-amber-700">{holidayName}</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Festività: {holidayName}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {shouldShowMissingWarning && (
             <div className="bg-red-50 border border-red-200 rounded p-1">
               <div className="flex items-center gap-1 text-red-600 mb-1">
                 <AlertCircle className="h-3 w-3" />
@@ -295,7 +357,7 @@ export function MonthlyCalendarView({
               <div className="text-xs text-red-700 mb-1">Nessuna timbratura</div>
             </div>
           )}
-          {isCurrentMonth && (
+          {isCurrentMonth && !isHolidayDay && !isSunday && (
             <div className="flex gap-1 mt-1">
               <Button
                 variant="ghost"
@@ -322,7 +384,24 @@ export function MonthlyCalendarView({
     }
 
     return (
-      <div className={`min-h-[60px] p-1 ${!isCurrentMonth ? 'opacity-30' : ''}`}>
+      <div className={`min-h-[60px] p-1 ${!isCurrentMonth ? 'opacity-30' : ''} ${isHolidayDay ? 'bg-amber-50/50' : ''}`}>
+        {/* Indicatore festivo in alto se è un giorno festivo */}
+        {isHolidayDay && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-300 text-xs mb-1 flex items-center gap-1 w-fit">
+                  <PartyPopper className="h-3 w-3" />
+                  Festivo
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{holidayName}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+        
         {/* Mostra assenze se presenti */}
         {dayData.absences.length > 0 && (
           <div className="mb-1">
