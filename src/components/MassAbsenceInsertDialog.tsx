@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { isHoliday as checkIsNationalHoliday } from '@/services/ItalianHolidaysService';
 
 interface MassAbsenceInsertDialogProps {
   open: boolean;
@@ -157,6 +158,7 @@ export function MassAbsenceInsertDialog({
 
     return allDays.filter(day => {
       const dayOfWeek = getDay(day);
+      const dateStr = format(day, 'yyyy-MM-dd');
       
       // Escludi sabato (6) se exclude_saturdays è true
       if (formData.exclude_saturdays && dayOfWeek === 6) return false;
@@ -166,8 +168,11 @@ export function MassAbsenceInsertDialog({
       
       // Escludi festivi aziendali se exclude_holidays è true
       if (formData.exclude_holidays) {
-        const dateStr = format(day, 'yyyy-MM-dd');
+        // Controlla festivi aziendali
         if (companyHolidays.has(dateStr)) return false;
+        
+        // Controlla festività nazionali italiane
+        if (checkIsNationalHoliday(dateStr)) return false;
       }
       
       return true;
