@@ -41,6 +41,7 @@ import { TimesheetWithProfile } from '@/types/timesheet';
 import { BenefitsService } from '@/services/BenefitsService';
 import { protectTimesheetManualEdit } from '@/utils/temporalEmployeeSettings';
 import { getContractedHoursForDay } from '@/utils/contractedHours';
+import { isHoliday as checkIsHoliday } from '@/services/ItalianHolidaysService';
 
 interface Project {
   id: string;
@@ -230,13 +231,31 @@ export function DayEditDialog({
   };
 
   const initializeData = async () => {
+    // Get company city for holiday detection
+    let companyCity: string | undefined;
+    try {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('companies(city)')
+        .eq('user_id', employee.user_id)
+        .single();
+      companyCity = (profileData as any)?.companies?.city;
+    } catch (e) {
+      console.warn('Could not fetch company city for holiday detection:', e);
+    }
+
+    // Check if this date is a holiday (national or patron saint)
+    const dateIsSaturday = new Date(`${date}T00:00:00`).getDay() === 6;
+    const dateIsHoliday = checkIsHoliday(date, companyCity);
+
     // Initialize timesheet data
     if (timesheet) {
       setTimesheetData({
         project_id: timesheet.project_id || '',
         notes: timesheet.notes || '',
         is_saturday: timesheet.is_saturday,
-        is_holiday: timesheet.is_holiday,
+        // Use stored value if exists, otherwise use detected holiday status
+        is_holiday: timesheet.is_holiday || dateIsHoliday,
       });
 
       // Load creator/updater profiles
@@ -273,11 +292,12 @@ export function DayEditDialog({
         // Usa la configurazione di default (già caricata in effectiveSettings)
       }
     } else {
+      // New timesheet - auto-detect is_saturday and is_holiday
       setTimesheetData({
         project_id: '',
         notes: '',
-        is_saturday: false,
-        is_holiday: false,
+        is_saturday: dateIsSaturday,
+        is_holiday: dateIsHoliday,
       });
       setShowLunchOverride(false);
     }

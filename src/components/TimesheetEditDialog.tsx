@@ -24,6 +24,7 @@ import LocationDisplay from './LocationDisplay';
 import LocationTrackingRoute from './LocationTrackingRoute';
 import { TimesheetWithProfile } from '@/types/timesheet';
 import { protectTimesheetManualEdit } from '@/utils/temporalEmployeeSettings';
+import { isHoliday as checkIsHoliday } from '@/services/ItalianHolidaysService';
 
 interface Project {
   id: string;
@@ -169,77 +170,98 @@ export function TimesheetEditDialog({ timesheet, open, onOpenChange, onSuccess }
 
   // Populate form when timesheet changes
   useEffect(() => {
-    if (timesheet) {
-      console.log('🔧 TIMESHEET DEBUG - Populating form:', {
-        id: timesheet.id,
-        start_time: timesheet.start_time,
-        end_time: timesheet.end_time,
-        notes: timesheet.notes,
-        is_imported: timesheet.notes?.includes('Importato da Excel')
-      });
+    const initializeForm = async () => {
+      if (timesheet) {
+        console.log('🔧 TIMESHEET DEBUG - Populating form:', {
+          id: timesheet.id,
+          start_time: timesheet.start_time,
+          end_time: timesheet.end_time,
+          notes: timesheet.notes,
+          is_imported: timesheet.notes?.includes('Importato da Excel')
+        });
 
-      // Verifica se è un timesheet importato senza sessioni
-      if (timesheet.notes?.includes('Importato da Excel') && !timesheet.timesheet_sessions?.length) {
-        console.log('🔧 IMPORTED FIX - Handling imported timesheet without sessions');
-        // Procedi normalmente usando i dati principali del timesheet
+        // Get company city for holiday detection
+        let companyCity: string | undefined;
+        try {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('companies(city)')
+            .eq('user_id', timesheet.user_id)
+            .single();
+          companyCity = (profileData as any)?.companies?.city;
+        } catch (e) {
+          console.warn('Could not fetch company city for holiday detection:', e);
+        }
+
+        // Check if this date is a holiday (national or patron saint)
+        const dateIsHoliday = checkIsHoliday(timesheet.date, companyCity);
+
+        // Verifica se è un timesheet importato senza sessioni
+        if (timesheet.notes?.includes('Importato da Excel') && !timesheet.timesheet_sessions?.length) {
+          console.log('🔧 IMPORTED FIX - Handling imported timesheet without sessions');
+          // Procedi normalmente usando i dati principali del timesheet
+        }
+
+        console.log('🔧 DIALOG SESSION FIX - Populating form with timesheet:', {
+          id: timesheet.id,
+          start_time: timesheet.start_time,
+          end_time: timesheet.end_time,
+          editing_session_id: (timesheet as any)._editing_session_id,
+          editing_session_order: (timesheet as any)._editing_session_order
+        });
+        
+        // CORREZIONE: Controlla se stiamo modificando una sessione specifica
+        const isEditingSpecificSession = (timesheet as any)._editing_session_id !== undefined;
+        
+        if (isEditingSpecificSession) {
+          console.log('🔧 DIALOG SESSION FIX - Editing specific session:', (timesheet as any)._editing_session_id, 'order:', (timesheet as any)._editing_session_order);
+        } else {
+          console.log('🔧 DIALOG SESSION FIX - Editing main timesheet');
+        }
+        
+        // Determina se la sessione attraversa mezzanotte
+        const sessionIsMultiday = timesheet.start_time && timesheet.end_time && 
+          new Date(timesheet.start_time).toDateString() !== new Date(timesheet.end_time).toDateString();
+        
+        setIsMultiday(sessionIsMultiday);
+        
+        setFormData({
+          date: timesheet.date,
+          end_date: timesheet.end_date || timesheet.date,
+          // CORREZIONE: Usa gli orari corretti con data se multiday
+          start_time: timesheet.start_time ? utcToLocalTime(timesheet.start_time, sessionIsMultiday) : '',
+          end_time: timesheet.end_time ? utcToLocalTime(timesheet.end_time, sessionIsMultiday) : '',
+          lunch_start_time: timesheet.lunch_start_time ? utcToLocalTime(timesheet.lunch_start_time) : '',
+          lunch_end_time: timesheet.lunch_end_time ? utcToLocalTime(timesheet.lunch_end_time) : '',
+          project_id: timesheet.project_id || 'none',
+          notes: isEditingSpecificSession ? ((timesheet as any).session_notes || timesheet.notes || '') : (timesheet.notes || ''),
+          is_saturday: timesheet.is_saturday,
+          // Use stored value or detected holiday status
+          is_holiday: timesheet.is_holiday || dateIsHoliday,
+        });
+
+        console.log('🔧 DIALOG SESSION FIX - Converted times:', {
+          original_start_time: timesheet.start_time,
+          converted_start_time: timesheet.start_time ? utcToLocalTime(timesheet.start_time) : '',
+          original_end_time: timesheet.end_time,
+          converted_end_time: timesheet.end_time ? utcToLocalTime(timesheet.end_time) : '',
+          is_editing_session: isEditingSpecificSession
+        });
+
+        // Gestione modalità pausa pranzo
+        if (timesheet.lunch_start_time && timesheet.lunch_end_time) {
+          setLunchBreakMode('times');
+        } else if (timesheet.lunch_duration_minutes !== null && timesheet.lunch_duration_minutes !== undefined) {
+          setLunchBreakMode('duration');
+          setLunchDuration(timesheet.lunch_duration_minutes);
+        } else {
+          setLunchBreakMode('duration');
+          setLunchDuration(defaultLunchMinutes);
+        }
       }
-
-      console.log('🔧 DIALOG SESSION FIX - Populating form with timesheet:', {
-        id: timesheet.id,
-        start_time: timesheet.start_time,
-        end_time: timesheet.end_time,
-        editing_session_id: (timesheet as any)._editing_session_id,
-        editing_session_order: (timesheet as any)._editing_session_order
-      });
-      
-      // CORREZIONE: Controlla se stiamo modificando una sessione specifica
-      const isEditingSpecificSession = (timesheet as any)._editing_session_id !== undefined;
-      
-      if (isEditingSpecificSession) {
-        console.log('🔧 DIALOG SESSION FIX - Editing specific session:', (timesheet as any)._editing_session_id, 'order:', (timesheet as any)._editing_session_order);
-      } else {
-      console.log('🔧 DIALOG SESSION FIX - Editing main timesheet');
-      }
-      
-      // Determina se la sessione attraversa mezzanotte
-      const sessionIsMultiday = timesheet.start_time && timesheet.end_time && 
-        new Date(timesheet.start_time).toDateString() !== new Date(timesheet.end_time).toDateString();
-      
-      setIsMultiday(sessionIsMultiday);
-      
-      setFormData({
-        date: timesheet.date,
-        end_date: timesheet.end_date || timesheet.date,
-        // CORREZIONE: Usa gli orari corretti con data se multiday
-        start_time: timesheet.start_time ? utcToLocalTime(timesheet.start_time, sessionIsMultiday) : '',
-        end_time: timesheet.end_time ? utcToLocalTime(timesheet.end_time, sessionIsMultiday) : '',
-        lunch_start_time: timesheet.lunch_start_time ? utcToLocalTime(timesheet.lunch_start_time) : '',
-        lunch_end_time: timesheet.lunch_end_time ? utcToLocalTime(timesheet.lunch_end_time) : '',
-        project_id: timesheet.project_id || 'none',
-        notes: isEditingSpecificSession ? ((timesheet as any).session_notes || timesheet.notes || '') : (timesheet.notes || ''),
-        is_saturday: timesheet.is_saturday,
-        is_holiday: timesheet.is_holiday,
-      });
-
-      console.log('🔧 DIALOG SESSION FIX - Converted times:', {
-        original_start_time: timesheet.start_time,
-        converted_start_time: timesheet.start_time ? utcToLocalTime(timesheet.start_time) : '',
-        original_end_time: timesheet.end_time,
-        converted_end_time: timesheet.end_time ? utcToLocalTime(timesheet.end_time) : '',
-        is_editing_session: isEditingSpecificSession
-      });
-
-      // Gestione modalità pausa pranzo
-      if (timesheet.lunch_start_time && timesheet.lunch_end_time) {
-        setLunchBreakMode('times');
-      } else if (timesheet.lunch_duration_minutes !== null && timesheet.lunch_duration_minutes !== undefined) {
-        setLunchBreakMode('duration');
-        setLunchDuration(timesheet.lunch_duration_minutes);
-      } else {
-        setLunchBreakMode('duration');
-        setLunchDuration(defaultLunchMinutes);
-      }
-    }
+    };
+    
+    initializeForm();
   }, [timesheet, defaultLunchMinutes]);
 
   const loadProjects = async () => {
