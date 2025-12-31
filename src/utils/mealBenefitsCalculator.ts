@@ -102,18 +102,38 @@ export function calculateMealBenefits(
                companySettings?.meal_allowance_policy || 
                'disabled';
 
-  // CRITICAL FIX: If meal_voucher_enabled is true but policy is 'disabled', 
-  // treat it as 'meal_vouchers_only' for backward compatibility
-  const mealVoucherEnabled = employeeSettings?.meal_voucher_enabled ?? 
-                             companySettings?.meal_voucher_enabled ?? 
-                             false;
+  // CRITICAL FIX: Check meal_voucher_enabled - if explicitly false, disable meal vouchers
+  // Priority: employee setting > company setting > default (false)
+  const employeeMealVoucherEnabled = employeeSettings?.meal_voucher_enabled;
+  const companyMealVoucherEnabled = companySettings?.meal_voucher_enabled;
+  
+  // If employee explicitly set meal_voucher_enabled to false, disable it
+  // Otherwise fall back to company setting, then default to false
+  const mealVoucherEnabled = employeeMealVoucherEnabled !== undefined 
+    ? employeeMealVoucherEnabled 
+    : (companyMealVoucherEnabled ?? false);
   
   console.log('🍽️ [MealBenefits] Policy check:', {
     initialPolicy: policy,
-    mealVoucherEnabled,
-    willOverride: policy === 'disabled' && mealVoucherEnabled,
+    employeeMealVoucherEnabled,
+    companyMealVoucherEnabled,
+    effectiveMealVoucherEnabled: mealVoucherEnabled,
   });
   
+  // If meal_voucher_enabled is explicitly false, disable meal vouchers regardless of policy
+  if (mealVoucherEnabled === false) {
+    console.log('🍽️ [MealBenefits] ❌ meal_voucher_enabled = false, nessun buono pasto');
+    return { 
+      mealVoucher: false, 
+      dailyAllowance: policy === 'daily_allowance' || policy === 'both' ? workedHours >= (employeeSettings?.daily_allowance_min_hours || companySettings?.default_daily_allowance_min_hours || 6) : false, 
+      workedHours,
+      mealVoucherAmount: 0,
+      dailyAllowanceAmount: 0 
+    };
+  }
+  
+  // If meal_voucher_enabled is true but policy is 'disabled', 
+  // treat it as 'meal_vouchers_only' for backward compatibility
   if (policy === 'disabled' && mealVoucherEnabled) {
     policy = 'meal_vouchers_only';
     console.log('🍽️ [MealBenefits] ✅ Policy overridden to meal_vouchers_only');
