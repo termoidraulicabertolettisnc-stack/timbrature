@@ -61,7 +61,10 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
   const startDate = `${year}-${month}-01`;
   const endDate = `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`;
 
-  // Multi-tenant safety: scope by current user's company and get company city for holidays
+  // Check if user is admin
+  const { data: isAdmin } = await supabase.rpc('is_admin');
+
+  // Get current user's company for holidays (used as fallback for city)
   const { data: me, error: meError } = await supabase
     .from('profiles')
     .select('company_id, companies(city)')
@@ -77,11 +80,30 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
     date => date >= startDate && date <= endDate
   );
 
-  // Also fetch any manually added company holidays
+  // For admins: load all active employees; for regular users: only their company
+  let profilesQuery = supabase
+    .from('profiles')
+    .select('user_id, first_name, last_name, company_id')
+    .eq('is_active', true);
+  
+  if (!isAdmin) {
+    profilesQuery = profilesQuery.eq('company_id', me!.company_id);
+  }
+
+  const { data: profilesData, error: profilesError } = await profilesQuery;
+  if (profilesError) throw profilesError;
+
+  const profiles = profilesData || [];
+  const userIds = profiles.map((p) => p.user_id);
+  
+  // Get unique company IDs for fetching holidays
+  const uniqueCompanyIds = [...new Set(profiles.map(p => p.company_id))];
+  
+  // Fetch manual holidays for all relevant companies
   const { data: manualHolidayData, error: holidayError } = await supabase
     .from('company_holidays')
     .select('date')
-    .eq('company_id', me!.company_id)
+    .in('company_id', uniqueCompanyIds.length > 0 ? uniqueCompanyIds : [me!.company_id])
     .gte('date', startDate)
     .lte('date', endDate);
   
@@ -93,15 +115,6 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
   const manualHolidays = manualHolidayData?.map(h => h.date) || [];
   const allHolidayDates = [...new Set([...holidayDates, ...manualHolidays])];
 
-  const { data: profilesData, error: profilesError } = await supabase
-    .from('profiles')
-    .select('user_id, first_name, last_name, company_id')
-    .eq('is_active', true)
-    .eq('company_id', me!.company_id);
-  if (profilesError) throw profilesError;
-
-  const profiles = profilesData || [];
-  const userIds = profiles.map((p) => p.user_id);
   if (userIds.length === 0) {
     return { data: [], holidays: allHolidayDates };
   }
