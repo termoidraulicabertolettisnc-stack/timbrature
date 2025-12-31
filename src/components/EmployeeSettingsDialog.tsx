@@ -709,7 +709,23 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
                   <Label>Politica Buoni Pasto / Indennità</Label>
                   <Select
                     value={(settings as any).meal_allowance_policy || 'company_default'}
-                    onValueChange={(value) => updateSetting('meal_allowance_policy' as any, value === 'company_default' ? null : value)}
+                    onValueChange={(value) => {
+                      const newPolicy = value === 'company_default' ? null : value;
+                      updateSetting('meal_allowance_policy' as any, newPolicy);
+                      // CRITICAL: Sync meal_voucher_enabled with policy
+                      // When policy is 'disabled', meal_voucher_enabled must be false
+                      // When policy includes meal vouchers, meal_voucher_enabled must be true
+                      if (newPolicy === 'disabled') {
+                        updateSetting('meal_voucher_enabled' as any, false);
+                      } else if (newPolicy === 'meal_vouchers_only' || newPolicy === 'both') {
+                        updateSetting('meal_voucher_enabled' as any, true);
+                      } else if (newPolicy === 'daily_allowance') {
+                        updateSetting('meal_voucher_enabled' as any, false);
+                      } else {
+                        // company_default: reset to null to use company setting
+                        updateSetting('meal_voucher_enabled' as any, null);
+                      }
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={companySettings ? `Default: ${(companySettings as any).meal_allowance_policy || 'disabled'}` : 'Seleziona politica'} />
