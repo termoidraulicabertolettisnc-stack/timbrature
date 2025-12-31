@@ -358,10 +358,13 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
       let finalDailyData = { ...dailyData };
       
       if (hasMonthlyOvertimeCompensation && totalOvertime > 0) {
+        // NOTE: We pass 0 for compensableAbsenceHours because full-day absences
+        // should NOT be included in deficit calculation - only days where employee
+        // actually worked less than contracted count as deficit
         const compensationResult = applyMonthlyOvertimeCompensation(
           dailyData,
           dailyContractedHours,
-          compensableAbsenceHours
+          0 // Full-day absences excluded from compensation
         );
         
         finalDailyData = compensationResult.dailyData;
