@@ -296,6 +296,7 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
             daily_allowance_min_hours: temporalSettings.daily_allowance_min_hours,
             lunch_break_type: temporalSettings.lunch_break_type,
             saturday_handling: temporalSettings.saturday_handling,
+            meal_voucher_enabled: temporalSettings.meal_voucher_enabled,
           } : undefined,
           companySettingsForEmployee,
           processedTimesheet.date,
