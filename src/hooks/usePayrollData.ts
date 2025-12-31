@@ -268,10 +268,13 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
     // Gli straordinari vengono compensati con il DEFICIT di ore (ore contrattuali - ore ordinarie lavorate)
     // Le ore ordinarie in deficit vengono "riempite" con le ore di straordinario
     if (hasMonthlyOvertimeCompensation && totalOvertime > 0) {
+      // NOTE: We pass 0 for compensableAbsenceHours because full-day absences
+      // should NOT be included in deficit calculation - only days where employee
+      // actually worked less than contracted count as deficit
       const compensationResult = applyMonthlyOvertimeCompensation(
         dailyData,
         dailyContractedHours,
-        compensableAbsenceHours
+        0 // Full-day absences excluded from compensation
       );
       
       finalDailyData = compensationResult.dailyData;
