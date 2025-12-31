@@ -61,13 +61,20 @@ export class OvertimeConversionService {
       console.error('Error fetching company settings:', companyError);
     }
 
-    if (!companySettings?.enable_overtime_conversion) {
-      return null; // Conversion disabled at company level
+    // Employee-level setting takes precedence over company setting
+    // If employee has explicit enable_overtime_conversion, use it
+    // Otherwise fall back to company setting
+    const isEnabled = employeeSettings?.enable_overtime_conversion !== undefined 
+      ? employeeSettings.enable_overtime_conversion 
+      : (companySettings?.enable_overtime_conversion ?? false);
+
+    if (!isEnabled) {
+      return null; // Conversion disabled
     }
 
     return {
-      enable_overtime_conversion: employeeSettings?.enable_overtime_conversion ?? companySettings?.enable_overtime_conversion ?? false,
-      overtime_conversion_rate: employeeSettings?.overtime_conversion_rate ?? companySettings.default_overtime_conversion_rate ?? 12.00
+      enable_overtime_conversion: true,
+      overtime_conversion_rate: employeeSettings?.overtime_conversion_rate ?? companySettings?.default_overtime_conversion_rate ?? 12.00
     };
   }
 
