@@ -135,8 +135,13 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  // Reset selectedCompanyId when employee changes
   useEffect(() => {
-    if (open) {
+    setSelectedCompanyId(employee.company_id);
+  }, [employee.id, employee.company_id]);
+
+  useEffect(() => {
+    if (open && selectedCompanyId) {
       loadSettings();
     }
   }, [open, employee.id, selectedCompanyId]);
