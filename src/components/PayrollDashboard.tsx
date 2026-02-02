@@ -95,7 +95,9 @@ export default function PayrollDashboard() {
       'PR': 'PR',
       'permesso_retribuito': 'PR',
       'PNR': 'PNR',
-      'permesso_non_retribuito': 'PNR'
+      'permesso_non_retribuito': 'PNR',
+      'C': 'C',
+      'congedo': 'C'
     };
     return labels[type] || type.charAt(0).toUpperCase();
   };
@@ -217,7 +219,7 @@ export default function PayrollDashboard() {
     
     worksheet.addRow([]);
     worksheet.addRow(['LEGENDA:']);
-    worksheet.addRow(['A: Assenza Ingiustificata', '', 'F: Ferie', '', 'FS: Festività']);
+    worksheet.addRow(['A: Assenza Ingiustificata', '', 'F: Ferie', '', 'FS: Festività', '', 'C: Congedo']);
     worksheet.addRow(['I: Infortunio', '', 'M: Malattia', '', 'PR: Permesso Retribuito', '', 'PNR: Permesso non retribuito']);
   };
 
@@ -564,6 +566,7 @@ export default function PayrollDashboard() {
             <span><strong>M:</strong> Malattia</span>
             <span><strong>PR:</strong> Permesso Retribuito</span>
             <span><strong>PNR:</strong> Permesso non retribuito</span>
+            <span><strong>C:</strong> Congedo</span>
           </div>
         </div>
       </Card>

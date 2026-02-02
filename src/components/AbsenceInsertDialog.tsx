@@ -36,7 +36,7 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
   
   const [formData, setFormData] = useState({
     user_id: '',
-    absence_type: 'F' as 'F' | 'I' | 'M' | 'PNR' | 'AI',
+    absence_type: 'F' as 'F' | 'I' | 'M' | 'PNR' | 'AI' | 'C',
     date_from: new Date(),
     date_to: new Date(),
     hours: 8,
@@ -301,7 +301,8 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
       'M': 'Malattia',
       'I': 'Infortunio',
       'PNR': 'Permesso non retribuito',
-      'AI': 'Assenza ingiustificata'
+      'AI': 'Assenza ingiustificata',
+      'C': 'Congedo'
     };
     return labels[type as keyof typeof labels] || type;
   };
@@ -364,6 +365,7 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
                 <SelectItem value="I">Infortunio</SelectItem>
                 <SelectItem value="PNR">Permesso non retribuito</SelectItem>
                 <SelectItem value="AI">Assenza ingiustificata</SelectItem>
+                <SelectItem value="C">Congedo</SelectItem>
               </SelectContent>
             </Select>
           </div>
