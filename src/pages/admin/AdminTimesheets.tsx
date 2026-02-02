@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MultiEmployeeSelect } from "@/components/MultiEmployeeSelect";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -424,7 +425,7 @@ export default function AdminTimesheets() {
   const [activeView, setActiveView] = useState<"daily" | "weekly" | "monthly">("daily");
 
   // Stati per i filtri
-  const [selectedEmployee, setSelectedEmployee] = useState<string>("all");
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>(["all"]);
   const [selectedProject, setSelectedProject] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<string>(format(new Date(), "yyyy-MM-dd"));
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -438,7 +439,7 @@ export default function AdminTimesheets() {
   } = useTimesheets({
     dateFilter,
     activeView,
-    selectedEmployee,
+    selectedEmployee: selectedEmployees.includes('all') ? 'all' : selectedEmployees[0] || 'all',
     selectedProject,
   });
 
@@ -586,7 +587,7 @@ export default function AdminTimesheets() {
 
       loadAbsences(startDate, endDate);
     }
-  }, [user, selectedEmployee, selectedProject, dateFilter, activeView]);
+  }, [user, selectedEmployees, selectedProject, dateFilter, activeView]);
 
   // Forza il re-render per aggiornare le ore in tempo reale
   useEffect(() => {
@@ -939,8 +940,11 @@ export default function AdminTimesheets() {
         .order("date", { ascending: false });
 
       // Applica filtro dipendente se selezionato
-      if (selectedEmployee !== "all") {
-        absenceQuery = absenceQuery.eq("user_id", selectedEmployee);
+      const effectiveEmployee = selectedEmployees.includes('all') ? 'all' : (selectedEmployees.length === 1 ? selectedEmployees[0] : null);
+      if (effectiveEmployee && effectiveEmployee !== "all") {
+        absenceQuery = absenceQuery.eq("user_id", effectiveEmployee);
+      } else if (!selectedEmployees.includes('all') && selectedEmployees.length > 1) {
+        absenceQuery = absenceQuery.in("user_id", selectedEmployees);
       }
 
       const { data: absenceData, error: absenceError } = await absenceQuery;
@@ -1015,7 +1019,7 @@ export default function AdminTimesheets() {
     timesheets_totali: timesheets.length,
     timesheets_filtrati: filteredTimesheets.length,
     searchTerm,
-    selectedEmployee,
+    selectedEmployees,
     selectedProject,
     sample_timesheet_raw: timesheets[0],
     sample_timesheet_filtered: filteredTimesheets[0]
@@ -1163,19 +1167,12 @@ export default function AdminTimesheets() {
             {/* Filtro dipendente */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Dipendente</label>
-              <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Tutti i dipendenti" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tutti i dipendenti</SelectItem>
-                  {employees.map((employee) => (
-                    <SelectItem key={employee.user_id} value={employee.user_id}>
-                      {employee.first_name} {employee.last_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiEmployeeSelect
+                employees={employees}
+                selectedIds={selectedEmployees}
+                onSelectionChange={setSelectedEmployees}
+                placeholder="Seleziona dipendenti"
+              />
             </div>
 
             {/* Filtro progetto */}

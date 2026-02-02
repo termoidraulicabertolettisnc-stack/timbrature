@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileDown, Calendar, Users, FolderKanban, Settings, Download, FileText, Table } from 'lucide-react';
+import { FileDown, Calendar, Users, FolderKanban, Settings, Download, FileText, Table, Search, X } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import * as ExcelJS from 'exceljs';
@@ -72,6 +72,8 @@ export default function AdminExport() {
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [employeeSearchTerm, setEmployeeSearchTerm] = useState('');
+  const [projectSearchTerm, setProjectSearchTerm] = useState('');
   
   const [exportSettings, setExportSettings] = useState<ExportSettings>({
     format: 'excel',
@@ -93,6 +95,22 @@ export default function AdminExport() {
       location: false,
     }
   });
+
+  // Filtered employees and projects based on search
+  const filteredEmployees = useMemo(() => {
+    if (!employeeSearchTerm) return employees;
+    const term = employeeSearchTerm.toLowerCase();
+    return employees.filter(emp => 
+      `${emp.first_name} ${emp.last_name}`.toLowerCase().includes(term) ||
+      emp.email?.toLowerCase().includes(term)
+    );
+  }, [employees, employeeSearchTerm]);
+
+  const filteredProjects = useMemo(() => {
+    if (!projectSearchTerm) return projects;
+    const term = projectSearchTerm.toLowerCase();
+    return projects.filter(proj => proj.name.toLowerCase().includes(term));
+  }, [projects, projectSearchTerm]);
 
   // Italian holidays calculator
   const getItalianHolidays = (year: number) => {
@@ -969,20 +987,47 @@ export default function AdminExport() {
                   Deseleziona tutti
                 </Button>
               </div>
+
+              {/* Search Input */}
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Cerca dipendente..."
+                  value={employeeSearchTerm}
+                  onChange={(e) => setEmployeeSearchTerm(e.target.value)}
+                  className="pl-8"
+                />
+                {employeeSearchTerm && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-1 top-1 h-7 w-7 p-0"
+                    onClick={() => setEmployeeSearchTerm('')}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
               
               <ScrollArea className="h-32 border rounded p-4">
-                {employees.map((employee) => (
-                  <div key={employee.user_id} className="flex items-center space-x-2 py-1">
-                    <Checkbox 
-                      id={`employee-${employee.user_id}`}
-                      checked={exportSettings.selectedEmployees.includes(employee.user_id)}
-                      onCheckedChange={(checked) => handleEmployeeToggle(employee.user_id, checked as boolean)}
-                    />
-                    <Label htmlFor={`employee-${employee.user_id}`}>
-                      {employee.first_name} {employee.last_name}
-                    </Label>
+                {filteredEmployees.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-4">
+                    Nessun dipendente trovato
                   </div>
-                ))}
+                ) : (
+                  filteredEmployees.map((employee) => (
+                    <div key={employee.user_id} className="flex items-center space-x-2 py-1">
+                      <Checkbox 
+                        id={`employee-${employee.user_id}`}
+                        checked={exportSettings.selectedEmployees.includes(employee.user_id)}
+                        onCheckedChange={(checked) => handleEmployeeToggle(employee.user_id, checked as boolean)}
+                      />
+                      <Label htmlFor={`employee-${employee.user_id}`}>
+                        {employee.first_name} {employee.last_name}
+                      </Label>
+                    </div>
+                  ))
+                )}
               </ScrollArea>
             </CardContent>
           </Card>
@@ -1013,20 +1058,47 @@ export default function AdminExport() {
                     Deseleziona tutti
                   </Button>
                 </div>
+
+                {/* Search Input */}
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Cerca progetto..."
+                    value={projectSearchTerm}
+                    onChange={(e) => setProjectSearchTerm(e.target.value)}
+                    className="pl-8"
+                  />
+                  {projectSearchTerm && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-1 top-1 h-7 w-7 p-0"
+                      onClick={() => setProjectSearchTerm('')}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
                 
                 <ScrollArea className="h-32 border rounded p-4">
-                  {projects.map((project) => (
-                    <div key={project.id} className="flex items-center space-x-2 py-1">
-                      <Checkbox 
-                        id={`project-${project.id}`}
-                        checked={exportSettings.selectedProjects.includes(project.id)}
-                        onCheckedChange={(checked) => handleProjectToggle(project.id, checked as boolean)}
-                      />
-                      <Label htmlFor={`project-${project.id}`}>
-                        {project.name}
-                      </Label>
+                  {filteredProjects.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-4">
+                      Nessun progetto trovato
                     </div>
-                  ))}
+                  ) : (
+                    filteredProjects.map((project) => (
+                      <div key={project.id} className="flex items-center space-x-2 py-1">
+                        <Checkbox
+                          id={`project-${project.id}`}
+                          checked={exportSettings.selectedProjects.includes(project.id)}
+                          onCheckedChange={(checked) => handleProjectToggle(project.id, checked as boolean)}
+                        />
+                        <Label htmlFor={`project-${project.id}`}>
+                          {project.name}
+                        </Label>
+                      </div>
+                    ))
+                  )}
                 </ScrollArea>
               </CardContent>
             </Card>

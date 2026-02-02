@@ -10,6 +10,7 @@ import { CalendarIcon, TrendingUp, TrendingDown, RotateCcw } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { MultiEmployeeSelect } from '@/components/MultiEmployeeSelect';
 
 interface EmployeeOvertimeStats {
   user_id: string;
@@ -31,7 +32,7 @@ interface EmployeeOvertimeStats {
 export const OvertimeTracker = () => {
   const { user } = useAuth();
   const [employees, setEmployees] = useState<EmployeeOvertimeStats[]>([]);
-  const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>(['all']);
   const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
   const [loading, setLoading] = useState(true);
 
@@ -119,9 +120,9 @@ export const OvertimeTracker = () => {
     }
   };
 
-  const filteredEmployees = selectedEmployee === 'all' 
+  const filteredEmployees = selectedEmployees.includes('all') 
     ? employees 
-    : employees.filter(emp => emp.user_id === selectedEmployee);
+    : employees.filter(emp => selectedEmployees.includes(emp.user_id));
 
   const formatHours = (hours: number) => {
     const h = Math.floor(Math.abs(hours));
@@ -177,19 +178,13 @@ export const OvertimeTracker = () => {
           </SelectContent>
         </Select>
 
-        <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-          <SelectTrigger className="w-full sm:w-64">
-            <SelectValue placeholder="Seleziona dipendente" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tutti i dipendenti</SelectItem>
-            {employees.map(emp => (
-              <SelectItem key={emp.user_id} value={emp.user_id}>
-                {emp.first_name} {emp.last_name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiEmployeeSelect
+          employees={employees}
+          selectedIds={selectedEmployees}
+          onSelectionChange={setSelectedEmployees}
+          placeholder="Seleziona dipendenti"
+          className="w-full sm:w-64"
+        />
       </div>
 
       {loading ? (
