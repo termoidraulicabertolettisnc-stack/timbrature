@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import * as ExcelJS from 'exceljs';
+import { MultiEmployeeSelect } from '@/components/MultiEmployeeSelect';
 
 export default function PayrollDashboard() {
   const { user } = useAuth();
@@ -22,14 +23,14 @@ export default function PayrollDashboard() {
   });
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportMode, setExportMode] = useState<'sheets' | 'files'>('sheets');
-  const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>(['all']);
 
   const { data: payrollData = [], isLoading: loading } = usePayrollData(selectedMonth);
   
   // Filter employees based on selection
-  const filteredPayrollData = selectedEmployee === 'all' 
+  const filteredPayrollData = selectedEmployees.includes('all') 
     ? payrollData 
-    : payrollData.filter(emp => emp.employee_id === selectedEmployee);
+    : payrollData.filter(emp => selectedEmployees.includes(emp.employee_id));
 
   // Italian holidays for 2024 (you can expand this)
   const getItalianHolidays = (year: number) => {
@@ -306,20 +307,13 @@ export default function PayrollDashboard() {
             <span className="hidden sm:inline">Esporta Excel</span>
             <span className="sm:hidden">Excel</span>
           </Button>
-          <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-            <SelectTrigger className="w-40 sm:w-48">
-              <Users className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Tutti i dipendenti" />
-            </SelectTrigger>
-            <SelectContent className="z-50 bg-popover">
-              <SelectItem value="all">Tutti i dipendenti</SelectItem>
-              {payrollData.map(emp => (
-                <SelectItem key={emp.employee_id} value={emp.employee_id}>
-                  {emp.employee_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <MultiEmployeeSelect
+            employees={payrollData.map(emp => ({ user_id: emp.employee_id, first_name: emp.employee_name.split(' ')[0] || '', last_name: emp.employee_name.split(' ').slice(1).join(' ') || '' }))}
+            selectedIds={selectedEmployees}
+            onSelectionChange={setSelectedEmployees}
+            placeholder="Seleziona dipendenti"
+            className="w-48"
+          />
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
             <SelectTrigger className="w-32 sm:w-40">
               <SelectValue />

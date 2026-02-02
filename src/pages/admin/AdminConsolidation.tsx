@@ -12,6 +12,7 @@ import { format, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, startOfW
 import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { BenefitsService } from '@/services/BenefitsService';
+import { MultiEmployeeSelect } from '@/components/MultiEmployeeSelect';
 
 interface ConsolidatedData {
   user_id: string;
@@ -42,7 +43,7 @@ export default function AdminConsolidation() {
   const [employeeSettings, setEmployeeSettings] = useState<{[key: string]: any}>({});
   
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'custom'>('month');
-  const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>(['all']);
   const [startDate, setStartDate] = useState<string>(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState<string>(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
 
@@ -59,7 +60,7 @@ export default function AdminConsolidation() {
 
   useEffect(() => {
     loadConsolidatedData();
-  }, [startDate, endDate, selectedEmployee]);
+  }, [startDate, endDate, selectedEmployees]);
 
   const updateDatesForPeriod = () => {
     const now = new Date();
@@ -144,8 +145,11 @@ export default function AdminConsolidation() {
         .gte('date', startDate)
         .lte('date', endDate);
 
-      if (selectedEmployee !== 'all') {
-        query = query.eq('user_id', selectedEmployee);
+      const effectiveEmployee = selectedEmployees.includes('all') ? 'all' : (selectedEmployees.length === 1 ? selectedEmployees[0] : null);
+      if (effectiveEmployee && effectiveEmployee !== 'all') {
+        query = query.eq('user_id', effectiveEmployee);
+      } else if (!selectedEmployees.includes('all') && selectedEmployees.length > 1) {
+        query = query.in('user_id', selectedEmployees);
       }
 
       const { data: timesheetData, error } = await query;
@@ -353,19 +357,12 @@ export default function AdminConsolidation() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Dipendente</label>
-              <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tutti i dipendenti</SelectItem>
-                  {employees.map((employee) => (
-                    <SelectItem key={employee.user_id} value={employee.user_id}>
-                      {employee.first_name} {employee.last_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiEmployeeSelect
+                employees={employees}
+                selectedIds={selectedEmployees}
+                onSelectionChange={setSelectedEmployees}
+                placeholder="Seleziona dipendenti"
+              />
             </div>
 
             <div className="flex items-end">

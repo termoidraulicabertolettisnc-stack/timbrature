@@ -9,12 +9,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, AlertCircle } from 'lucide-react';
+import { CalendarIcon, AlertCircle, Search, Check, ChevronsUpDown, X } from 'lucide-react';
 import { format, addDays, eachDayOfInterval, getDay } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { getContractedHoursForDay } from '@/utils/contractedHours';
 import { isHoliday as checkIsHoliday, getAllHolidays } from '@/services/ItalianHolidaysService';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { EmployeeSearchSelect } from '@/components/EmployeeSearchSelect';
 
 interface AbsenceInsertDialogProps {
   open: boolean;
@@ -342,18 +344,12 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="user_id">Dipendente *</Label>
-            <Select value={formData.user_id} onValueChange={(value) => setFormData(prev => ({ ...prev, user_id: value }))}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleziona dipendente" />
-              </SelectTrigger>
-              <SelectContent>
-                {employees.map((employee) => (
-                  <SelectItem key={employee.user_id} value={employee.user_id}>
-                    {employee.first_name} {employee.last_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <EmployeeSearchSelect
+              employees={employees}
+              selectedId={formData.user_id}
+              onSelect={(value) => setFormData(prev => ({ ...prev, user_id: value }))}
+              placeholder="Cerca dipendente..."
+            />
           </div>
 
           <div className="space-y-2">

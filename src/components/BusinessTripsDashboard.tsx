@@ -14,6 +14,7 @@ import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog'
 import { MassConversionDialog } from '@/components/MassConversionDialog';
 import { DayConversionToggle } from '@/components/DayConversionToggle';
 import { useToast } from '@/hooks/use-toast';
+import { MultiEmployeeSelect } from '@/components/MultiEmployeeSelect';
 
 const BusinessTripsDashboard = () => {
   const { user } = useAuth();
@@ -23,16 +24,16 @@ const BusinessTripsDashboard = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
-  const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>(['all']);
 
   const { data, isLoading: loading } = useBusinessTripData(selectedMonth);
   const businessTripData = data?.data || [];
   const holidays = data?.holidays || [];
   
   // Filter employees based on selection
-  const filteredBusinessTripData = selectedEmployee === 'all' 
+  const filteredBusinessTripData = selectedEmployees.includes('all') 
     ? businessTripData 
-    : businessTripData.filter(emp => emp.employee_id === selectedEmployee);
+    : businessTripData.filter(emp => selectedEmployees.includes(emp.employee_id));
 
   // Italian holidays (fallback for standard holidays)
   const getItalianHolidays = (year: number) => {
@@ -426,20 +427,13 @@ const BusinessTripsDashboard = () => {
           <p className="text-muted-foreground">Panoramica separata per tipologia di trasferta</p>
         </div>
         <div className="flex items-center gap-4">
-          <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-            <SelectTrigger className="w-[200px]">
-              <Users className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Tutti i dipendenti" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tutti i dipendenti</SelectItem>
-              {businessTripData.map(emp => (
-                <SelectItem key={emp.employee_id} value={emp.employee_id}>
-                  {emp.employee_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <MultiEmployeeSelect
+            employees={businessTripData.map(emp => ({ user_id: emp.employee_id, first_name: emp.employee_name.split(' ')[0] || '', last_name: emp.employee_name.split(' ').slice(1).join(' ') || '' }))}
+            selectedIds={selectedEmployees}
+            onSelectionChange={setSelectedEmployees}
+            placeholder="Seleziona dipendenti"
+            className="w-[200px]"
+          />
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Selezione mese" />

@@ -13,6 +13,7 @@ import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { fromZonedTime } from 'date-fns-tz';
 import { cn } from '@/lib/utils';
+import { EmployeeSearchSelect } from '@/components/EmployeeSearchSelect';
 
 interface TimesheetInsertDialogProps {
   open: boolean;
@@ -326,18 +327,12 @@ export function TimesheetInsertDialog({ open, onOpenChange, onSuccess, selectedD
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="user_id">Dipendente *</Label>
-            <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleziona dipendente" />
-              </SelectTrigger>
-              <SelectContent>
-                {employees.map((employee) => (
-                  <SelectItem key={employee.user_id} value={employee.user_id}>
-                    {employee.first_name} {employee.last_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <EmployeeSearchSelect
+              employees={employees}
+              selectedId={selectedEmployee}
+              onSelect={setSelectedEmployee}
+              placeholder="Cerca dipendente..."
+            />
           </div>
 
           <div className="space-y-2">

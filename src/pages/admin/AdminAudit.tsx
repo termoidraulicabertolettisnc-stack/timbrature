@@ -11,6 +11,7 @@ import { FileText, Search, Filter, RefreshCw, Eye, AlertTriangle } from 'lucide-
 import { format, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+import { MultiEmployeeSelect } from '@/components/MultiEmployeeSelect';
 
 interface AuditLog {
   id: string;
@@ -48,7 +49,7 @@ export default function AdminAudit() {
   const [searchTerm, setSearchTerm] = useState('');
   const [tableFilter, setTableFilter] = useState<string>('all');
   const [actionFilter, setActionFilter] = useState<string>('all');
-  const [userFilter, setUserFilter] = useState<string>('all');
+  const [userFilter, setUserFilter] = useState<string[]>(['all']);
   const [dateFilter, setDateFilter] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
   const [users, setUsers] = useState<any[]>([]);
@@ -104,8 +105,11 @@ export default function AdminAudit() {
         query = query.eq('action', actionFilter);
       }
 
-      if (userFilter !== 'all') {
-        query = query.eq('changed_by', userFilter);
+      const effectiveUser = userFilter.includes('all') ? 'all' : (userFilter.length === 1 ? userFilter[0] : null);
+      if (effectiveUser && effectiveUser !== 'all') {
+        query = query.eq('changed_by', effectiveUser);
+      } else if (!userFilter.includes('all') && userFilter.length > 1) {
+        query = query.in('changed_by', userFilter);
       }
 
       // Date filter
@@ -316,19 +320,13 @@ export default function AdminAudit() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Utente</label>
-              <Select value={userFilter} onValueChange={setUserFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Tutti gli utenti" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tutti gli utenti</SelectItem>
-                  {users.map((user) => (
-                    <SelectItem key={user.user_id} value={user.user_id}>
-                      {user.first_name} {user.last_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiEmployeeSelect
+                employees={users}
+                selectedIds={userFilter}
+                onSelectionChange={setUserFilter}
+                placeholder="Seleziona utenti"
+                allOptionLabel="Tutti gli utenti"
+              />
             </div>
 
             <div className="space-y-2">
