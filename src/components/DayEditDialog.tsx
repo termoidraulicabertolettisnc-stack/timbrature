@@ -10,6 +10,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -156,6 +167,7 @@ export function DayEditDialog({
 }: DayEditDialogProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [metadataOpen, setMetadataOpen] = useState(false);
   
@@ -896,6 +908,73 @@ export function DayEditDialog({
     }
   };
 
+  // Funzione per eliminare tutta la giornata (timesheet + assenze)
+  const handleDeleteDay = async () => {
+    setDeleting(true);
+    try {
+      let deletedItems = [];
+
+      // Elimina il timesheet se esiste
+      if (timesheet?.id) {
+        // Prima elimina le sessioni associate
+        const { error: sessionsError } = await supabase
+          .from('timesheet_sessions')
+          .delete()
+          .eq('timesheet_id', timesheet.id);
+
+        if (sessionsError) {
+          console.error('Error deleting sessions:', sessionsError);
+        }
+
+        // Poi elimina il timesheet
+        const { error: timesheetError } = await supabase
+          .from('timesheets')
+          .delete()
+          .eq('id', timesheet.id);
+
+        if (timesheetError) throw timesheetError;
+        deletedItems.push('timbratura');
+      }
+
+      // Elimina le assenze per questo giorno
+      const { data: existingAbsences, error: absencesFetchError } = await supabase
+        .from('employee_absences')
+        .select('id')
+        .eq('user_id', employee.user_id)
+        .eq('date', date);
+
+      if (!absencesFetchError && existingAbsences && existingAbsences.length > 0) {
+        const { error: absencesError } = await supabase
+          .from('employee_absences')
+          .delete()
+          .eq('user_id', employee.user_id)
+          .eq('date', date);
+
+        if (absencesError) throw absencesError;
+        deletedItems.push(`${existingAbsences.length} assenza/e`);
+      }
+
+      toast({
+        title: "Eliminazione completata",
+        description: deletedItems.length > 0 
+          ? `Eliminato: ${deletedItems.join(', ')} per il ${format(parseISO(date), 'dd MMMM yyyy', { locale: it })}`
+          : `Nessun dato da eliminare per il ${format(parseISO(date), 'dd MMMM yyyy', { locale: it })}`,
+      });
+
+      onSuccess();
+      onOpenChange(false);
+    } catch (error: any) {
+      console.error('Error deleting day data:', error);
+      toast({
+        title: "Errore",
+        description: `Errore durante l'eliminazione: ${error.message}`,
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
 
   const totals = calculateTotals();
 
@@ -1434,34 +1513,83 @@ export function DayEditDialog({
           <Separator />
 
           {/* Actions */}
-          <div className="flex justify-end gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-            >
-              Annulla
-            </Button>
-            <div className="flex flex-col items-end gap-2">
+          <div className="flex justify-between gap-2">
+            {/* Delete Button */}
+            {(timesheet || absences.length > 0) && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="destructive" 
+                    disabled={loading || deleting}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Elimina Giornata
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Conferma Eliminazione</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Stai per eliminare tutti i dati del {format(parseISO(date), 'dd MMMM yyyy', { locale: it })} per {employee.first_name} {employee.last_name}.
+                      <br /><br />
+                      Verranno eliminati:
+                      <ul className="list-disc list-inside mt-2">
+                        {timesheet && <li>La timbratura e tutte le sessioni associate</li>}
+                        {absences.length > 0 && <li>{absences.length} assenza/e registrata/e</li>}
+                      </ul>
+                      <br />
+                      <strong>Questa azione non può essere annullata.</strong>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Annulla</AlertDialogCancel>
+                    <AlertDialogAction 
+                      onClick={handleDeleteDay}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deleting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Eliminazione...
+                        </>
+                      ) : (
+                        'Elimina Definitivamente'
+                      )}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+            
+            <div className="flex gap-2 ml-auto">
               <Button 
-                onClick={handleSave} 
-                disabled={loading || validateSessions().hasErrors}
-                className="w-full md:w-auto"
+                variant="outline" 
+                onClick={() => onOpenChange(false)}
+                disabled={loading || deleting}
               >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Salvataggio...
-                  </>
-                ) : (
-                  'Salva Modifiche'
-                )}
+                Annulla
               </Button>
-              {validateSessions().hasErrors && (
-                <p className="text-sm text-destructive text-center">
-                  Correggi gli errori nelle sessioni prima di salvare
-                </p>
-              )}
+              <div className="flex flex-col items-end gap-2">
+                <Button 
+                  onClick={handleSave} 
+                  disabled={loading || deleting || validateSessions().hasErrors}
+                  className="w-full md:w-auto"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Salvataggio...
+                    </>
+                  ) : (
+                    'Salva Modifiche'
+                  )}
+                </Button>
+                {validateSessions().hasErrors && (
+                  <p className="text-sm text-destructive text-center">
+                    Correggi gli errori nelle sessioni prima di salvare
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>
