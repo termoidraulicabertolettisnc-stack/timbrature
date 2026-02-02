@@ -595,8 +595,17 @@ const BusinessTripsDashboard = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                     {businessTripData.map((employee) => (
+                     {businessTripData.map((employee, employeeIndex) => (
                        <React.Fragment key={employee.employee_id}>
+                          {/* Separator between employees */}
+                          {employeeIndex > 0 && (
+                            <TableRow>
+                              <TableCell 
+                                colSpan={getDaysInMonth() + 4} 
+                                className="h-1 p-0 bg-border border-t-2 border-border"
+                              />
+                            </TableRow>
+                          )}
                           {/* Ordinary hours row */}
                          <TableRow className="hover:bg-green-50/50">
                            <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
