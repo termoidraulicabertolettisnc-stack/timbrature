@@ -19,6 +19,7 @@ import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { getHolidayDates } from '@/services/ItalianHolidaysService';
 
 interface MassTimesheetInsertDialogProps {
   open: boolean;
@@ -155,6 +156,20 @@ export function MassTimesheetInsertDialog({
     );
   }, [employees, searchQuery]);
 
+  // Calcola le festività nazionali italiane per gli anni coinvolti
+  const italianHolidays = useMemo(() => {
+    const startYear = formData.date_from.getFullYear();
+    const endYear = formData.date_to.getFullYear();
+    const holidays = new Set<string>();
+    
+    for (let year = startYear; year <= endYear; year++) {
+      const yearHolidays = getHolidayDates(year);
+      yearHolidays.forEach(h => holidays.add(h));
+    }
+    
+    return holidays;
+  }, [formData.date_from, formData.date_to]);
+
   const workingDays = useMemo(() => {
     const allDays = eachDayOfInterval({
       start: formData.date_from,
@@ -169,12 +184,14 @@ export function MassTimesheetInsertDialog({
       
       if (formData.exclude_holidays) {
         const dateStr = format(day, 'yyyy-MM-dd');
+        // Controlla sia festività aziendali che nazionali italiane
         if (companyHolidays.has(dateStr)) return false;
+        if (italianHolidays.has(dateStr)) return false;
       }
       
       return true;
     });
-  }, [formData.date_from, formData.date_to, formData.exclude_weekends, formData.exclude_saturdays, formData.exclude_holidays, companyHolidays]);
+  }, [formData.date_from, formData.date_to, formData.exclude_weekends, formData.exclude_saturdays, formData.exclude_holidays, companyHolidays, italianHolidays]);
 
   const [conflictsData, setConflictsData] = useState<Map<string, { date: string }[]>>(new Map());
 
