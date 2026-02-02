@@ -70,6 +70,7 @@ export default function AdminAudit() {
       const { data: usersData, error: usersError } = await supabase
         .from('profiles')
         .select('user_id, first_name, last_name, email')
+        .order('last_name')
         .order('first_name');
 
       if (usersError) throw usersError;

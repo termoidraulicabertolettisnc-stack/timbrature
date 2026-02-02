@@ -173,6 +173,7 @@ export default function AdminExport() {
         .from('profiles')
         .select('user_id, first_name, last_name, email')
         .eq('is_active', true)
+        .order('last_name')
         .order('first_name');
 
       if (employeesError) throw employeesError;

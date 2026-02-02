@@ -41,13 +41,16 @@ export function MultiEmployeeSelect({
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Normalizza i dipendenti per supportare diversi formati
+  // Normalizza i dipendenti per supportare diversi formati e ordina alfabeticamente
   const normalizedEmployees = useMemo(() => {
     return employees.map(emp => ({
       id: emp.user_id || emp.employee_id || '',
       name: emp.employee_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
       email: emp.email || '',
-    }));
+      sortKey: emp.last_name && emp.first_name 
+        ? `${emp.last_name} ${emp.first_name}`.toLowerCase()
+        : (emp.employee_name || `${emp.first_name || ''} ${emp.last_name || ''}`).toLowerCase(),
+    })).sort((a, b) => a.sortKey.localeCompare(b.sortKey, 'it'));
   }, [employees]);
 
   // Filtra i dipendenti basato sulla ricerca

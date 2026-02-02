@@ -33,14 +33,16 @@ export function EmployeeSearchSelect({
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Filtra i dipendenti basato sulla ricerca
+  // Filtra e ordina i dipendenti basato sulla ricerca
   const filteredEmployees = useMemo(() => {
-    if (!searchTerm) return employees;
-    const term = searchTerm.toLowerCase();
-    return employees.filter(
-      emp => 
-        `${emp.first_name} ${emp.last_name}`.toLowerCase().includes(term) || 
-        emp.email?.toLowerCase().includes(term)
+    const list = !searchTerm 
+      ? employees 
+      : employees.filter(emp => 
+          `${emp.first_name} ${emp.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) || 
+          emp.email?.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    return [...list].sort((a, b) => 
+      `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'it')
     );
   }, [employees, searchTerm]);
 

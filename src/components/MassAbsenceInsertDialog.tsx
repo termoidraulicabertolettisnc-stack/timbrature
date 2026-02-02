@@ -115,6 +115,7 @@ export function MassAbsenceInsertDialog({
         .from('profiles')
         .select('user_id, first_name, last_name, email, company_id')
         .eq('is_active', true)
+        .order('last_name')
         .order('first_name');
 
       if (employeesError) throw employeesError;

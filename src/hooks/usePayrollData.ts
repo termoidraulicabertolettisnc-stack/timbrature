@@ -50,7 +50,9 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
         name
       )
     `)
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .order('last_name')
+    .order('first_name');
 
   if (profilesError) throw profilesError;
 

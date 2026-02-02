@@ -301,7 +301,10 @@ export function WeeklyTimelineView({
       processTimesheet(timesheet, employee);
     });
 
-    const result = Array.from(employeesMap.values());
+    // Ordina alfabeticamente per cognome e nome
+    const result = Array.from(employeesMap.values()).sort((a, b) => 
+      `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'it')
+    );
     console.log('📊 WeeklyTimelineView - Final result:', {
       employees_count: result.length,
       employees: result.map(emp => ({ 
