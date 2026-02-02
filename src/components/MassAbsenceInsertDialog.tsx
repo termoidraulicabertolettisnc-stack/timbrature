@@ -64,7 +64,7 @@ export function MassAbsenceInsertDialog({
   }>({ success: 0, errors: [] });
   
   const [formData, setFormData] = useState({
-    absence_type: 'F' as 'F' | 'I' | 'M' | 'PNR',
+    absence_type: 'F' as 'F' | 'I' | 'M' | 'PNR' | 'AI' | 'C',
     date_from: new Date(),
     date_to: new Date(),
     default_hours: 8,
@@ -448,7 +448,8 @@ export function MassAbsenceInsertDialog({
       'M': 'Malattia',
       'I': 'Infortunio',
       'PNR': 'Permesso non retribuito',
-      'AI': 'Assenza ingiustificata'
+      'AI': 'Assenza ingiustificata',
+      'C': 'Congedo'
     };
     return labels[type as keyof typeof labels] || type;
   };
@@ -643,13 +644,14 @@ export function MassAbsenceInsertDialog({
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="F">Ferie/Permesso</SelectItem>
-              <SelectItem value="M">Malattia</SelectItem>
-              <SelectItem value="I">Infortunio</SelectItem>
-              <SelectItem value="PNR">Permesso non retribuito</SelectItem>
-              <SelectItem value="AI">Assenza ingiustificata</SelectItem>
-            </SelectContent>
+              <SelectContent>
+                <SelectItem value="F">Ferie/Permesso</SelectItem>
+                <SelectItem value="M">Malattia</SelectItem>
+                <SelectItem value="I">Infortunio</SelectItem>
+                <SelectItem value="PNR">Permesso non retribuito</SelectItem>
+                <SelectItem value="AI">Assenza ingiustificata</SelectItem>
+                <SelectItem value="C">Congedo</SelectItem>
+              </SelectContent>
           </Select>
 
           <div className="space-y-2">

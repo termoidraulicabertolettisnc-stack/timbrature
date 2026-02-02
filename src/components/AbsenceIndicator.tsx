@@ -1,6 +1,6 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
-import { TreePalm, Stethoscope, AlertTriangle, CircleSlash, UserX } from 'lucide-react';
+import { TreePalm, Stethoscope, AlertTriangle, CircleSlash, UserX, Baby } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface AbsenceIndicatorProps {
@@ -19,6 +19,7 @@ export function AbsenceIndicator({ absences, className = "", onAbsenceClick }: A
       case 'I': return <AlertTriangle className="h-4 w-4" />;
       case 'PNR': return <CircleSlash className="h-4 w-4" />;
       case 'AI': return <UserX className="h-4 w-4" />;
+      case 'C': return <Baby className="h-4 w-4" />;
       default: return <TreePalm className="h-4 w-4" />;
     }
   };
@@ -30,6 +31,7 @@ export function AbsenceIndicator({ absences, className = "", onAbsenceClick }: A
       case 'I': return 'bg-orange-100 text-orange-800 hover:bg-orange-200';
       case 'PNR': return 'bg-gray-100 text-gray-800 hover:bg-gray-200';
       case 'AI': return 'bg-purple-100 text-purple-800 hover:bg-purple-200';
+      case 'C': return 'bg-pink-100 text-pink-800 hover:bg-pink-200';
       default: return 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200';
     }
   };
@@ -41,6 +43,7 @@ export function AbsenceIndicator({ absences, className = "", onAbsenceClick }: A
       case 'I': return 'Infortunio';
       case 'PNR': return 'Permesso non retribuito';
       case 'AI': return 'Assenza ingiustificata';
+      case 'C': return 'Congedo';
       default: return type;
     }
   };
