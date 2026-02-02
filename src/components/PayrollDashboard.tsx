@@ -81,12 +81,19 @@ export default function PayrollDashboard() {
   const getAbsenceTypeLabel = (type: string | null) => {
     if (!type) return '';
     const labels: { [key: string]: string } = {
-      'assenza_ingiustificata': 'A',
+      'AI': 'AI',
+      'assenza_ingiustificata': 'AI',
+      'F': 'F',
       'ferie': 'F',
+      'FS': 'FS',
       'festivita': 'FS',
+      'I': 'I',
       'infortunio': 'I',
+      'M': 'M',
       'malattia': 'M',
+      'PR': 'PR',
       'permesso_retribuito': 'PR',
+      'PNR': 'PNR',
       'permesso_non_retribuito': 'PNR'
     };
     return labels[type] || type.charAt(0).toUpperCase();
