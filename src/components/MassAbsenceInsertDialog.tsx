@@ -447,7 +447,8 @@ export function MassAbsenceInsertDialog({
       'F': 'Ferie/Permesso',
       'M': 'Malattia',
       'I': 'Infortunio',
-      'PNR': 'Permesso non retribuito'
+      'PNR': 'Permesso non retribuito',
+      'AI': 'Assenza ingiustificata'
     };
     return labels[type as keyof typeof labels] || type;
   };
@@ -647,6 +648,7 @@ export function MassAbsenceInsertDialog({
               <SelectItem value="M">Malattia</SelectItem>
               <SelectItem value="I">Infortunio</SelectItem>
               <SelectItem value="PNR">Permesso non retribuito</SelectItem>
+              <SelectItem value="AI">Assenza ingiustificata</SelectItem>
             </SelectContent>
           </Select>
 

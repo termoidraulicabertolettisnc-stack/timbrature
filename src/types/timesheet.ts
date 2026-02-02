@@ -13,7 +13,7 @@ export interface TimesheetWithProfile {
   is_saturday: boolean;
   is_holiday: boolean;
   is_absence?: boolean;
-  absence_type?: 'F' | 'M' | 'I' | 'FS' | 'PR' | 'PNR' | 'A';
+  absence_type?: 'F' | 'M' | 'I' | 'FS' | 'PR' | 'PNR' | 'A' | 'AI';
   start_location_lat: number | null;
   start_location_lng: number | null;
   end_location_lat: number | null;
