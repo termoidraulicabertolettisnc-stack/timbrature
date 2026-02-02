@@ -79,6 +79,7 @@ export default function AdminConsolidation() {
         .from('profiles')
         .select('user_id, first_name, last_name, email')
         .eq('is_active', true)
+        .order('last_name')
         .order('first_name');
 
       if (error) throw error;
@@ -229,7 +230,10 @@ export default function AdminConsolidation() {
         });
     });
 
-    return Array.from(userMap.values());
+    // Ordina alfabeticamente per nome dipendente
+    return Array.from(userMap.values()).sort((a, b) => 
+      a.employee_name.localeCompare(b.employee_name, 'it')
+    );
   };
 
   const processDailyData = (data: any[]): DailyData[] => {

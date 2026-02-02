@@ -111,7 +111,10 @@ export const OvertimeTracker = () => {
         });
       }
 
-      setEmployees(employeeStats);
+      // Ordina alfabeticamente per cognome e nome
+      setEmployees(employeeStats.sort((a, b) => 
+        `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'it')
+      ));
     } catch (error) {
       console.error('Error loading overtime stats:', error);
       toast.error('Errore nel caricamento delle statistiche straordinari');

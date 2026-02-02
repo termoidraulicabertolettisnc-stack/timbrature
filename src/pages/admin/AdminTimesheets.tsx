@@ -596,7 +596,7 @@ export default function AdminTimesheets() {
 
   const loadEmployees = async () => {
     try {
-      const { data, error } = await supabase.from("profiles").select("*").order("first_name");
+      const { data, error } = await supabase.from("profiles").select("*").order("last_name").order("first_name");
 
       if (error) throw error;
       setEmployees(data || []);

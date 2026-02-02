@@ -84,7 +84,9 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
   let profilesQuery = supabase
     .from('profiles')
     .select('user_id, first_name, last_name, company_id')
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .order('last_name')
+    .order('first_name');
   
   if (!isAdmin) {
     profilesQuery = profilesQuery.eq('company_id', me!.company_id);

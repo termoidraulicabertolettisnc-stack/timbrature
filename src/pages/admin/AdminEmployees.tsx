@@ -71,6 +71,7 @@ export default function AdminEmployees() {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
+        .order('last_name')
         .order('first_name');
 
       if (error) throw error;

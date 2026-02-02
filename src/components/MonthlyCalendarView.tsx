@@ -250,7 +250,10 @@ export function MonthlyCalendarView({
       employee.days[date].absences.push(absence);
     });
 
-    return Array.from(employeesMap.values());
+    // Ordina alfabeticamente per cognome e nome
+    return Array.from(employeesMap.values()).sort((a, b) => 
+      `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'it')
+    );
     } catch (error) {
       console.error('🚨 ERROR in useMemo:', error);
       return [];
