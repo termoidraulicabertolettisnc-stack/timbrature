@@ -2172,7 +2172,7 @@ export type Database = {
       }
     }
     Enums: {
-      absence_type: "A" | "F" | "FS" | "I" | "M" | "PR" | "PNR"
+      absence_type: "A" | "F" | "FS" | "I" | "M" | "PR" | "PNR" | "AI"
       lunch_break_type:
         | "30_minuti"
         | "60_minuti"
@@ -2324,7 +2324,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      absence_type: ["A", "F", "FS", "I", "M", "PR", "PNR"],
+      absence_type: ["A", "F", "FS", "I", "M", "PR", "PNR", "AI"],
       lunch_break_type: [
         "30_minuti",
         "60_minuti",

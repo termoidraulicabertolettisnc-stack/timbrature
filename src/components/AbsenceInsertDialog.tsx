@@ -199,7 +199,7 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
         .from('employee_absences')
         .select('date, absence_type')
         .eq('user_id', formData.user_id)
-        .eq('absence_type', formData.absence_type)
+        .eq('absence_type', formData.absence_type as any)
         .in('date', dateStrings);
 
       if (checkError) {
@@ -261,7 +261,7 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
       // Inserisci le assenze disponibili
       const { error } = await supabase
         .from('employee_absences')
-        .insert(absences);
+        .insert(absences as any);
 
       if (error) {
         console.error('Insert error:', error);
