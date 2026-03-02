@@ -61,6 +61,7 @@ export const syncEmployeeSettingsStructure = async (companyId: string) => {
         // Nuovi campi di conversione straordinari
         enable_overtime_conversion: empSetting.enable_overtime_conversion !== undefined ? empSetting.enable_overtime_conversion : null,
         overtime_conversion_rate: empSetting.overtime_conversion_rate !== undefined ? empSetting.overtime_conversion_rate : null,
+        has_meal_allowance_in_paycheck: empSetting.has_meal_allowance_in_paycheck !== undefined ? empSetting.has_meal_allowance_in_paycheck : null,
         updated_at: new Date().toISOString()
       };
 
@@ -138,6 +139,8 @@ export const createDefaultEmployeeSettings = async (
       // Nuovi campi di conversione straordinari
       enable_overtime_conversion: null,
       overtime_conversion_rate: null,
+      // Meal allowance in paycheck
+      has_meal_allowance_in_paycheck: null,
     };
 
     const { data, error } = await supabase

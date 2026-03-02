@@ -679,6 +679,7 @@ export type Database = {
           enable_entry_tolerance: boolean | null
           enable_overtime_conversion: boolean | null
           entry_tolerance_minutes: number | null
+          has_meal_allowance_in_paycheck: boolean | null
           id: string
           lunch_break_min_hours: number | null
           lunch_break_minutes: number | null
@@ -724,6 +725,7 @@ export type Database = {
           enable_entry_tolerance?: boolean | null
           enable_overtime_conversion?: boolean | null
           entry_tolerance_minutes?: number | null
+          has_meal_allowance_in_paycheck?: boolean | null
           id?: string
           lunch_break_min_hours?: number | null
           lunch_break_minutes?: number | null
@@ -771,6 +773,7 @@ export type Database = {
           enable_entry_tolerance?: boolean | null
           enable_overtime_conversion?: boolean | null
           entry_tolerance_minutes?: number | null
+          has_meal_allowance_in_paycheck?: boolean | null
           id?: string
           lunch_break_min_hours?: number | null
           lunch_break_minutes?: number | null
