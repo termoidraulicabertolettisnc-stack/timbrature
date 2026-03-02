@@ -56,6 +56,8 @@ interface EmployeeSettings {
   // Overtime conversion fields
   enable_overtime_conversion?: boolean | null;
   overtime_conversion_rate?: number | null;
+  // Meal allowance in paycheck
+  has_meal_allowance_in_paycheck?: boolean | null;
 }
 
 interface CompanySettings {
@@ -122,6 +124,8 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
     // Overtime conversion fields
     enable_overtime_conversion: null,
     overtime_conversion_rate: null,
+    // Meal allowance in paycheck
+    has_meal_allowance_in_paycheck: null,
   });
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [companies, setCompanies] = useState<Array<{id: string, name: string}>>([]);
@@ -253,6 +257,8 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
           // Overtime conversion fields
           enable_overtime_conversion: null,
           overtime_conversion_rate: null,
+          // Meal allowance in paycheck
+          has_meal_allowance_in_paycheck: null,
         });
       }
     } catch (error) {
@@ -391,6 +397,8 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
       // Overtime conversion fields
       enable_overtime_conversion: null,
       overtime_conversion_rate: null,
+      // Meal allowance in paycheck
+      has_meal_allowance_in_paycheck: null,
     });
     setHasChanges(true);
   };
@@ -960,6 +968,39 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
               </CardContent>
             </Card>
           )}
+
+          {/* Meal Allowance in Paycheck */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Coffee className="h-5 w-5" />
+                Indennità di Mensa in Busta
+              </CardTitle>
+              <CardDescription>
+                Se abilitato, il dipendente ha l'indennità di mensa in busta paga. 
+                Questo comporta l'utilizzo del massimale trasferta ridotto (€30.98) per tutti i giorni lavorati, 
+                come se avesse i buoni pasto.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="has_meal_allowance_in_paycheck"
+                  checked={settings.has_meal_allowance_in_paycheck === true}
+                  onCheckedChange={(checked) => {
+                    updateSetting('has_meal_allowance_in_paycheck', checked === true ? true : false);
+                  }}
+                />
+                <Label htmlFor="has_meal_allowance_in_paycheck" className="cursor-pointer">
+                  Dipendente con indennità di mensa in busta
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Valore attuale: {settings.has_meal_allowance_in_paycheck ? '✅ Abilitato' : '❌ Disabilitato'}
+              </p>
+            </CardContent>
+          </Card>
+
         {/* Entry Tolerance System */}
         <Card>
           <CardHeader>

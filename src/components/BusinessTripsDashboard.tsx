@@ -211,10 +211,18 @@ const BusinessTripsDashboard = () => {
       // Conta giorni disponibili
       let A46 = 0; // giorni SENZA buoni pasto
       let A30 = 0; // giorni CON buoni pasto (convertiti o non)
+      const hasMealAllowanceInPaycheck = emp.has_meal_allowance_in_paycheck === true;
+      
       Object.keys(emp.daily_data).forEach(d => {
         const w = emp.daily_data[d] || { ordinary: 0, overtime: 0, absence: null };
         const worked = (w.ordinary + w.overtime) > 0 && !w.absence;
         if (!worked) return;
+
+        // Se ha indennità di mensa in busta, TUTTI i giorni sono a 30.98
+        if (hasMealAllowanceInPaycheck) {
+          A30 += 1;
+          return;
+        }
 
         const hasCB = !!emp.meal_voucher_conversions.daily_data?.[d];        // convertito -> 46.48
         const hasBDPnotConv = !!emp.meal_vouchers_daily_data?.[d];           // maturato non convertito -> 30.98

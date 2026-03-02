@@ -54,6 +54,7 @@ export interface BusinessTripData {
   meal_vouchers_daily_data: { [day: string]: boolean };
   daily_allowances_amounts: { [day: string]: number };
   saturday_rate: number;
+  has_meal_allowance_in_paycheck: boolean;
 }
 
 const fetchBusinessTripData = async (selectedMonth: string, userId: string): Promise<{ data: BusinessTripData[], holidays: string[] }> => {
@@ -485,6 +486,7 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         meal_vouchers_daily_data: mealVouchersDaily,
         daily_allowances_amounts: dailyAllowanceAmounts,
         saturday_rate: defaultSaturdayRate,
+        has_meal_allowance_in_paycheck: latestEmployeeSettings?.has_meal_allowance_in_paycheck === true,
       };
     })
   );
