@@ -140,7 +140,21 @@ export default function PayrollDashboard() {
       cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
     });
     
-    employees.forEach((employee) => {
+    employees.forEach((employee, empIndex) => {
+      // Add thick separator between employees in Excel
+      if (empIndex > 0) {
+        const separatorRow = worksheet.addRow([]);
+        separatorRow.height = 6;
+        separatorRow.eachCell({ includeEmpty: true }, (cell) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF333333' } };
+        });
+        // Fill all columns of separator
+        for (let col = 1; col <= headers.length; col++) {
+          const cell = separatorRow.getCell(col);
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF333333' } };
+        }
+      }
+      
       const baseRowTypes = ['O', 'S'];
       const baseRowColors = ['FFE6F7E6', 'FFE6F2FF'];
       
@@ -423,10 +437,10 @@ export default function PayrollDashboard() {
               <TableBody>
                 {filteredPayrollData.map((employee, employeeIndex) => (
                   <React.Fragment key={employee.employee_id}>
-                    {/* Separatore tra dipendenti */}
+                    {/* Separatore marcato tra dipendenti */}
                     {employeeIndex > 0 && (
-                      <TableRow className="border-t-4 border-primary/20">
-                        <TableCell colSpan={getDaysInMonth() + 3} className="h-1 p-0 bg-primary/5" />
+                      <TableRow className="border-0 hover:bg-transparent">
+                        <TableCell colSpan={getDaysInMonth() + 3} className="h-2 p-0 bg-foreground/20" />
                       </TableRow>
                     )}
                     {/* Riga Ore Ordinarie */}
