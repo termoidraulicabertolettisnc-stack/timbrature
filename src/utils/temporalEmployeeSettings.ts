@@ -28,6 +28,8 @@ export interface TemporalEmployeeSettings {
   entry_tolerance_minutes?: number;
   // Meal allowance in paycheck (indennità di mensa in busta)
   has_meal_allowance_in_paycheck?: boolean;
+  // Staffing agency (somministrazione)
+  staffing_agency_name?: string | null;
   valid_from: string;
   valid_to?: string;
   created_at: string;

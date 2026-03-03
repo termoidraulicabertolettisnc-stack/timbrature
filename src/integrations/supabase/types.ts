@@ -704,6 +704,7 @@ export type Database = {
           saturday_handling: Database["public"]["Enums"]["saturday_type"] | null
           saturday_hourly_rate: number | null
           saturday_is_business_trip: boolean | null
+          staffing_agency_name: string | null
           standard_start_time: string | null
           standard_weekly_hours: Json | null
           updated_at: string
@@ -752,6 +753,7 @@ export type Database = {
             | null
           saturday_hourly_rate?: number | null
           saturday_is_business_trip?: boolean | null
+          staffing_agency_name?: string | null
           standard_start_time?: string | null
           standard_weekly_hours?: Json | null
           updated_at?: string
@@ -800,6 +802,7 @@ export type Database = {
             | null
           saturday_hourly_rate?: number | null
           saturday_is_business_trip?: boolean | null
+          staffing_agency_name?: string | null
           standard_start_time?: string | null
           standard_weekly_hours?: Json | null
           updated_at?: string

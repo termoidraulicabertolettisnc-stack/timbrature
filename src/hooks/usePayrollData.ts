@@ -17,6 +17,7 @@ export interface PayrollData {
   employee_name: string;
   company_id: string;
   company_name: string;
+  staffing_agency_name: string | null;
   daily_data: {
     [day: string]: {
       ordinary: number;
@@ -398,11 +399,15 @@ const fetchPayrollData = async (selectedMonth: string): Promise<PayrollData[]> =
       resolvedName: companyName,
     });
 
+    // Get staffing agency from current employee settings
+    const staffingAgencyName = currentEmployeeSettings?.staffing_agency_name || null;
+
     return {
       employee_id: profile.user_id,
       employee_name: `${profile.first_name} ${profile.last_name}`,
       company_id: profile.company_id || '',
       company_name: companyName,
+      staffing_agency_name: staffingAgencyName,
       daily_data: finalDailyData,
       totals: { 
         ordinary: finalTotalOrdinary ?? 0, 

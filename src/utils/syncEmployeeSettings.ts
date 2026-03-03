@@ -62,6 +62,7 @@ export const syncEmployeeSettingsStructure = async (companyId: string) => {
         enable_overtime_conversion: empSetting.enable_overtime_conversion !== undefined ? empSetting.enable_overtime_conversion : null,
         overtime_conversion_rate: empSetting.overtime_conversion_rate !== undefined ? empSetting.overtime_conversion_rate : null,
         has_meal_allowance_in_paycheck: empSetting.has_meal_allowance_in_paycheck !== undefined ? empSetting.has_meal_allowance_in_paycheck : null,
+        staffing_agency_name: empSetting.staffing_agency_name !== undefined ? empSetting.staffing_agency_name : null,
         updated_at: new Date().toISOString()
       };
 
@@ -141,6 +142,8 @@ export const createDefaultEmployeeSettings = async (
       overtime_conversion_rate: null,
       // Meal allowance in paycheck
       has_meal_allowance_in_paycheck: null,
+      // Staffing agency
+      staffing_agency_name: null,
     };
 
     const { data, error } = await supabase
