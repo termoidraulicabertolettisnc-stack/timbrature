@@ -58,6 +58,8 @@ interface EmployeeSettings {
   overtime_conversion_rate?: number | null;
   // Meal allowance in paycheck
   has_meal_allowance_in_paycheck?: boolean | null;
+  // Staffing agency
+  staffing_agency_name?: string | null;
 }
 
 interface CompanySettings {
@@ -126,6 +128,8 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
     overtime_conversion_rate: null,
     // Meal allowance in paycheck
     has_meal_allowance_in_paycheck: null,
+    // Staffing agency
+    staffing_agency_name: null,
   });
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [companies, setCompanies] = useState<Array<{id: string, name: string}>>([]);
@@ -259,6 +263,8 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
           overtime_conversion_rate: null,
           // Meal allowance in paycheck
           has_meal_allowance_in_paycheck: null,
+          // Staffing agency
+          staffing_agency_name: null,
         });
       }
     } catch (error) {
@@ -399,6 +405,8 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
       overtime_conversion_rate: null,
       // Meal allowance in paycheck
       has_meal_allowance_in_paycheck: null,
+      // Staffing agency
+      staffing_agency_name: null,
     });
     setHasChanges(true);
   };
@@ -998,6 +1006,39 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
               <p className="text-xs text-muted-foreground mt-2">
                 Valore attuale: {settings.has_meal_allowance_in_paycheck ? '✅ Abilitato' : '❌ Disabilitato'}
               </p>
+            </CardContent>
+          </Card>
+
+          {/* Somministrazione */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5" />
+                Somministrazione
+              </CardTitle>
+              <CardDescription>
+                Se il dipendente è in somministrazione, indica il nome dell'agenzia. 
+                I dipendenti somministrati verranno esportati separatamente nelle buste paga.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="staffing_agency_name">Nome Agenzia di Somministrazione</Label>
+                  <Input
+                    id="staffing_agency_name"
+                    value={settings.staffing_agency_name || ''}
+                    onChange={(e) => updateSetting('staffing_agency_name', e.target.value || null)}
+                    placeholder="Es. Adecco, Manpower, Randstad..."
+                    className="mt-1"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {settings.staffing_agency_name 
+                    ? `✅ Somministrato tramite: ${settings.staffing_agency_name}` 
+                    : '❌ Non in somministrazione (dipendente diretto)'}
+                </p>
+              </div>
             </CardContent>
           </Card>
 

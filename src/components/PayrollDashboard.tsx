@@ -255,28 +255,36 @@ export default function PayrollDashboard() {
                        'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
     const monthName = monthNames[parseInt(month) - 1];
     
-    const employeesByCompany = payrollData.reduce((acc, employee) => {
-      const companyKey = employee.company_id || 'unknown';
-      const companyName = employee.company_name || 'Azienda sconosciuta';
-      if (!acc[companyKey]) acc[companyKey] = { name: companyName, employees: [] };
-      acc[companyKey].employees.push(employee);
+    // Group employees by company + staffing agency
+    // Each unique combination gets its own sheet/file
+    const employeeGroups = payrollData.reduce((acc, employee) => {
+      const agencyName = employee.staffing_agency_name;
+      const groupKey = agencyName 
+        ? `${employee.company_id}_agency_${agencyName}` 
+        : `${employee.company_id}_direct`;
+      const groupLabel = agencyName 
+        ? `${employee.company_name} - ${agencyName}` 
+        : employee.company_name || 'Azienda sconosciuta';
+      
+      if (!acc[groupKey]) acc[groupKey] = { name: groupLabel, employees: [], isAgency: !!agencyName };
+      acc[groupKey].employees.push(employee);
       return acc;
-    }, {} as { [key: string]: { name: string; employees: PayrollData[] } });
+    }, {} as { [key: string]: { name: string; employees: PayrollData[]; isAgency: boolean } });
 
     if (mode === 'sheets') {
       // Single file with multiple sheets
       const workbook = new ExcelJS.Workbook();
-      Object.values(employeesByCompany).forEach(companyData => {
-        createCompanyWorksheet(workbook, companyData.name, companyData.employees, year, month, monthName, daysInMonth);
+      Object.values(employeeGroups).forEach(groupData => {
+        createCompanyWorksheet(workbook, groupData.name, groupData.employees, year, month, monthName, daysInMonth);
       });
       await downloadWorkbook(workbook, `${month}_${year}_Buste_Paga.xlsx`);
     } else {
-      // Multiple files, one per company
-      for (const companyData of Object.values(employeesByCompany)) {
+      // Multiple files, one per group (company + agency)
+      for (const groupData of Object.values(employeeGroups)) {
         const workbook = new ExcelJS.Workbook();
-        createCompanyWorksheet(workbook, companyData.name, companyData.employees, year, month, monthName, daysInMonth);
-        const sanitizedCompanyName = companyData.name.replace(/[\\/*?:"<>|]/g, '_');
-        await downloadWorkbook(workbook, `${month}_${year}_Buste_Paga_${sanitizedCompanyName}.xlsx`);
+        createCompanyWorksheet(workbook, groupData.name, groupData.employees, year, month, monthName, daysInMonth);
+        const sanitizedName = groupData.name.replace(/[\\/*?:"<>|]/g, '_');
+        await downloadWorkbook(workbook, `${month}_${year}_Buste_Paga_${sanitizedName}.xlsx`);
       }
     }
     
@@ -447,6 +455,11 @@ export default function PayrollDashboard() {
                     <TableRow className="hover:bg-green-50/50">
                       <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
                         <span className="text-green-700 font-bold">O</span> - {employee.employee_name}
+                        {employee.staffing_agency_name && (
+                          <Badge variant="outline" className="ml-1 text-[10px] px-1 py-0">
+                            {employee.staffing_agency_name}
+                          </Badge>
+                        )}
                       </TableCell>
                       {Array.from({ length: getDaysInMonth() }, (_, i) => {
                         const day = i + 1;
