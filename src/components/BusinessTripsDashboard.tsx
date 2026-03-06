@@ -572,6 +572,7 @@ const BusinessTripsDashboard = () => {
                         {breakdown.components.daily_allowances > 0 && <div>TI: €{breakdown.components.daily_allowances.toFixed(2)}</div>}
                         {breakdown.components.overtime_conversions > 0 && <div>CS: €{breakdown.components.overtime_conversions.toFixed(2)}</div>}
                         {breakdown.components.meal_voucher_conversions > 0 && <div>CB: €{breakdown.components.meal_voucher_conversions.toFixed(2)}</div>}
+                        {breakdown.components.manual_trips > 0 && <div>TM: €{breakdown.components.manual_trips.toFixed(2)}</div>}
                       </div>
                     </div>
                   </div>
