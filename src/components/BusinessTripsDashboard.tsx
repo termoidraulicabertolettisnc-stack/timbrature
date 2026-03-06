@@ -1,14 +1,16 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBusinessTripData, type BusinessTripData } from '@/hooks/useBusinessTripData';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, Download, Users, MapPin, TrendingDown } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Calendar, Download, Users, MapPin, TrendingDown, Truck } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog';
 import { MassConversionDialog } from '@/components/MassConversionDialog';
