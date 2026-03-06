@@ -55,6 +55,15 @@ export interface BusinessTripData {
   daily_allowances_amounts: { [day: string]: number };
   saturday_rate: number;
   has_meal_allowance_in_paycheck: boolean;
+  // Manual trip mode
+  manual_trip_mode: boolean;
+  manual_trips: {
+    trip_count: number;
+    amount_per_trip: number;
+    total_amount: number;
+    manual_trip_id?: string;
+  };
+  manual_trips_daily_data: { [day: string]: boolean }; // which days had meal vouchers removed
 }
 
 const fetchBusinessTripData = async (selectedMonth: string, userId: string): Promise<{ data: BusinessTripData[], holidays: string[] }> => {
