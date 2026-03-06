@@ -491,7 +491,7 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
       // MANUAL TRIP MODE: remove meal vouchers from first N days with meal vouchers
       const manualTripsDailyData: { [day: string]: boolean } = {};
       let effectiveMealVoucherDays = mealVoucherDays;
-      let effectiveMealVoucherAmount = mealVoucherDays * effectiveMealVoucherAmountPerDay;
+      let effectiveMealVoucherTotal = mealVoucherDays * effectiveMealVoucherAmount;
       const manualTripCount = isManualTripMode && manualTripRecord ? (manualTripRecord.trip_count || 0) : 0;
       const manualTripAmountPerTrip = isManualTripMode && manualTripRecord ? (manualTripRecord.amount_per_trip || 46.48) : 46.48;
       
