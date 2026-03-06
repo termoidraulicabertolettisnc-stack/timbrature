@@ -227,7 +227,8 @@ const BusinessTripsDashboard = () => {
   const totalDailyAllowanceAmount = businessTripData.reduce((sum, emp) => sum + emp.daily_allowances.amount, 0);
   const totalOvertimeConversions = businessTripData.reduce((sum, emp) => sum + emp.overtime_conversions.amount, 0);
   const totalMealVoucherConversions = businessTripData.reduce((sum, emp) => sum + emp.meal_voucher_conversions.amount, 0);
-  const grandTotal = totalSaturdayAmount + totalDailyAllowanceAmount + totalOvertimeConversions + totalMealVoucherConversions;
+  const totalManualTrips = businessTripData.reduce((sum, emp) => sum + emp.manual_trips.total_amount, 0);
+  const grandTotal = totalSaturdayAmount + totalDailyAllowanceAmount + totalOvertimeConversions + totalMealVoucherConversions + totalManualTrips;
   
   const calculateEmployeeBreakdowns = () => {
     const CAP_STD = 46.48;  // senza BDP
