@@ -265,11 +265,13 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
           // Overtime conversion fields
           enable_overtime_conversion: null,
           overtime_conversion_rate: null,
-          // Meal allowance in paycheck
-          has_meal_allowance_in_paycheck: null,
-          // Staffing agency
-          staffing_agency_name: null,
-        });
+      // Meal allowance in paycheck
+      has_meal_allowance_in_paycheck: null,
+      // Staffing agency
+      staffing_agency_name: null,
+      // Manual trip mode
+      manual_trip_mode: null,
+    });
       }
     } catch (error) {
       console.error('Error loading settings:', error);
