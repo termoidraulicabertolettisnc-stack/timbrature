@@ -132,6 +132,8 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
     has_meal_allowance_in_paycheck: null,
     // Staffing agency
     staffing_agency_name: null,
+    // Manual trip mode
+    manual_trip_mode: null,
   });
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [companies, setCompanies] = useState<Array<{id: string, name: string}>>([]);
