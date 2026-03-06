@@ -89,6 +89,55 @@ const BusinessTripsDashboard = () => {
     workingDays: []
   });
 
+  // Manual trip count editing state
+  const [editingManualTrips, setEditingManualTrips] = useState<{ [userId: string]: string }>({});
+  const [savingManualTrips, setSavingManualTrips] = useState<{ [userId: string]: boolean }>({});
+
+  const saveManualTripCount = useCallback(async (employee: BusinessTripData) => {
+    const tripCountStr = editingManualTrips[employee.employee_id];
+    if (tripCountStr === undefined) return;
+    
+    const tripCount = parseInt(tripCountStr) || 0;
+    const monthDate = `${selectedMonth}-01`;
+    
+    setSavingManualTrips(prev => ({ ...prev, [employee.employee_id]: true }));
+    try {
+      if (tripCount <= 0) {
+        // Delete the record if count is 0
+        if (employee.manual_trips.manual_trip_id) {
+          await supabase
+            .from('employee_manual_trips')
+            .delete()
+            .eq('id', employee.manual_trips.manual_trip_id);
+        }
+      } else {
+        // Upsert
+        const { error } = await supabase
+          .from('employee_manual_trips')
+          .upsert({
+            user_id: employee.employee_id,
+            company_id: employee.company_id,
+            month: monthDate,
+            trip_count: tripCount,
+            amount_per_trip: 46.48,
+            created_by: user!.id,
+            updated_by: user!.id,
+          }, { onConflict: 'user_id,month' });
+        
+        if (error) throw error;
+      }
+      
+      toast({ title: 'Trasferte manuali salvate', description: `${tripCount} trasferte per ${employee.employee_name}` });
+      setEditingManualTrips(prev => { const n = { ...prev }; delete n[employee.employee_id]; return n; });
+      handleRefresh();
+    } catch (error) {
+      console.error('Error saving manual trips:', error);
+      toast({ title: 'Errore', description: 'Impossibile salvare le trasferte manuali', variant: 'destructive' });
+    } finally {
+      setSavingManualTrips(prev => ({ ...prev, [employee.employee_id]: false }));
+    }
+  }, [editingManualTrips, selectedMonth, user, toast]);
+
   const getDaysInMonth = () => {
     const [year, month] = selectedMonth.split('-');
     return new Date(parseInt(year), parseInt(month), 0).getDate();
