@@ -55,6 +55,15 @@ export interface BusinessTripData {
   daily_allowances_amounts: { [day: string]: number };
   saturday_rate: number;
   has_meal_allowance_in_paycheck: boolean;
+  // Manual trip mode
+  manual_trip_mode: boolean;
+  manual_trips: {
+    trip_count: number;
+    amount_per_trip: number;
+    total_amount: number;
+    manual_trip_id?: string;
+  };
+  manual_trips_daily_data: { [day: string]: boolean }; // which days had meal vouchers removed
 }
 
 const fetchBusinessTripData = async (selectedMonth: string, userId: string): Promise<{ data: BusinessTripData[], holidays: string[] }> => {
@@ -155,11 +164,19 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
   // Load all meal voucher conversions for the period
   const allConversionsData = await MealVoucherConversionService.getConversionsForUsers(userIds, startDate, endDate);
 
-  // Get employee settings for monthly compensation check
+  // Get employee settings for monthly compensation check (include manual_trip_mode)
   const { data: employeeSettingsData } = await supabase
     .from('employee_settings')
-    .select('user_id, overtime_monthly_compensation, valid_from, valid_to')
+    .select('user_id, overtime_monthly_compensation, manual_trip_mode, valid_from, valid_to')
     .in('user_id', userIds);
+
+  // Load manual trips for the month
+  const monthDate = `${year}-${month}-01`;
+  const { data: manualTripsData } = await supabase
+    .from('employee_manual_trips')
+    .select('*')
+    .in('user_id', userIds)
+    .eq('month', monthDate);
 
   // Build simplified per-employee dataset
   const processedData: BusinessTripData[] = await Promise.all(
@@ -176,6 +193,10 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         (es.valid_to === null || es.valid_to >= startDate)
       );
       const hasMonthlyOvertimeCompensation = employeeSetting?.overtime_monthly_compensation === true;
+      const isManualTripMode = employeeSetting?.manual_trip_mode === true;
+      
+      // Get manual trip record for this employee/month
+      const manualTripRecord = manualTripsData?.find(mt => mt.user_id === profile.user_id);
 
       const dailyData: BusinessTripData['daily_data'] = {};
       // Track contracted hours per day for deficit calculation
@@ -467,6 +488,41 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         mealVoucherDays,
       });
 
+      // MANUAL TRIP MODE: remove meal vouchers from first N days with meal vouchers
+      const manualTripsDailyData: { [day: string]: boolean } = {};
+      let effectiveMealVoucherDays = mealVoucherDays;
+      let effectiveMealVoucherTotal = mealVoucherDays * effectiveMealVoucherAmount;
+      const manualTripCount = isManualTripMode && manualTripRecord ? (manualTripRecord.trip_count || 0) : 0;
+      const manualTripAmountPerTrip = isManualTripMode && manualTripRecord ? (manualTripRecord.amount_per_trip || 46.48) : 46.48;
+      
+      if (isManualTripMode && manualTripCount > 0) {
+        // Collect days with meal vouchers (sorted by day number)
+        const mealVoucherDayKeys = Object.keys(mealVouchersDaily)
+          .filter(dk => mealVouchersDaily[dk])
+          .sort((a, b) => parseInt(a) - parseInt(b));
+        
+        // Remove meal vouchers from first N days
+        let tripsAssigned = 0;
+        for (const dayKey of mealVoucherDayKeys) {
+          if (tripsAssigned >= manualTripCount) break;
+          mealVouchersDaily[dayKey] = false;
+          manualTripsDailyData[dayKey] = true;
+          tripsAssigned++;
+          effectiveMealVoucherDays--;
+        }
+        
+        // Recalculate meal voucher amount
+        effectiveMealVoucherTotal = effectiveMealVoucherDays * effectiveMealVoucherAmount;
+        
+        console.log(`🚗 [BusinessTripData] Trasferte manuali per ${profile.first_name} ${profile.last_name}:`, {
+          tripCount: manualTripCount,
+          amountPerTrip: manualTripAmountPerTrip,
+          totalAmount: manualTripCount * manualTripAmountPerTrip,
+          mealVouchersRemoved: tripsAssigned,
+          remainingMealVouchers: effectiveMealVoucherDays,
+        });
+      }
+
       return {
         employee_id: profile.user_id,
         employee_name: `${profile.first_name} ${profile.last_name}`,
@@ -477,8 +533,8 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
           overtime: finalOvertimeTotal,
           absence_totals: absenceTotals,
         },
-        meal_vouchers: mealVoucherDays,
-        meal_voucher_amount: mealVoucherDays * effectiveMealVoucherAmount,
+        meal_vouchers: effectiveMealVoucherDays,
+        meal_voucher_amount: effectiveMealVoucherTotal,
         saturday_trips: saturdayTrips,
         daily_allowances: dailyAllowances,
         overtime_conversions: overtimeConversions,
@@ -487,6 +543,14 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         daily_allowances_amounts: dailyAllowanceAmounts,
         saturday_rate: defaultSaturdayRate,
         has_meal_allowance_in_paycheck: latestEmployeeSettings?.has_meal_allowance_in_paycheck === true,
+        manual_trip_mode: isManualTripMode,
+        manual_trips: {
+          trip_count: manualTripCount,
+          amount_per_trip: manualTripAmountPerTrip,
+          total_amount: manualTripCount * manualTripAmountPerTrip,
+          manual_trip_id: manualTripRecord?.id,
+        },
+        manual_trips_daily_data: manualTripsDailyData,
       };
     })
   );

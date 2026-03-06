@@ -13,7 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { AlertTriangle, Save, RotateCcw, CalendarIcon, Settings, Coffee } from 'lucide-react';
+import { AlertTriangle, Save, RotateCcw, CalendarIcon, Settings, Coffee, MapPin } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -60,6 +60,8 @@ interface EmployeeSettings {
   has_meal_allowance_in_paycheck?: boolean | null;
   // Staffing agency
   staffing_agency_name?: string | null;
+  // Manual trip mode
+  manual_trip_mode?: boolean | null;
 }
 
 interface CompanySettings {
@@ -130,6 +132,8 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
     has_meal_allowance_in_paycheck: null,
     // Staffing agency
     staffing_agency_name: null,
+    // Manual trip mode
+    manual_trip_mode: null,
   });
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [companies, setCompanies] = useState<Array<{id: string, name: string}>>([]);
@@ -261,11 +265,13 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
           // Overtime conversion fields
           enable_overtime_conversion: null,
           overtime_conversion_rate: null,
-          // Meal allowance in paycheck
-          has_meal_allowance_in_paycheck: null,
-          // Staffing agency
-          staffing_agency_name: null,
-        });
+      // Meal allowance in paycheck
+      has_meal_allowance_in_paycheck: null,
+      // Staffing agency
+      staffing_agency_name: null,
+      // Manual trip mode
+      manual_trip_mode: null,
+    });
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -403,13 +409,15 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
       // Overtime conversion fields
       enable_overtime_conversion: null,
       overtime_conversion_rate: null,
-      // Meal allowance in paycheck
-      has_meal_allowance_in_paycheck: null,
-      // Staffing agency
-      staffing_agency_name: null,
-    });
-    setHasChanges(true);
-  };
+    // Meal allowance in paycheck
+    has_meal_allowance_in_paycheck: null,
+    // Staffing agency
+    staffing_agency_name: null,
+    // Manual trip mode
+    manual_trip_mode: null,
+  });
+  setHasChanges(true);
+};
 
   const handleCompanyChange = (companyId: string) => {
     setSelectedCompanyId(companyId);
@@ -1005,6 +1013,38 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
               </div>
               <p className="text-xs text-muted-foreground mt-2">
                 Valore attuale: {settings.has_meal_allowance_in_paycheck ? '✅ Abilitato' : '❌ Disabilitato'}
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Manual Trip Mode */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Trasferte Manuali
+              </CardTitle>
+              <CardDescription>
+                Se abilitato, le trasferte di questo dipendente vengono assegnate manualmente a fine mese 
+                (es. "10 trasferte") invece di essere calcolate automaticamente dalla policy giornaliera.
+                I giorni con trasferta manuale non avranno il buono pasto, applicando la tariffa piena (€46.48).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="manual_trip_mode"
+                  checked={settings.manual_trip_mode === true}
+                  onCheckedChange={(checked) => {
+                    updateSetting('manual_trip_mode', checked === true ? true : false);
+                  }}
+                />
+                <Label htmlFor="manual_trip_mode" className="cursor-pointer">
+                  Abilita trasferte manuali mensili
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Valore attuale: {settings.manual_trip_mode ? '✅ Trasferte manuali attive' : '❌ Trasferte automatiche (default)'}
               </p>
             </CardContent>
           </Card>

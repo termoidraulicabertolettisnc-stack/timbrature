@@ -1,14 +1,16 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBusinessTripData, type BusinessTripData } from '@/hooks/useBusinessTripData';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, Download, Users, MapPin, TrendingDown } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Calendar, Download, Users, MapPin, TrendingDown, Truck } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { OvertimeConversionDialog } from '@/components/OvertimeConversionDialog';
 import { MassConversionDialog } from '@/components/MassConversionDialog';
@@ -86,6 +88,55 @@ const BusinessTripsDashboard = () => {
     companyId: '',
     workingDays: []
   });
+
+  // Manual trip count editing state
+  const [editingManualTrips, setEditingManualTrips] = useState<{ [userId: string]: string }>({});
+  const [savingManualTrips, setSavingManualTrips] = useState<{ [userId: string]: boolean }>({});
+
+  const saveManualTripCount = useCallback(async (employee: BusinessTripData) => {
+    const tripCountStr = editingManualTrips[employee.employee_id];
+    if (tripCountStr === undefined) return;
+    
+    const tripCount = parseInt(tripCountStr) || 0;
+    const monthDate = `${selectedMonth}-01`;
+    
+    setSavingManualTrips(prev => ({ ...prev, [employee.employee_id]: true }));
+    try {
+      if (tripCount <= 0) {
+        // Delete the record if count is 0
+        if (employee.manual_trips.manual_trip_id) {
+          await supabase
+            .from('employee_manual_trips')
+            .delete()
+            .eq('id', employee.manual_trips.manual_trip_id);
+        }
+      } else {
+        // Upsert
+        const { error } = await supabase
+          .from('employee_manual_trips')
+          .upsert({
+            user_id: employee.employee_id,
+            company_id: employee.company_id,
+            month: monthDate,
+            trip_count: tripCount,
+            amount_per_trip: 46.48,
+            created_by: user!.id,
+            updated_by: user!.id,
+          }, { onConflict: 'user_id,month' });
+        
+        if (error) throw error;
+      }
+      
+      toast({ title: 'Trasferte manuali salvate', description: `${tripCount} trasferte per ${employee.employee_name}` });
+      setEditingManualTrips(prev => { const n = { ...prev }; delete n[employee.employee_id]; return n; });
+      handleRefresh();
+    } catch (error) {
+      console.error('Error saving manual trips:', error);
+      toast({ title: 'Errore', description: 'Impossibile salvare le trasferte manuali', variant: 'destructive' });
+    } finally {
+      setSavingManualTrips(prev => ({ ...prev, [employee.employee_id]: false }));
+    }
+  }, [editingManualTrips, selectedMonth, user, toast]);
 
   const getDaysInMonth = () => {
     const [year, month] = selectedMonth.split('-');
@@ -176,7 +227,8 @@ const BusinessTripsDashboard = () => {
   const totalDailyAllowanceAmount = businessTripData.reduce((sum, emp) => sum + emp.daily_allowances.amount, 0);
   const totalOvertimeConversions = businessTripData.reduce((sum, emp) => sum + emp.overtime_conversions.amount, 0);
   const totalMealVoucherConversions = businessTripData.reduce((sum, emp) => sum + emp.meal_voucher_conversions.amount, 0);
-  const grandTotal = totalSaturdayAmount + totalDailyAllowanceAmount + totalOvertimeConversions + totalMealVoucherConversions;
+  const totalManualTrips = businessTripData.reduce((sum, emp) => sum + emp.manual_trips.total_amount, 0);
+  const grandTotal = totalSaturdayAmount + totalDailyAllowanceAmount + totalOvertimeConversions + totalMealVoucherConversions + totalManualTrips;
   
   const calculateEmployeeBreakdowns = () => {
     const CAP_STD = 46.48;  // senza BDP
@@ -201,12 +253,13 @@ const BusinessTripsDashboard = () => {
     };
 
     return filteredBusinessTripData.map(emp => {
-      // Totale R = TS + TI + CS + CB
+      // Totale R = TS + TI + CS + CB + TM
       const TS_total = emp.saturday_trips.amount || 0;
       const TI_total = emp.daily_allowances.amount || 0;
       const CS_total = emp.overtime_conversions.amount || 0;
       const CB_total = emp.meal_voucher_conversions.amount || 0;
-      const R = TS_total + TI_total + CS_total + CB_total;
+      const TM_total = emp.manual_trips.total_amount || 0;
+      const R = TS_total + TI_total + CS_total + CB_total + TM_total;
 
       // Conta giorni disponibili
       let A46 = 0; // giorni SENZA buoni pasto
@@ -268,7 +321,8 @@ const BusinessTripsDashboard = () => {
             saturday_trips: TS_total,
             daily_allowances: TI_total,
             overtime_conversions: CS_total,
-            meal_voucher_conversions: CB_total
+            meal_voucher_conversions: CB_total,
+            manual_trips: TM_total
           },
           needCapacityWarning: R > 0 ? `${emp.employee_name}: nessun giorno eleggibile` : null,
           totalEligibleDays: 0,
@@ -300,7 +354,8 @@ const BusinessTripsDashboard = () => {
             saturday_trips: TS_total,
             daily_allowances: TI_total,
             overtime_conversions: CS_total,
-            meal_voucher_conversions: CB_total
+            meal_voucher_conversions: CB_total,
+            manual_trips: TM_total
           },
           needCapacityWarning: `${emp.employee_name}: Capienza insufficiente: residuo non distribuibile €${clamp2(residual)}`,
           totalEligibleDays: A46 + A30,
@@ -413,7 +468,8 @@ const BusinessTripsDashboard = () => {
           saturday_trips: TS_total,
           daily_allowances: TI_total,
           overtime_conversions: CS_total,
-          meal_voucher_conversions: CB_total
+          meal_voucher_conversions: CB_total,
+          manual_trips: TM_total
         },
         needCapacityWarning: warning,
         totalEligibleDays: A46 + A30,
@@ -517,6 +573,7 @@ const BusinessTripsDashboard = () => {
                         {breakdown.components.daily_allowances > 0 && <div>TI: €{breakdown.components.daily_allowances.toFixed(2)}</div>}
                         {breakdown.components.overtime_conversions > 0 && <div>CS: €{breakdown.components.overtime_conversions.toFixed(2)}</div>}
                         {breakdown.components.meal_voucher_conversions > 0 && <div>CB: €{breakdown.components.meal_voucher_conversions.toFixed(2)}</div>}
+                        {breakdown.components.manual_trips > 0 && <div>TM: €{breakdown.components.manual_trips.toFixed(2)}</div>}
                       </div>
                     </div>
                   </div>
@@ -885,8 +942,62 @@ const BusinessTripsDashboard = () => {
                               </Button>
                             </TableCell>
                          </TableRow>
+
+                         {/* Manual trips row - only for manual_trip_mode employees */}
+                         {employee.manual_trip_mode && (
+                           <TableRow className="hover:bg-teal-50/50">
+                             <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                               <span className="text-teal-700 font-bold">TM</span> - {employee.employee_name}
+                             </TableCell>
+                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                               const dayKey = String(i + 1).padStart(2, '0');
+                               const hasManualTrip = employee.manual_trips_daily_data[dayKey];
+                               const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                               return (
+                                 <TableCell 
+                                   key={i + 1} 
+                                   className={`text-center text-xs p-1 ${
+                                     isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                   } ${hasManualTrip ? 'text-teal-700 font-medium' : 'text-muted-foreground'}`}
+                                 >
+                                   {hasManualTrip ? 'TM' : ''}
+                                 </TableCell>
+                               );
+                             })}
+                             <TableCell className="text-center font-bold text-teal-700 text-xs p-1 bg-gray-50 border-l">
+                               {employee.manual_trips.trip_count}
+                             </TableCell>
+                             <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                             <TableCell className="text-center font-bold text-teal-700 text-xs p-1">
+                               €{employee.manual_trips.total_amount.toFixed(2)}
+                             </TableCell>
+                             <TableCell className="p-1">
+                               <div className="flex items-center gap-1">
+                                 <Input
+                                   type="number"
+                                   min="0"
+                                   className="w-16 h-7 text-xs"
+                                   value={editingManualTrips[employee.employee_id] ?? employee.manual_trips.trip_count}
+                                   onChange={(e) => setEditingManualTrips(prev => ({ ...prev, [employee.employee_id]: e.target.value }))}
+                                 />
+                                 {editingManualTrips[employee.employee_id] !== undefined && (
+                                   <Button
+                                     variant="outline"
+                                     size="sm"
+                                     className="h-7 text-xs px-2"
+                                     disabled={savingManualTrips[employee.employee_id]}
+                                     onClick={() => saveManualTripCount(employee)}
+                                   >
+                                     {savingManualTrips[employee.employee_id] ? '...' : 'Salva'}
+                                   </Button>
+                                 )}
+                               </div>
+                             </TableCell>
+                           </TableRow>
+                         )}
                        </React.Fragment>
                      ))}
+
                   </TableBody>
                 </Table>
               </div>
@@ -936,6 +1047,10 @@ const BusinessTripsDashboard = () => {
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-purple-200 rounded"></div>
                   <span><strong>CB</strong> - Conversioni Buoni Pasto (+€8.00)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-teal-200 rounded"></div>
+                  <span><strong>TM</strong> - Trasferte Manuali (€46.48 - assegnate a fine mese)</span>
                 </div>
               </div>
             </div>
