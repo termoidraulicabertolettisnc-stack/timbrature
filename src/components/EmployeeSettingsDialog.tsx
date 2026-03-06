@@ -1017,6 +1017,38 @@ export const EmployeeSettingsDialog = ({ employee, open, onOpenChange, onEmploye
             </CardContent>
           </Card>
 
+          {/* Manual Trip Mode */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Trasferte Manuali
+              </CardTitle>
+              <CardDescription>
+                Se abilitato, le trasferte di questo dipendente vengono assegnate manualmente a fine mese 
+                (es. "10 trasferte") invece di essere calcolate automaticamente dalla policy giornaliera.
+                I giorni con trasferta manuale non avranno il buono pasto, applicando la tariffa piena (€46.48).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center space-x-3">
+                <Checkbox
+                  id="manual_trip_mode"
+                  checked={settings.manual_trip_mode === true}
+                  onCheckedChange={(checked) => {
+                    updateSetting('manual_trip_mode', checked === true ? true : false);
+                  }}
+                />
+                <Label htmlFor="manual_trip_mode" className="cursor-pointer">
+                  Abilita trasferte manuali mensili
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Valore attuale: {settings.manual_trip_mode ? '✅ Trasferte manuali attive' : '❌ Trasferte automatiche (default)'}
+              </p>
+            </CardContent>
+          </Card>
+
           {/* Somministrazione */}
           <Card>
             <CardHeader>
