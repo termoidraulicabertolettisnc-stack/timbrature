@@ -13,7 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { toast } from 'sonner';
-import { AlertTriangle, Save, RotateCcw, CalendarIcon, Settings, Coffee } from 'lucide-react';
+import { AlertTriangle, Save, RotateCcw, CalendarIcon, Settings, Coffee, MapPin } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
