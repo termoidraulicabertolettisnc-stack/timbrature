@@ -936,8 +936,62 @@ const BusinessTripsDashboard = () => {
                               </Button>
                             </TableCell>
                          </TableRow>
+
+                         {/* Manual trips row - only for manual_trip_mode employees */}
+                         {employee.manual_trip_mode && (
+                           <TableRow className="hover:bg-teal-50/50">
+                             <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs p-2 border-r">
+                               <span className="text-teal-700 font-bold">TM</span> - {employee.employee_name}
+                             </TableCell>
+                             {Array.from({ length: getDaysInMonth() }, (_, i) => {
+                               const dayKey = String(i + 1).padStart(2, '0');
+                               const hasManualTrip = employee.manual_trips_daily_data[dayKey];
+                               const { isSunday, isSaturday, isHoliday } = getDateInfo(i + 1);
+                               return (
+                                 <TableCell 
+                                   key={i + 1} 
+                                   className={`text-center text-xs p-1 ${
+                                     isSunday || isHoliday ? 'bg-red-50' : isSaturday ? 'bg-orange-50' : ''
+                                   } ${hasManualTrip ? 'text-teal-700 font-medium' : 'text-muted-foreground'}`}
+                                 >
+                                   {hasManualTrip ? 'TM' : ''}
+                                 </TableCell>
+                               );
+                             })}
+                             <TableCell className="text-center font-bold text-teal-700 text-xs p-1 bg-gray-50 border-l">
+                               {employee.manual_trips.trip_count}
+                             </TableCell>
+                             <TableCell className="text-center text-xs p-1 bg-yellow-50">-</TableCell>
+                             <TableCell className="text-center font-bold text-teal-700 text-xs p-1">
+                               €{employee.manual_trips.total_amount.toFixed(2)}
+                             </TableCell>
+                             <TableCell className="p-1">
+                               <div className="flex items-center gap-1">
+                                 <Input
+                                   type="number"
+                                   min="0"
+                                   className="w-16 h-7 text-xs"
+                                   value={editingManualTrips[employee.employee_id] ?? employee.manual_trips.trip_count}
+                                   onChange={(e) => setEditingManualTrips(prev => ({ ...prev, [employee.employee_id]: e.target.value }))}
+                                 />
+                                 {editingManualTrips[employee.employee_id] !== undefined && (
+                                   <Button
+                                     variant="outline"
+                                     size="sm"
+                                     className="h-7 text-xs px-2"
+                                     disabled={savingManualTrips[employee.employee_id]}
+                                     onClick={() => saveManualTripCount(employee)}
+                                   >
+                                     {savingManualTrips[employee.employee_id] ? '...' : 'Salva'}
+                                   </Button>
+                                 )}
+                               </div>
+                             </TableCell>
+                           </TableRow>
+                         )}
                        </React.Fragment>
                      ))}
+
                   </TableBody>
                 </Table>
               </div>
