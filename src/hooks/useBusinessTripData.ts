@@ -164,11 +164,19 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
   // Load all meal voucher conversions for the period
   const allConversionsData = await MealVoucherConversionService.getConversionsForUsers(userIds, startDate, endDate);
 
-  // Get employee settings for monthly compensation check
+  // Get employee settings for monthly compensation check (include manual_trip_mode)
   const { data: employeeSettingsData } = await supabase
     .from('employee_settings')
-    .select('user_id, overtime_monthly_compensation, valid_from, valid_to')
+    .select('user_id, overtime_monthly_compensation, manual_trip_mode, valid_from, valid_to')
     .in('user_id', userIds);
+
+  // Load manual trips for the month
+  const monthDate = `${year}-${month}-01`;
+  const { data: manualTripsData } = await supabase
+    .from('employee_manual_trips')
+    .select('*')
+    .in('user_id', userIds)
+    .eq('month', monthDate);
 
   // Build simplified per-employee dataset
   const processedData: BusinessTripData[] = await Promise.all(
