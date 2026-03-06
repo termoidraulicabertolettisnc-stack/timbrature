@@ -581,6 +581,51 @@ export type Database = {
         }
         Relationships: []
       }
+      employee_manual_trips: {
+        Row: {
+          amount_per_trip: number
+          company_id: string
+          created_at: string
+          created_by: string
+          id: string
+          month: string
+          notes: string | null
+          total_amount: number | null
+          trip_count: number
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          amount_per_trip?: number
+          company_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          month: string
+          notes?: string | null
+          total_amount?: number | null
+          trip_count?: number
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          amount_per_trip?: number
+          company_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          month?: string
+          notes?: string | null
+          total_amount?: number | null
+          trip_count?: number
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       employee_meal_voucher_conversions: {
         Row: {
           company_id: string
@@ -686,6 +731,7 @@ export type Database = {
           lunch_break_type:
             | Database["public"]["Enums"]["lunch_break_type"]
             | null
+          manual_trip_mode: boolean | null
           meal_allowance_policy:
             | Database["public"]["Enums"]["meal_allowance_policy"]
             | null
@@ -733,6 +779,7 @@ export type Database = {
           lunch_break_type?:
             | Database["public"]["Enums"]["lunch_break_type"]
             | null
+          manual_trip_mode?: boolean | null
           meal_allowance_policy?:
             | Database["public"]["Enums"]["meal_allowance_policy"]
             | null
@@ -782,6 +829,7 @@ export type Database = {
           lunch_break_type?:
             | Database["public"]["Enums"]["lunch_break_type"]
             | null
+          manual_trip_mode?: boolean | null
           meal_allowance_policy?:
             | Database["public"]["Enums"]["meal_allowance_policy"]
             | null
