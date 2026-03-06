@@ -353,7 +353,8 @@ const BusinessTripsDashboard = () => {
             saturday_trips: TS_total,
             daily_allowances: TI_total,
             overtime_conversions: CS_total,
-            meal_voucher_conversions: CB_total
+            meal_voucher_conversions: CB_total,
+            manual_trips: TM_total
           },
           needCapacityWarning: `${emp.employee_name}: Capienza insufficiente: residuo non distribuibile €${clamp2(residual)}`,
           totalEligibleDays: A46 + A30,
