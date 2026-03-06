@@ -60,6 +60,8 @@ interface EmployeeSettings {
   has_meal_allowance_in_paycheck?: boolean | null;
   // Staffing agency
   staffing_agency_name?: string | null;
+  // Manual trip mode
+  manual_trip_mode?: boolean | null;
 }
 
 interface CompanySettings {
