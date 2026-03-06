@@ -193,6 +193,10 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         (es.valid_to === null || es.valid_to >= startDate)
       );
       const hasMonthlyOvertimeCompensation = employeeSetting?.overtime_monthly_compensation === true;
+      const isManualTripMode = employeeSetting?.manual_trip_mode === true;
+      
+      // Get manual trip record for this employee/month
+      const manualTripRecord = manualTripsData?.find(mt => mt.user_id === profile.user_id);
 
       const dailyData: BusinessTripData['daily_data'] = {};
       // Track contracted hours per day for deficit calculation
