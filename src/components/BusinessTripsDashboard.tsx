@@ -252,12 +252,13 @@ const BusinessTripsDashboard = () => {
     };
 
     return filteredBusinessTripData.map(emp => {
-      // Totale R = TS + TI + CS + CB
+      // Totale R = TS + TI + CS + CB + TM
       const TS_total = emp.saturday_trips.amount || 0;
       const TI_total = emp.daily_allowances.amount || 0;
       const CS_total = emp.overtime_conversions.amount || 0;
       const CB_total = emp.meal_voucher_conversions.amount || 0;
-      const R = TS_total + TI_total + CS_total + CB_total;
+      const TM_total = emp.manual_trips.total_amount || 0;
+      const R = TS_total + TI_total + CS_total + CB_total + TM_total;
 
       // Conta giorni disponibili
       let A46 = 0; // giorni SENZA buoni pasto
