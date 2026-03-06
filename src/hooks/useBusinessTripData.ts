@@ -534,7 +534,7 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
           absence_totals: absenceTotals,
         },
         meal_vouchers: effectiveMealVoucherDays,
-        meal_voucher_amount: effectiveMealVoucherAmount,
+        meal_voucher_amount: effectiveMealVoucherTotal,
         saturday_trips: saturdayTrips,
         daily_allowances: dailyAllowances,
         overtime_conversions: overtimeConversions,
