@@ -320,7 +320,8 @@ const BusinessTripsDashboard = () => {
             saturday_trips: TS_total,
             daily_allowances: TI_total,
             overtime_conversions: CS_total,
-            meal_voucher_conversions: CB_total
+            meal_voucher_conversions: CB_total,
+            manual_trips: TM_total
           },
           needCapacityWarning: R > 0 ? `${emp.employee_name}: nessun giorno eleggibile` : null,
           totalEligibleDays: 0,
