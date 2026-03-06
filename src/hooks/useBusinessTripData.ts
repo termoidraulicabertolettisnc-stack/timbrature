@@ -512,7 +512,7 @@ const fetchBusinessTripData = async (selectedMonth: string, userId: string): Pro
         }
         
         // Recalculate meal voucher amount
-        effectiveMealVoucherAmount = effectiveMealVoucherDays * effectiveMealVoucherAmountPerDay;
+        effectiveMealVoucherTotal = effectiveMealVoucherDays * effectiveMealVoucherAmount;
         
         console.log(`🚗 [BusinessTripData] Trasferte manuali per ${profile.first_name} ${profile.last_name}:`, {
           tripCount: manualTripCount,
