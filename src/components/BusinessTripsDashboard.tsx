@@ -1048,6 +1048,10 @@ const BusinessTripsDashboard = () => {
                   <div className="w-3 h-3 bg-purple-200 rounded"></div>
                   <span><strong>CB</strong> - Conversioni Buoni Pasto (+€8.00)</span>
                 </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-teal-200 rounded"></div>
+                  <span><strong>TM</strong> - Trasferte Manuali (€46.48 - assegnate a fine mese)</span>
+                </div>
               </div>
             </div>
 
