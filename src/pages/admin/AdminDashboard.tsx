@@ -371,7 +371,7 @@ function OverviewDashboard() {
                         </div>
                       </div>
                       <div className="bg-green-50 p-3 rounded-lg">
-                        <div className="text-muted-foreground">Anno 2025 (Normativo)</div>
+                        <div className="text-muted-foreground">Anno {new Date().getFullYear()} (Normativo)</div>
                         <div className="font-semibold text-lg text-blue-700">{emp.yearHours}h / 250h</div>
                         <div className="text-xs text-muted-foreground">
                           {emp.yearPercentage}% • {Math.round(250 - emp.yearHours)}h disponibili
