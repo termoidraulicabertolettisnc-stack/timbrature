@@ -84,7 +84,7 @@ export function getMissingHours(workedHours: number, contractedHours: number): n
 export function hasMissingHours(
   workedHours: number,
   contractedHours: number,
-  tolerance: number = 0.25
+  tolerance: number = 0.08
 ): boolean {
   if (contractedHours === 0) return false; // Giorno non lavorativo
   const missing = getMissingHours(workedHours, contractedHours);
