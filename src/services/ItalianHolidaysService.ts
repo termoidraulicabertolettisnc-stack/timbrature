@@ -137,7 +137,10 @@ export function getNationalHolidays(year: number): { date: string; name: string 
   const easter = getEasterDate(year);
   const easterMonday = new Date(easter);
   easterMonday.setDate(easter.getDate() + 1);
-  const easterMondayStr = easterMonday.toISOString().split('T')[0];
+  const yyyy = easterMonday.getFullYear();
+  const mm = String(easterMonday.getMonth() + 1).padStart(2, '0');
+  const dd = String(easterMonday.getDate()).padStart(2, '0');
+  const easterMondayStr = `${yyyy}-${mm}-${dd}`;
   holidays.push({ date: easterMondayStr, name: "Lunedì dell'Angelo (Pasquetta)" });
 
   return holidays;
