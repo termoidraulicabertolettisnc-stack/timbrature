@@ -201,13 +201,13 @@ export default function PayrollDashboard() {
 
       Object.entries(employee.totals.absence_totals).forEach(([absenceType, hours]) => {
         if (hours > 0) {
-          const rowData = [`${getAbsenceTypeLabel(absenceType)} - ${employee.employee_name}`];
+          const rowData: (string | number)[] = [`${getAbsenceTypeLabel(absenceType)} - ${employee.employee_name}`];
           for (let day = 1; day <= daysInMonth; day++) {
             const dayKey = String(day).padStart(2, '0');
             const absence = employee.daily_data[dayKey]?.absence;
             rowData.push(absence === absenceType ? getAbsenceTypeLabel(absence) : '');
           }
-          rowData.push((hours ?? 0).toFixed(2));
+          rowData.push(Number((hours ?? 0).toFixed(2)));
           rowData.push('-');
           
           const row = worksheet.addRow(rowData);
@@ -222,6 +222,9 @@ export default function PayrollDashboard() {
             cell.font = { size: 10 };
             cell.alignment = { vertical: 'middle', horizontal: colNumber === 1 ? 'left' : 'center' };
             cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+            if (typeof cell.value === 'number') {
+              cell.numFmt = '0.00';
+            }
           });
         }
       });
