@@ -159,25 +159,25 @@ export default function PayrollDashboard() {
       const baseRowColors = ['FFE6F7E6', 'FFE6F2FF'];
       
       baseRowTypes.forEach((type, typeIndex) => {
-        const rowData = [`${type} - ${employee.employee_name}`];
+        const rowData: (string | number)[] = [`${type} - ${employee.employee_name}`];
         for (let day = 1; day <= daysInMonth; day++) {
           const dayKey = String(day).padStart(2, '0');
-          let value = '';
+          let value: string | number = '';
           if (type === 'O') {
             const ordinary = employee.daily_data[dayKey]?.ordinary || 0;
-            value = ordinary > 0 ? ordinary.toFixed(2) : '';
+            value = ordinary > 0 ? Number(ordinary.toFixed(2)) : '';
           } else {
             const overtime = employee.daily_data[dayKey]?.overtime || 0;
-            value = overtime >= 0.1 ? overtime.toFixed(2) : '';
+            value = overtime >= 0.1 ? Number(overtime.toFixed(2)) : '';
           }
           rowData.push(value);
         }
         if (type === 'O') {
-          rowData.push((employee.totals.ordinary ?? 0).toFixed(2));
+          rowData.push(Number((employee.totals.ordinary ?? 0).toFixed(2)));
           rowData.push((employee.meal_vouchers ?? 0) > 0 ? `${employee.meal_vouchers} x €${(employee.meal_voucher_amount ?? 0).toFixed(2)}` : '-');
         } else {
           const overtimeTotal = employee.totals.overtime ?? 0;
-          rowData.push(overtimeTotal >= 0.1 ? overtimeTotal.toFixed(2) : '');
+          rowData.push(overtimeTotal >= 0.1 ? Number(overtimeTotal.toFixed(2)) : '');
           rowData.push('-');
         }
         
@@ -193,18 +193,21 @@ export default function PayrollDashboard() {
           cell.font = { size: 10 };
           cell.alignment = { vertical: 'middle', horizontal: colNumber === 1 ? 'left' : 'center' };
           cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+          if (typeof cell.value === 'number') {
+            cell.numFmt = '0.00';
+          }
         });
       });
 
       Object.entries(employee.totals.absence_totals).forEach(([absenceType, hours]) => {
         if (hours > 0) {
-          const rowData = [`${getAbsenceTypeLabel(absenceType)} - ${employee.employee_name}`];
+          const rowData: (string | number)[] = [`${getAbsenceTypeLabel(absenceType)} - ${employee.employee_name}`];
           for (let day = 1; day <= daysInMonth; day++) {
             const dayKey = String(day).padStart(2, '0');
             const absence = employee.daily_data[dayKey]?.absence;
             rowData.push(absence === absenceType ? getAbsenceTypeLabel(absence) : '');
           }
-          rowData.push((hours ?? 0).toFixed(2));
+          rowData.push(Number((hours ?? 0).toFixed(2)));
           rowData.push('-');
           
           const row = worksheet.addRow(rowData);
@@ -219,6 +222,9 @@ export default function PayrollDashboard() {
             cell.font = { size: 10 };
             cell.alignment = { vertical: 'middle', horizontal: colNumber === 1 ? 'left' : 'center' };
             cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+            if (typeof cell.value === 'number') {
+              cell.numFmt = '0.00';
+            }
           });
         }
       });
