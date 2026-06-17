@@ -89,7 +89,7 @@ interface DayEditDialogProps {
   sessions: any[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
+  onSuccess: () => void | Promise<void>;
   employeeSettings?: any;
   companySettings?: any;
 }
@@ -894,7 +894,7 @@ export function DayEditDialog({
         description: `Giornata del ${format(parseISO(date), 'dd MMMM yyyy', { locale: it })} salvata con successo`,
       });
 
-      onSuccess();
+      await onSuccess();
       onOpenChange(false);
     } catch (error: any) {
       console.error('Error saving day data:', error);
@@ -961,7 +961,7 @@ export function DayEditDialog({
           : `Nessun dato da eliminare per il ${format(parseISO(date), 'dd MMMM yyyy', { locale: it })}`,
       });
 
-      onSuccess();
+      await onSuccess();
       onOpenChange(false);
     } catch (error: any) {
       console.error('Error deleting day data:', error);

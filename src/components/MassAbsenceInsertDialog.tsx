@@ -23,7 +23,7 @@ import { isHoliday as checkIsNationalHoliday } from '@/services/ItalianHolidaysS
 interface MassAbsenceInsertDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
+  onSuccess: () => void | Promise<void>;
   preSelectedEmployees?: string[];
   preSelectedDates?: { from: Date; to: Date };
 }
@@ -421,7 +421,7 @@ export function MassAbsenceInsertDialog({
           title: "Successo",
           description: `${processedCount} assenze inserite con successo per ${employeeAbsenceData.length} dipendenti`,
         });
-        onSuccess();
+        await onSuccess();
         setTimeout(() => onOpenChange(false), 2000);
       } else {
         toast({
