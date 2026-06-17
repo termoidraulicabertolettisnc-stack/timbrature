@@ -336,9 +336,7 @@ export const HoursDisplayFixed = ({
   employee: EmployeeSummary;
   standardDailyHours?: number;
 }) => {
-  const formatHours = (hours: number) => {
-    return hours.toFixed(1) + "h";
-  };
+  const formatHours = (hours: number) => formatHoursDecimal(hours);
 
   return (
     <div className="space-y-1">
