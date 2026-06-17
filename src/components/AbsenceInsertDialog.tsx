@@ -21,7 +21,7 @@ import { EmployeeSearchSelect } from '@/components/EmployeeSearchSelect';
 interface AbsenceInsertDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
+  onSuccess: () => void | Promise<void>;
   selectedDate?: Date;
   preSelectedEmployeeId?: string;
 }
@@ -281,7 +281,7 @@ export function AbsenceInsertDialog({ open, onOpenChange, onSuccess, selectedDat
         description: successMessage,
       });
 
-      onSuccess();
+      await onSuccess();
       onOpenChange(false);
 
     } catch (error) {

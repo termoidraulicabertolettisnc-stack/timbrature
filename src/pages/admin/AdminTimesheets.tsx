@@ -1473,8 +1473,8 @@ export default function AdminTimesheets() {
           sessions={dayEditData.sessions}
           employeeSettings={employeeSettings[dayEditData.employee.user_id]}
           companySettings={companySettings}
-          onSuccess={() => {
-            invalidateTimesheets();
+          onSuccess={async () => {
+            await Promise.all([invalidateTimesheets(), refreshAbsences()]);
             setDayEditDialogOpen(false);
             setDayEditData(null);
           }}
