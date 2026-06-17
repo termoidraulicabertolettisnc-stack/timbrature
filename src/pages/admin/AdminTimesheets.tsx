@@ -518,6 +518,10 @@ export default function AdminTimesheets() {
   const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
   const [selectedTimesheetDate, setSelectedTimesheetDate] = useState<string>("");
   const [preSelectedEmployeeId, setPreSelectedEmployeeId] = useState<string>("");
+  const selectedDialogDate = useMemo(
+    () => parseISO(selectedTimesheetDate || dateFilter),
+    [selectedTimesheetDate, dateFilter]
+  );
   const [dayEditData, setDayEditData] = useState<{
     date: string;
     employee: any;
@@ -1188,11 +1192,26 @@ export default function AdminTimesheets() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button onClick={() => setInsertDialogOpen(true)} className="gap-2">
+          <Button
+            onClick={() => {
+              setSelectedTimesheetDate(dateFilter);
+              setPreSelectedEmployeeId('');
+              setInsertDialogOpen(true);
+            }}
+            className="gap-2"
+          >
             <Plus className="h-4 w-4" />
             Nuovo Timesheet
           </Button>
-          <Button variant="outline" onClick={() => setAbsenceDialogOpen(true)} className="gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setSelectedTimesheetDate(dateFilter);
+              setPreSelectedEmployeeId('');
+              setAbsenceDialogOpen(true);
+            }}
+            className="gap-2"
+          >
             <UserPlus className="h-4 w-4" />
             Aggiungi Assenza
           </Button>
@@ -1378,14 +1397,18 @@ export default function AdminTimesheets() {
         open={insertDialogOpen}
         onOpenChange={(open) => {
           setInsertDialogOpen(open);
-          if (!open) setPreSelectedEmployeeId(''); // Reset quando si chiude
+          if (!open) {
+            setPreSelectedEmployeeId('');
+            setSelectedTimesheetDate('');
+          }
         }}
-        selectedDate={selectedTimesheetDate ? parseISO(selectedTimesheetDate) : new Date()}
+        selectedDate={selectedDialogDate}
         preSelectedEmployeeId={preSelectedEmployeeId}
         onSuccess={() => {
           invalidateTimesheets();
           setInsertDialogOpen(false);
           setPreSelectedEmployeeId('');
+          setSelectedTimesheetDate('');
         }}
       />
 
@@ -1394,14 +1417,18 @@ export default function AdminTimesheets() {
         open={absenceDialogOpen}
         onOpenChange={(open) => {
           setAbsenceDialogOpen(open);
-          if (!open) setPreSelectedEmployeeId(''); // Reset quando si chiude
+          if (!open) {
+            setPreSelectedEmployeeId('');
+            setSelectedTimesheetDate('');
+          }
         }}
-        selectedDate={selectedTimesheetDate ? parseISO(selectedTimesheetDate) : undefined}
+        selectedDate={selectedDialogDate}
         preSelectedEmployeeId={preSelectedEmployeeId}
         onSuccess={async () => {
           await Promise.all([invalidateTimesheets(), refreshAbsences()]);
           setAbsenceDialogOpen(false);
           setPreSelectedEmployeeId('');
+          setSelectedTimesheetDate('');
         }}
       />
 
