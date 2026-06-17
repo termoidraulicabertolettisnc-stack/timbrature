@@ -114,11 +114,7 @@ const TimesheetStats = () => {
     setIsLoading(false);
   };
 
-  const formatHours = (hours: number) => {
-    const h = Math.floor(hours);
-    const m = Math.round((hours - h) * 60);
-    return `${h}:${m.toString().padStart(2, '0')}`;
-  };
+  const formatHours = (hours: number) => formatHoursClock(hours);
 
   const getCurrentMonth = () => {
     return new Date().toLocaleDateString('it-IT', {
