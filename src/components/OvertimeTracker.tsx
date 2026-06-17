@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CalendarIcon, TrendingUp, TrendingDown, RotateCcw } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+import { formatHoursClock } from '@/utils/italianFormat';
 import { it } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { MultiEmployeeSelect } from '@/components/MultiEmployeeSelect';
