@@ -4,6 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { BarChart3, Clock, Calendar, Zap } from 'lucide-react';
+import { formatHoursClock } from '@/utils/italianFormat';
 
 interface MonthlyStats {
   totalHours: number;
@@ -114,11 +115,7 @@ const TimesheetStats = () => {
     setIsLoading(false);
   };
 
-  const formatHours = (hours: number) => {
-    const h = Math.floor(hours);
-    const m = Math.round((hours - h) * 60);
-    return `${h}:${m.toString().padStart(2, '0')}`;
-  };
+  const formatHours = (hours: number) => formatHoursClock(hours);
 
   const getCurrentMonth = () => {
     return new Date().toLocaleDateString('it-IT', {

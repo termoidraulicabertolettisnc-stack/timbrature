@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useTimesheets } from "@/hooks/useTimesheets";
+import { formatHoursDecimal } from "@/utils/italianFormat";
 import { Coffee, Zap, Moon, UtensilsCrossed } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -281,10 +282,7 @@ function HoursDisplayMultiSessionFixed({ session }: { session: any }) {
     };
   }, [session.start_time, session.end_time, session.user_id, session.date]);
 
-  const formatHours = (hours: number | null) => {
-    if (!hours) return "0h";
-    return `${hours.toFixed(1)}h`;
-  };
+  const formatHours = (hours: number | null) => formatHoursDecimal(hours);
 
   if (!session.end_time && session.start_time) {
     return (
@@ -338,9 +336,7 @@ export const HoursDisplayFixed = ({
   employee: EmployeeSummary;
   standardDailyHours?: number;
 }) => {
-  const formatHours = (hours: number) => {
-    return hours.toFixed(1) + "h";
-  };
+  const formatHours = (hours: number) => formatHoursDecimal(hours);
 
   return (
     <div className="space-y-1">
@@ -995,10 +991,7 @@ export default function AdminTimesheets() {
     return format(parseISO(timeString), "HH:mm");
   };
 
-  const formatHours = (hours: number | null) => {
-    if (!hours) return "0h";
-    return `${hours.toFixed(1)}h`;
-  };
+  const formatHours = (hours: number | null) => formatHoursDecimal(hours);
 
   const getEmployeeName = (timesheet: TimesheetWithProfile) => {
     if (!timesheet.profiles) return "Dipendente sconosciuto";

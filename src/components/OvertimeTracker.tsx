@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CalendarIcon, TrendingUp, TrendingDown, RotateCcw } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+import { formatHoursClock } from '@/utils/italianFormat';
 import { it } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { MultiEmployeeSelect } from '@/components/MultiEmployeeSelect';
@@ -127,12 +128,7 @@ export const OvertimeTracker = () => {
     ? employees 
     : employees.filter(emp => selectedEmployees.includes(emp.user_id));
 
-  const formatHours = (hours: number) => {
-    const h = Math.floor(Math.abs(hours));
-    const m = Math.round((Math.abs(hours) - h) * 60);
-    const sign = hours < 0 ? '-' : '';
-    return `${sign}${h}:${m.toString().padStart(2, '0')}`;
-  };
+  const formatHours = (hours: number) => formatHoursClock(hours);
 
   const getOvertimeStatus = (cumulativeOvertime: number) => {
     if (cumulativeOvertime > 4) return { variant: 'destructive' as const, label: 'Alto' };

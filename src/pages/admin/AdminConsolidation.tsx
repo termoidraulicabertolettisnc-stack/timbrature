@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { formatHoursDecimal } from '@/utils/italianFormat';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -284,9 +285,7 @@ export default function AdminConsolidation() {
     });
   };
 
-  const formatHours = (hours: number) => {
-    return `${hours.toFixed(1)}h`;
-  };
+  const formatHours = (hours: number) => formatHoursDecimal(hours);
 
   const getTotalStats = () => {
     const totals = consolidatedData.reduce((acc, curr) => ({
