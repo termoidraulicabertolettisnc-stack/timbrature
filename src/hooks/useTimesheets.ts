@@ -26,7 +26,7 @@ const convertToISO8601 = (dateStr: string | null): string | null => {
   return dateStr
     .replace(' ', 'T')                    // Spazio → T
     .replace(/\+(\d{2})$/, '+$1:00')      // +00 → +00:00
-    .replace(/\-(\d{2})$/, '-$1:00');     // -00 → -00:00
+    .replace(/-(\d{2})$/, '-$1:00');       // -00 → -00:00
 };
 
 /**
