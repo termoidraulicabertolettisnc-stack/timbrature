@@ -1367,10 +1367,10 @@ export default function AdminTimesheets() {
         }}
         selectedDate={selectedTimesheetDate ? parseISO(selectedTimesheetDate) : undefined}
         preSelectedEmployeeId={preSelectedEmployeeId}
-        onSuccess={() => {
-          invalidateTimesheets();
-          refreshAbsences();
+        onSuccess={async () => {
+          await Promise.all([invalidateTimesheets(), refreshAbsences()]);
           setAbsenceDialogOpen(false);
+          setPreSelectedEmployeeId('');
         }}
       />
 
@@ -1378,9 +1378,8 @@ export default function AdminTimesheets() {
       <MassAbsenceInsertDialog
         open={massAbsenceDialogOpen}
         onOpenChange={setMassAbsenceDialogOpen}
-        onSuccess={() => {
-          invalidateTimesheets();
-          refreshAbsences();
+        onSuccess={async () => {
+          await Promise.all([invalidateTimesheets(), refreshAbsences()]);
           setMassAbsenceDialogOpen(false);
         }}
       />
