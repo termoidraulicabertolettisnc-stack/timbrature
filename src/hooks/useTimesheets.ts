@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO } from 'date-fns';
@@ -25,7 +26,7 @@ const convertToISO8601 = (dateStr: string | null): string | null => {
   return dateStr
     .replace(' ', 'T')                    // Spazio → T
     .replace(/\+(\d{2})$/, '+$1:00')      // +00 → +00:00
-    .replace(/\-(\d{2})$/, '-$1:00');     // -00 → -00:00
+    .replace(/-(\d{2})$/, '-$1:00');       // -00 → -00:00
 };
 
 /**
@@ -124,13 +125,12 @@ export function useTimesheets({
       const normalizedData = normalizeTimesheetDates(data as unknown as TimesheetWithProfile[]);
       return normalizedData || [];
     },
-    staleTime: 5 * 60 * 1000, // 5 minuti
   });
 
   // Funzione per invalidare cache (chiamala dopo mutation)
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['timesheets'] });
-  };
+  const invalidate = useCallback(() => {
+    return queryClient.invalidateQueries({ queryKey: ['timesheets'] });
+  }, [queryClient]);
 
   return {
     timesheets: data || [],

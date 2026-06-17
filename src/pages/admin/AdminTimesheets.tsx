@@ -85,6 +85,29 @@ import { MonthlyCalendarView } from "@/components/MonthlyCalendarView";
 import { WeeklyTimelineView } from "@/components/WeeklyTimelineView";
 import { TimesheetImportDialog } from "@/components/TimesheetImportDialog";
 
+type AdminTimesheetsView = "daily" | "weekly" | "monthly";
+
+const TIMESHEET_VIEW_STATE_KEY = "admin-timesheets-view-state";
+
+const getSavedTimesheetViewState = (): { activeView: AdminTimesheetsView; dateFilter: string } => {
+  const fallback = { activeView: "daily" as AdminTimesheetsView, dateFilter: format(new Date(), "yyyy-MM-dd") };
+
+  try {
+    const saved = sessionStorage.getItem(TIMESHEET_VIEW_STATE_KEY);
+    if (!saved) return fallback;
+
+    const parsed = JSON.parse(saved) as { activeView?: string; dateFilter?: string };
+    return {
+      activeView: ["daily", "weekly", "monthly"].includes(parsed.activeView || "")
+        ? (parsed.activeView as AdminTimesheetsView)
+        : fallback.activeView,
+      dateFilter: /^\d{4}-\d{2}-\d{2}$/.test(parsed.dateFilter || "") ? parsed.dateFilter! : fallback.dateFilter,
+    };
+  } catch {
+    return fallback;
+  }
+};
+
 // CORREZIONE COMPLETA: Funzione migliorata per estrarre UUID con gestione di tutti i formati
 const extractRealTimesheetId = (compositeId: string): string => {
   console.log("🔧 EXTRACT UUID - Input:", compositeId);
@@ -418,14 +441,22 @@ export default function AdminTimesheets() {
   const [absences, setAbsences] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
-  const [activeView, setActiveView] = useState<"daily" | "weekly" | "monthly">("daily");
+  const [activeView, setActiveView] = useState<AdminTimesheetsView>(() => getSavedTimesheetViewState().activeView);
 
   // Stati per i filtri
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>(["all"]);
   const [selectedProject, setSelectedProject] = useState<string>("all");
-  const [dateFilter, setDateFilter] = useState<string>(format(new Date(), "yyyy-MM-dd"));
+  const [dateFilter, setDateFilter] = useState<string>(() => getSavedTimesheetViewState().dateFilter);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(TIMESHEET_VIEW_STATE_KEY, JSON.stringify({ activeView, dateFilter }));
+    } catch {
+      // Non bloccare la pagina se il browser impedisce sessionStorage.
+    }
+  }, [activeView, dateFilter]);
 
   // Use React Query hook for timesheets (after state declarations)
   const {
@@ -487,6 +518,10 @@ export default function AdminTimesheets() {
   const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
   const [selectedTimesheetDate, setSelectedTimesheetDate] = useState<string>("");
   const [preSelectedEmployeeId, setPreSelectedEmployeeId] = useState<string>("");
+  const selectedDialogDate = useMemo(
+    () => parseISO(selectedTimesheetDate || dateFilter),
+    [selectedTimesheetDate, dateFilter]
+  );
   const [dayEditData, setDayEditData] = useState<{
     date: string;
     employee: any;
@@ -552,6 +587,30 @@ export default function AdminTimesheets() {
     };
   }, [invalidateTimesheets]);
 
+  // Aggiorna subito anche le assenze quando cambiano da altri inserimenti/modifiche,
+  // senza toccare data/filtro correnti.
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin-absences-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "employee_absences",
+        },
+        () => {
+          console.log("🔄 Absences refresh triggered by realtime");
+          refreshAbsences();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [dateFilter, activeView, selectedEmployees, selectedProject, user]);
+
   useEffect(() => {
     if (user) {
       loadEmployees();
@@ -581,9 +640,9 @@ export default function AdminTimesheets() {
     return { startDate, endDate };
   };
 
-  const refreshAbsences = () => {
+  const refreshAbsences = async () => {
     const { startDate, endDate } = getCurrentDateRange();
-    loadAbsences(startDate, endDate);
+    await loadAbsences(startDate, endDate);
   };
 
   // Separate useEffect for absences (triggered by same filters as timesheets hook)
@@ -1133,11 +1192,26 @@ export default function AdminTimesheets() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button onClick={() => setInsertDialogOpen(true)} className="gap-2">
+          <Button
+            onClick={() => {
+              setSelectedTimesheetDate(dateFilter);
+              setPreSelectedEmployeeId('');
+              setInsertDialogOpen(true);
+            }}
+            className="gap-2"
+          >
             <Plus className="h-4 w-4" />
             Nuovo Timesheet
           </Button>
-          <Button variant="outline" onClick={() => setAbsenceDialogOpen(true)} className="gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setSelectedTimesheetDate(dateFilter);
+              setPreSelectedEmployeeId('');
+              setAbsenceDialogOpen(true);
+            }}
+            className="gap-2"
+          >
             <UserPlus className="h-4 w-4" />
             Aggiungi Assenza
           </Button>
@@ -1323,14 +1397,18 @@ export default function AdminTimesheets() {
         open={insertDialogOpen}
         onOpenChange={(open) => {
           setInsertDialogOpen(open);
-          if (!open) setPreSelectedEmployeeId(''); // Reset quando si chiude
+          if (!open) {
+            setPreSelectedEmployeeId('');
+            setSelectedTimesheetDate('');
+          }
         }}
-        selectedDate={selectedTimesheetDate ? parseISO(selectedTimesheetDate) : new Date()}
+        selectedDate={selectedDialogDate}
         preSelectedEmployeeId={preSelectedEmployeeId}
         onSuccess={() => {
           invalidateTimesheets();
           setInsertDialogOpen(false);
           setPreSelectedEmployeeId('');
+          setSelectedTimesheetDate('');
         }}
       />
 
@@ -1339,14 +1417,18 @@ export default function AdminTimesheets() {
         open={absenceDialogOpen}
         onOpenChange={(open) => {
           setAbsenceDialogOpen(open);
-          if (!open) setPreSelectedEmployeeId(''); // Reset quando si chiude
+          if (!open) {
+            setPreSelectedEmployeeId('');
+            setSelectedTimesheetDate('');
+          }
         }}
-        selectedDate={selectedTimesheetDate ? parseISO(selectedTimesheetDate) : undefined}
+        selectedDate={selectedDialogDate}
         preSelectedEmployeeId={preSelectedEmployeeId}
-        onSuccess={() => {
-          invalidateTimesheets();
-          refreshAbsences();
+        onSuccess={async () => {
+          await Promise.all([invalidateTimesheets(), refreshAbsences()]);
           setAbsenceDialogOpen(false);
+          setPreSelectedEmployeeId('');
+          setSelectedTimesheetDate('');
         }}
       />
 
@@ -1354,9 +1436,8 @@ export default function AdminTimesheets() {
       <MassAbsenceInsertDialog
         open={massAbsenceDialogOpen}
         onOpenChange={setMassAbsenceDialogOpen}
-        onSuccess={() => {
-          invalidateTimesheets();
-          refreshAbsences();
+        onSuccess={async () => {
+          await Promise.all([invalidateTimesheets(), refreshAbsences()]);
           setMassAbsenceDialogOpen(false);
         }}
       />
