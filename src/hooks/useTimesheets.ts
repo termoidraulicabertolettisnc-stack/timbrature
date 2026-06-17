@@ -114,13 +114,12 @@ export function useTimesheets({
         .order('date', { ascending: false })
         .order('start_time', { ascending: false });
 
-      const { data, error } = await query;
+      const { data, error } = await query.returns<TimesheetWithProfile[]>();
 
       if (error) throw error;
-      
+
       // ✅ Normalizza le date SQL → ISO 8601
-      const normalizedData = normalizeTimesheetDates(data as unknown as TimesheetWithProfile[]);
-      return normalizedData || [];
+      return normalizeTimesheetDates(data ?? []);
     },
   });
 
