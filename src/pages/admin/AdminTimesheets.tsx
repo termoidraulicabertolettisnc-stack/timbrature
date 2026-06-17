@@ -85,6 +85,29 @@ import { MonthlyCalendarView } from "@/components/MonthlyCalendarView";
 import { WeeklyTimelineView } from "@/components/WeeklyTimelineView";
 import { TimesheetImportDialog } from "@/components/TimesheetImportDialog";
 
+type AdminTimesheetsView = "daily" | "weekly" | "monthly";
+
+const TIMESHEET_VIEW_STATE_KEY = "admin-timesheets-view-state";
+
+const getSavedTimesheetViewState = (): { activeView: AdminTimesheetsView; dateFilter: string } => {
+  const fallback = { activeView: "daily" as AdminTimesheetsView, dateFilter: format(new Date(), "yyyy-MM-dd") };
+
+  try {
+    const saved = sessionStorage.getItem(TIMESHEET_VIEW_STATE_KEY);
+    if (!saved) return fallback;
+
+    const parsed = JSON.parse(saved) as { activeView?: string; dateFilter?: string };
+    return {
+      activeView: ["daily", "weekly", "monthly"].includes(parsed.activeView || "")
+        ? (parsed.activeView as AdminTimesheetsView)
+        : fallback.activeView,
+      dateFilter: /^\d{4}-\d{2}-\d{2}$/.test(parsed.dateFilter || "") ? parsed.dateFilter! : fallback.dateFilter,
+    };
+  } catch {
+    return fallback;
+  }
+};
+
 // CORREZIONE COMPLETA: Funzione migliorata per estrarre UUID con gestione di tutti i formati
 const extractRealTimesheetId = (compositeId: string): string => {
   console.log("🔧 EXTRACT UUID - Input:", compositeId);
@@ -418,14 +441,22 @@ export default function AdminTimesheets() {
   const [absences, setAbsences] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
-  const [activeView, setActiveView] = useState<"daily" | "weekly" | "monthly">("daily");
+  const [activeView, setActiveView] = useState<AdminTimesheetsView>(() => getSavedTimesheetViewState().activeView);
 
   // Stati per i filtri
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>(["all"]);
   const [selectedProject, setSelectedProject] = useState<string>("all");
-  const [dateFilter, setDateFilter] = useState<string>(format(new Date(), "yyyy-MM-dd"));
+  const [dateFilter, setDateFilter] = useState<string>(() => getSavedTimesheetViewState().dateFilter);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(TIMESHEET_VIEW_STATE_KEY, JSON.stringify({ activeView, dateFilter }));
+    } catch {
+      // Non bloccare la pagina se il browser impedisce sessionStorage.
+    }
+  }, [activeView, dateFilter]);
 
   // Use React Query hook for timesheets (after state declarations)
   const {
