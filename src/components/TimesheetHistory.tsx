@@ -85,12 +85,7 @@ const TimesheetHistory = () => {
     });
   };
 
-  const formatHours = (hours: number | null) => {
-    if (!hours) return '0:00';
-    const h = Math.floor(hours);
-    const m = Math.round((hours - h) * 60);
-    return `${h}:${m.toString().padStart(2, '0')}`;
-  };
+  const formatHours = (hours: number | null) => formatHoursClock(hours);
 
   if (isLoading) {
     return (
