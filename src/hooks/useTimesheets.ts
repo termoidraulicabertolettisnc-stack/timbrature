@@ -16,17 +16,14 @@ interface UseTimesheetsParams {
  * SQL:  "2025-10-20 13:29:55.803+00"
  * ISO:  "2025-10-20T13:29:55.803+00:00"
  */
-const convertToISO8601 = (dateStr: string | null): string | null => {
-  if (!dateStr) return null;
-  
+const convertToISO8601 = <T extends string | null>(dateStr: T): T => {
+  if (!dateStr) return dateStr;
   // Se ha già la T, è già ISO
   if (dateStr.includes('T')) return dateStr;
-  
-  // Converti spazio in T e aggiungi :00 al timezone se manca
   return dateStr
-    .replace(' ', 'T')                    // Spazio → T
-    .replace(/\+(\d{2})$/, '+$1:00')      // +00 → +00:00
-    .replace(/-(\d{2})$/, '-$1:00');       // -00 → -00:00
+    .replace(' ', 'T')
+    .replace(/\+(\d{2})$/, '+$1:00')
+    .replace(/-(\d{2})$/, '-$1:00') as T;
 };
 
 /**
