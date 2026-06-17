@@ -991,10 +991,7 @@ export default function AdminTimesheets() {
     return format(parseISO(timeString), "HH:mm");
   };
 
-  const formatHours = (hours: number | null) => {
-    if (!hours) return "0h";
-    return `${hours.toFixed(1)}h`;
-  };
+  const formatHours = (hours: number | null) => formatHoursDecimal(hours);
 
   const getEmployeeName = (timesheet: TimesheetWithProfile) => {
     if (!timesheet.profiles) return "Dipendente sconosciuto";
