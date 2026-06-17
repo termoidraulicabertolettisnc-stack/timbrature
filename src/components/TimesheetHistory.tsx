@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Calendar, Clock, MapPin, FileText } from 'lucide-react';
+import { formatHoursClock } from '@/utils/italianFormat';
 
 interface TimesheetRecord {
   id: string;
