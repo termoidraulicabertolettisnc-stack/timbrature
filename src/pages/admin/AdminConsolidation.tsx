@@ -284,9 +284,7 @@ export default function AdminConsolidation() {
     });
   };
 
-  const formatHours = (hours: number) => {
-    return `${hours.toFixed(1)}h`;
-  };
+  const formatHours = (hours: number) => formatHoursDecimal(hours);
 
   const getTotalStats = () => {
     const totals = consolidatedData.reduce((acc, curr) => ({
