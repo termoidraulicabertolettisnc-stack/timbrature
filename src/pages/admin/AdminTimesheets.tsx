@@ -560,27 +560,36 @@ export default function AdminTimesheets() {
     }
   }, [user]);
 
+  // Compute current date range based on filters
+  const getCurrentDateRange = () => {
+    const baseDate = parseISO(dateFilter);
+    let startDate: Date;
+    let endDate: Date;
+    switch (activeView) {
+      case "weekly":
+        startDate = startOfWeek(baseDate, { weekStartsOn: 1 });
+        endDate = endOfWeek(baseDate, { weekStartsOn: 1 });
+        break;
+      case "monthly":
+        startDate = startOfMonth(baseDate);
+        endDate = endOfMonth(baseDate);
+        break;
+      default:
+        startDate = baseDate;
+        endDate = baseDate;
+    }
+    return { startDate, endDate };
+  };
+
+  const refreshAbsences = () => {
+    const { startDate, endDate } = getCurrentDateRange();
+    loadAbsences(startDate, endDate);
+  };
+
   // Separate useEffect for absences (triggered by same filters as timesheets hook)
   useEffect(() => {
     if (user) {
-      const baseDate = parseISO(dateFilter);
-      let startDate: Date;
-      let endDate: Date;
-
-      switch (activeView) {
-        case "weekly":
-          startDate = startOfWeek(baseDate, { weekStartsOn: 1 });
-          endDate = endOfWeek(baseDate, { weekStartsOn: 1 });
-          break;
-        case "monthly":
-          startDate = startOfMonth(baseDate);
-          endDate = endOfMonth(baseDate);
-          break;
-        default:
-          startDate = baseDate;
-          endDate = baseDate;
-      }
-
+      const { startDate, endDate } = getCurrentDateRange();
       loadAbsences(startDate, endDate);
     }
   }, [user, selectedEmployees, selectedProject, dateFilter, activeView]);
