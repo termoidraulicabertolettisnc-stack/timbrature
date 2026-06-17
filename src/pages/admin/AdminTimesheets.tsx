@@ -281,10 +281,7 @@ function HoursDisplayMultiSessionFixed({ session }: { session: any }) {
     };
   }, [session.start_time, session.end_time, session.user_id, session.date]);
 
-  const formatHours = (hours: number | null) => {
-    if (!hours) return "0h";
-    return `${hours.toFixed(1)}h`;
-  };
+  const formatHours = (hours: number | null) => formatHoursDecimal(hours);
 
   if (!session.end_time && session.start_time) {
     return (
