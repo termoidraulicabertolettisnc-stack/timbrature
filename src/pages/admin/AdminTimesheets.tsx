@@ -1344,7 +1344,8 @@ export default function AdminTimesheets() {
         selectedDate={selectedTimesheetDate ? parseISO(selectedTimesheetDate) : undefined}
         preSelectedEmployeeId={preSelectedEmployeeId}
         onSuccess={() => {
-          invalidateTimesheets(); // Invalida cache timesheets e ricarica assenze
+          invalidateTimesheets();
+          refreshAbsences();
           setAbsenceDialogOpen(false);
         }}
       />
@@ -1355,6 +1356,7 @@ export default function AdminTimesheets() {
         onOpenChange={setMassAbsenceDialogOpen}
         onSuccess={() => {
           invalidateTimesheets();
+          refreshAbsences();
           setMassAbsenceDialogOpen(false);
         }}
       />
@@ -1365,6 +1367,7 @@ export default function AdminTimesheets() {
         onOpenChange={setMassTimesheetDialogOpen}
         onSuccess={() => {
           invalidateTimesheets();
+          refreshAbsences();
           setMassTimesheetDialogOpen(false);
         }}
       />
