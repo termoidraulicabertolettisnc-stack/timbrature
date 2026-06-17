@@ -552,6 +552,30 @@ export default function AdminTimesheets() {
     };
   }, [invalidateTimesheets]);
 
+  // Aggiorna subito anche le assenze quando cambiano da altri inserimenti/modifiche,
+  // senza toccare data/filtro correnti.
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin-absences-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "employee_absences",
+        },
+        () => {
+          console.log("🔄 Absences refresh triggered by realtime");
+          refreshAbsences();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [dateFilter, activeView, selectedEmployees, selectedProject, user]);
+
   useEffect(() => {
     if (user) {
       loadEmployees();
@@ -581,9 +605,9 @@ export default function AdminTimesheets() {
     return { startDate, endDate };
   };
 
-  const refreshAbsences = () => {
+  const refreshAbsences = async () => {
     const { startDate, endDate } = getCurrentDateRange();
-    loadAbsences(startDate, endDate);
+    await loadAbsences(startDate, endDate);
   };
 
   // Separate useEffect for absences (triggered by same filters as timesheets hook)
