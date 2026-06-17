@@ -16,17 +16,14 @@ interface UseTimesheetsParams {
  * SQL:  "2025-10-20 13:29:55.803+00"
  * ISO:  "2025-10-20T13:29:55.803+00:00"
  */
-const convertToISO8601 = (dateStr: string | null): string | null => {
-  if (!dateStr) return null;
-  
+const convertToISO8601 = <T extends string | null>(dateStr: T): T => {
+  if (!dateStr) return dateStr;
   // Se ha già la T, è già ISO
   if (dateStr.includes('T')) return dateStr;
-  
-  // Converti spazio in T e aggiungi :00 al timezone se manca
   return dateStr
-    .replace(' ', 'T')                    // Spazio → T
-    .replace(/\+(\d{2})$/, '+$1:00')      // +00 → +00:00
-    .replace(/-(\d{2})$/, '-$1:00');       // -00 → -00:00
+    .replace(' ', 'T')
+    .replace(/\+(\d{2})$/, '+$1:00')
+    .replace(/-(\d{2})$/, '-$1:00') as T;
 };
 
 /**
@@ -117,13 +114,12 @@ export function useTimesheets({
         .order('date', { ascending: false })
         .order('start_time', { ascending: false });
 
-      const { data, error } = await query;
+      const { data, error } = await query.returns<TimesheetWithProfile[]>();
 
       if (error) throw error;
-      
+
       // ✅ Normalizza le date SQL → ISO 8601
-      const normalizedData = normalizeTimesheetDates(data as unknown as TimesheetWithProfile[]);
-      return normalizedData || [];
+      return normalizeTimesheetDates(data ?? []);
     },
   });
 

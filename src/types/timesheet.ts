@@ -1,32 +1,15 @@
-export interface TimesheetWithProfile {
-  id: string;
-  date: string;
-  end_date: string | null;
-  start_time: string | null;
-  end_time: string | null;
-  lunch_start_time: string | null;
-  lunch_end_time: string | null;
-  lunch_duration_minutes: number | null;
-  notes: string | null;
-  user_id: string;
-  project_id: string | null;
-  is_saturday: boolean;
-  is_holiday: boolean;
-  is_absence?: boolean;
-  absence_type?: 'F' | 'M' | 'I' | 'FS' | 'PR' | 'PNR' | 'A' | 'AI' | 'C';
-  start_location_lat: number | null;
-  start_location_lng: number | null;
-  end_location_lat: number | null;
-  end_location_lng: number | null;
-  total_hours: number | null;
-  overtime_hours: number | null;
-  night_hours: number | null;
-  meal_voucher_earned?: boolean;
-  created_at?: string;
-  created_by?: string;
-  updated_at?: string;
-  updated_by?: string | null;
-  location_pings?: any[];
+import type { Tables } from '@/integrations/supabase/types';
+
+/**
+ * Row del timesheet arricchito con relazioni caricate via Supabase select.
+ * Allineato ai tipi generati: estendiamo Tables<'timesheets'> con i join
+ * (`profiles`, `projects`, `timesheet_sessions`) e i campi runtime opzionali
+ * usati dal frontend (`location_pings`).
+ */
+export type TimesheetRow = Tables<'timesheets'>;
+export type TimesheetSessionRow = Tables<'timesheet_sessions'>;
+
+export interface TimesheetWithProfile extends TimesheetRow {
   profiles: {
     first_name: string;
     last_name: string;
@@ -35,12 +18,10 @@ export interface TimesheetWithProfile {
   projects: {
     name: string;
   } | null;
-  timesheet_sessions?: {
-    id: string;
-    session_order: number;
-    start_time: string;
-    end_time: string | null;
-    session_type: string;
-    notes: string | null;
-  }[];
+  timesheet_sessions?: Pick<
+    TimesheetSessionRow,
+    'id' | 'session_order' | 'start_time' | 'end_time' | 'session_type' | 'notes'
+  >[];
+  // Campi runtime non presenti nello schema DB
+  location_pings?: any[];
 }
