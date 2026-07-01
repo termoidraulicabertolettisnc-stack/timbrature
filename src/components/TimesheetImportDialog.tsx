@@ -304,22 +304,44 @@ export function TimesheetImportDialog({
     try {
       setBatchId(crypto.randomUUID());
 
-      const { data: validationData, error: validationError } = await supabase.functions.invoke<ImportFunctionResult>('import-timesheets', {
-        body: {
-          action: 'validate',
-          rows: data,
-        },
+      const fiscalCodes = [...new Set(data.map(row => row.employee_code?.trim()).filter(Boolean))];
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('user_id, first_name, last_name, codice_fiscale')
+        .in('codice_fiscale', fiscalCodes);
+
+      if (profilesError) throw profilesError;
+
+      const profileByCode = new Map((profiles ?? []).map(profile => [profile.codice_fiscale, profile]));
+
+      const results: ValidationResult[] = data.map((row, index) => {
+        const messages: ValidationResult['messages'] = [];
+        const employeeCode = row.employee_code?.trim();
+        const profile = employeeCode ? profileByCode.get(employeeCode) : null;
+        const hours = calculateHours(row.date, row.start_time, row.end_time);
+
+        if (!employeeCode) messages.push({ type: 'error', field: 'employee_code', message: 'Codice fiscale mancante' });
+        if (employeeCode && !profile) messages.push({ type: 'error', field: 'employee_code', message: 'Dipendente non trovato' });
+        if (!parseDate(row.date)) messages.push({ type: 'error', field: 'date', message: 'Data non valida' });
+        if (!parseTime(row.start_time)) messages.push({ type: 'error', field: 'start_time', message: 'Ora ingresso non valida' });
+        if (!parseTime(row.end_time)) messages.push({ type: 'error', field: 'end_time', message: 'Ora uscita non valida' });
+        if (hours !== null && hours <= 0) messages.push({ type: 'error', field: 'hours', message: 'Durata non valida' });
+
+        return {
+          row_number: index + 1,
+          status: messages.some(message => message.type === 'error') ? 'error' : 'valid',
+          messages,
+          data: row,
+          employee_name: profile ? `${profile.first_name} ${profile.last_name}` : undefined,
+          calculated_hours: hours ?? undefined,
+          user_id: profile?.user_id,
+        };
       });
-
-      if (validationError) throw validationError;
-      if (validationData?.error) throw new Error(validationData.error);
-
-      const results = validationData?.results ?? [];
       
       setValidationResults(results);
       
       // Calculate stats
-      const newStats = validationData?.stats ?? {
+      const newStats = {
         total: results.length,
         valid: results.filter(r => r.status === 'valid').length,
         warnings: results.filter(r => r.status === 'warning').length,
