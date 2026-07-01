@@ -155,6 +155,16 @@ export function TimesheetDialogs(props: TimesheetDialogsProps) {
         }}
       />
 
+      <MassDeleteDialog
+        open={massDeleteDialogOpen}
+        onOpenChange={setMassDeleteDialogOpen}
+        onSuccess={async () => {
+          await Promise.all([invalidateTimesheets(), refreshAbsences()]);
+          setMassDeleteDialogOpen(false);
+        }}
+      />
+
+
       <TimesheetImportDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
