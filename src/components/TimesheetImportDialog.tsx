@@ -384,10 +384,11 @@ export function TimesheetImportDialog({
     setStep('importing');
     setLoading(true);
     setProgress(0);
+    let interval: ReturnType<typeof setInterval> | null = null;
     
     try {
       // Simula progresso
-      const interval = setInterval(() => {
+      interval = setInterval(() => {
         setProgress(prev => Math.min(prev + 10, 90));
       }, 200);
 
@@ -491,7 +492,7 @@ export function TimesheetImportDialog({
         }
       }
 
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
       
       setProgress(100);
       setStep('complete');
@@ -506,6 +507,7 @@ export function TimesheetImportDialog({
       }
       
     } catch (error) {
+      if (interval) clearInterval(interval);
       console.error('Import error:', error);
       toast({
         title: "Errore import",
