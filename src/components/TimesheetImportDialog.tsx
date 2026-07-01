@@ -78,15 +78,6 @@ interface ImportStats {
   errors: number;
 }
 
-interface ImportFunctionResult {
-  results?: ValidationResult[];
-  stats?: ImportStats;
-  success_count?: number;
-  error_count?: number;
-  warning_count?: number;
-  error?: string;
-}
-
 const TZ = 'Europe/Rome';
 
 const parseDate = (value: string) => {
