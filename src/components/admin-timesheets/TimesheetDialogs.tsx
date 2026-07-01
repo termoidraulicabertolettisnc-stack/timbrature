@@ -71,6 +71,8 @@ export function TimesheetDialogs(props: TimesheetDialogsProps) {
     setMassAbsenceDialogOpen,
     massTimesheetDialogOpen,
     setMassTimesheetDialogOpen,
+    massDeleteDialogOpen,
+    setMassDeleteDialogOpen,
     importDialogOpen,
     setImportDialogOpen,
     dayEditDialogOpen,
