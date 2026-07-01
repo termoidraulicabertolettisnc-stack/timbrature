@@ -3,6 +3,7 @@ import { TimesheetInsertDialog } from "@/components/TimesheetInsertDialog";
 import { AbsenceInsertDialog } from "@/components/AbsenceInsertDialog";
 import { MassAbsenceInsertDialog } from "@/components/MassAbsenceInsertDialog";
 import { MassTimesheetInsertDialog } from "@/components/MassTimesheetInsertDialog";
+import { MassDeleteDialog } from "@/components/MassDeleteDialog";
 import { TimesheetImportDialog } from "@/components/TimesheetImportDialog";
 import { DayEditDialog } from "@/components/DayEditDialog";
 import type { TimesheetWithProfile } from "@/types/timesheet";
