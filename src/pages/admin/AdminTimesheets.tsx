@@ -86,6 +86,7 @@ export default function AdminTimesheets() {
   const [absenceDialogOpen, setAbsenceDialogOpen] = useState(false);
   const [massAbsenceDialogOpen, setMassAbsenceDialogOpen] = useState(false);
   const [massTimesheetDialogOpen, setMassTimesheetDialogOpen] = useState(false);
+  const [massDeleteDialogOpen, setMassDeleteDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [dayEditDialogOpen, setDayEditDialogOpen] = useState(false);
   const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
@@ -530,6 +531,7 @@ export default function AdminTimesheets() {
         }}
         onMassTimesheet={() => setMassTimesheetDialogOpen(true)}
         onMassAbsence={() => setMassAbsenceDialogOpen(true)}
+        onMassDelete={() => setMassDeleteDialogOpen(true)}
         onImport={() => setImportDialogOpen(true)}
       />
 
@@ -634,6 +636,8 @@ export default function AdminTimesheets() {
         setMassAbsenceDialogOpen={setMassAbsenceDialogOpen}
         massTimesheetDialogOpen={massTimesheetDialogOpen}
         setMassTimesheetDialogOpen={setMassTimesheetDialogOpen}
+        massDeleteDialogOpen={massDeleteDialogOpen}
+        setMassDeleteDialogOpen={setMassDeleteDialogOpen}
         importDialogOpen={importDialogOpen}
         setImportDialogOpen={setImportDialogOpen}
         dayEditDialogOpen={dayEditDialogOpen}

@@ -3,6 +3,7 @@ import { TimesheetInsertDialog } from "@/components/TimesheetInsertDialog";
 import { AbsenceInsertDialog } from "@/components/AbsenceInsertDialog";
 import { MassAbsenceInsertDialog } from "@/components/MassAbsenceInsertDialog";
 import { MassTimesheetInsertDialog } from "@/components/MassTimesheetInsertDialog";
+import { MassDeleteDialog } from "@/components/MassDeleteDialog";
 import { TimesheetImportDialog } from "@/components/TimesheetImportDialog";
 import { DayEditDialog } from "@/components/DayEditDialog";
 import type { TimesheetWithProfile } from "@/types/timesheet";
@@ -35,6 +36,8 @@ interface TimesheetDialogsProps {
   setMassAbsenceDialogOpen: (open: boolean) => void;
   massTimesheetDialogOpen: boolean;
   setMassTimesheetDialogOpen: (open: boolean) => void;
+  massDeleteDialogOpen: boolean;
+  setMassDeleteDialogOpen: (open: boolean) => void;
   // Import
   importDialogOpen: boolean;
   setImportDialogOpen: (open: boolean) => void;
@@ -68,6 +71,8 @@ export function TimesheetDialogs(props: TimesheetDialogsProps) {
     setMassAbsenceDialogOpen,
     massTimesheetDialogOpen,
     setMassTimesheetDialogOpen,
+    massDeleteDialogOpen,
+    setMassDeleteDialogOpen,
     importDialogOpen,
     setImportDialogOpen,
     dayEditDialogOpen,
@@ -149,6 +154,16 @@ export function TimesheetDialogs(props: TimesheetDialogsProps) {
           setMassTimesheetDialogOpen(false);
         }}
       />
+
+      <MassDeleteDialog
+        open={massDeleteDialogOpen}
+        onOpenChange={setMassDeleteDialogOpen}
+        onSuccess={async () => {
+          await Promise.all([invalidateTimesheets(), refreshAbsences()]);
+          setMassDeleteDialogOpen(false);
+        }}
+      />
+
 
       <TimesheetImportDialog
         open={importDialogOpen}
