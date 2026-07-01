@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { fromZonedTime } from 'date-fns-tz';
 
 // =====================================================
 // TYPES & INTERFACES
@@ -67,6 +68,7 @@ interface ValidationResult {
   data: ImportRow;
   employee_name?: string;
   calculated_hours?: number;
+  user_id?: string;
 }
 
 interface ImportStats {
@@ -76,14 +78,47 @@ interface ImportStats {
   errors: number;
 }
 
-interface ImportFunctionResult {
-  results?: ValidationResult[];
-  stats?: ImportStats;
-  success_count?: number;
-  error_count?: number;
-  warning_count?: number;
-  error?: string;
-}
+const TZ = 'Europe/Rome';
+
+const parseDate = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
+  if (!match) return null;
+  const [, year, month, day] = match;
+  return { year: Number(year), month: Number(month), day: Number(day) };
+};
+
+const parseTime = (value: string) => {
+  const match = /^(\d{1,2}):(\d{2})/.exec(value || '');
+  if (!match) return null;
+  const [, hour, minute] = match;
+  const parsed = { hour: Number(hour), minute: Number(minute) };
+  if (parsed.hour > 23 || parsed.minute > 59) return null;
+  return parsed;
+};
+
+const addDays = (date: string, days: number) => {
+  const parsed = parseDate(date);
+  if (!parsed) return date;
+  const utc = new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day + days));
+  return utc.toISOString().slice(0, 10);
+};
+
+const localDateTimeToUtcIso = (date: string, time: string) => {
+  const parsedDate = parseDate(date);
+  const parsedTime = parseTime(time);
+  if (!parsedDate || !parsedTime) return null;
+
+  const localDateTime = `${date}T${String(parsedTime.hour).padStart(2, '0')}:${String(parsedTime.minute).padStart(2, '0')}:00`;
+  return fromZonedTime(new Date(localDateTime), TZ).toISOString();
+};
+
+const calculateHours = (date: string, startTime: string, endTime: string) => {
+  const endDate = endTime < startTime ? addDays(date, 1) : date;
+  const start = localDateTimeToUtcIso(date, startTime);
+  const end = localDateTimeToUtcIso(endDate, endTime);
+  if (!start || !end) return null;
+  return (new Date(end).getTime() - new Date(start).getTime()) / 36e5;
+};
 
 interface TimesheetImportDialogProps {
   open: boolean;
@@ -260,22 +295,44 @@ export function TimesheetImportDialog({
     try {
       setBatchId(crypto.randomUUID());
 
-      const { data: validationData, error: validationError } = await supabase.functions.invoke<ImportFunctionResult>('import-timesheets', {
-        body: {
-          action: 'validate',
-          rows: data,
-        },
+      const fiscalCodes = [...new Set(data.map(row => row.employee_code?.trim()).filter(Boolean))];
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('user_id, first_name, last_name, codice_fiscale')
+        .in('codice_fiscale', fiscalCodes);
+
+      if (profilesError) throw profilesError;
+
+      const profileByCode = new Map((profiles ?? []).map(profile => [profile.codice_fiscale, profile]));
+
+      const results: ValidationResult[] = data.map((row, index) => {
+        const messages: ValidationResult['messages'] = [];
+        const employeeCode = row.employee_code?.trim();
+        const profile = employeeCode ? profileByCode.get(employeeCode) : null;
+        const hours = calculateHours(row.date, row.start_time, row.end_time);
+
+        if (!employeeCode) messages.push({ type: 'error', field: 'employee_code', message: 'Codice fiscale mancante' });
+        if (employeeCode && !profile) messages.push({ type: 'error', field: 'employee_code', message: 'Dipendente non trovato' });
+        if (!parseDate(row.date)) messages.push({ type: 'error', field: 'date', message: 'Data non valida' });
+        if (!parseTime(row.start_time)) messages.push({ type: 'error', field: 'start_time', message: 'Ora ingresso non valida' });
+        if (!parseTime(row.end_time)) messages.push({ type: 'error', field: 'end_time', message: 'Ora uscita non valida' });
+        if (hours !== null && hours <= 0) messages.push({ type: 'error', field: 'hours', message: 'Durata non valida' });
+
+        return {
+          row_number: index + 1,
+          status: messages.some(message => message.type === 'error') ? 'error' : 'valid',
+          messages,
+          data: row,
+          employee_name: profile ? `${profile.first_name} ${profile.last_name}` : undefined,
+          calculated_hours: hours ?? undefined,
+          user_id: profile?.user_id,
+        };
       });
-
-      if (validationError) throw validationError;
-      if (validationData?.error) throw new Error(validationData.error);
-
-      const results = validationData?.results ?? [];
       
       setValidationResults(results);
       
       // Calculate stats
-      const newStats = validationData?.stats ?? {
+      const newStats = {
         total: results.length,
         valid: results.filter(r => r.status === 'valid').length,
         warnings: results.filter(r => r.status === 'warning').length,
@@ -318,32 +375,122 @@ export function TimesheetImportDialog({
     setStep('importing');
     setLoading(true);
     setProgress(0);
+    let interval: ReturnType<typeof setInterval> | null = null;
     
     try {
       // Simula progresso
-      const interval = setInterval(() => {
+      interval = setInterval(() => {
         setProgress(prev => Math.min(prev + 10, 90));
       }, 200);
-      
-      const { data, error } = await supabase.functions.invoke<ImportFunctionResult>('import-timesheets', {
-        body: {
-          action: 'execute',
-          rows: mappedData,
-          mode: importMode,
-        },
-      });
-      
-      clearInterval(interval);
-      
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+
+      if (importMode === 'all_or_nothing' && stats.errors > 0) {
+        throw new Error('Correggi gli errori prima di importare');
+      }
+
+      const currentUserResult = await supabase.auth.getUser();
+      if (currentUserResult.error || !currentUserResult.data.user) {
+        throw new Error('Utente non autenticato');
+      }
+
+      const validRows = validationResults.filter(result =>
+        result.status !== 'error' && result.user_id
+      );
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const result of validRows) {
+        try {
+          const row = result.data;
+          const endDate = row.end_time < row.start_time ? addDays(row.date, 1) : row.date;
+          const startTimestamp = localDateTimeToUtcIso(row.date, row.start_time);
+          const endTimestamp = localDateTimeToUtcIso(endDate, row.end_time);
+
+          if (!startTimestamp || !endTimestamp || !result.user_id) {
+            throw new Error(`Riga ${result.row_number}: data/ora non valida`);
+          }
+
+          const { data: existingTimesheet, error: existingError } = await supabase
+            .from('timesheets')
+            .select('id, notes')
+            .eq('user_id', result.user_id)
+            .eq('date', row.date)
+            .maybeSingle();
+
+          if (existingError) throw existingError;
+
+          let timesheetId = existingTimesheet?.id;
+          if (timesheetId) {
+            const nextNotes = existingTimesheet.notes?.includes('Import')
+              ? existingTimesheet.notes
+              : `${existingTimesheet.notes ? `${existingTimesheet.notes} | ` : ''}Import aggiuntivo`;
+
+            const { error: updateError } = await supabase
+              .from('timesheets')
+              .update({
+                updated_at: new Date().toISOString(),
+                notes: nextNotes,
+                updated_by: currentUserResult.data.user.id,
+              })
+              .eq('id', timesheetId);
+
+            if (updateError) throw updateError;
+          } else {
+            const { data: insertedTimesheet, error: insertError } = await supabase
+              .from('timesheets')
+              .insert({
+                user_id: result.user_id,
+                date: row.date,
+                created_by: currentUserResult.data.user.id,
+                updated_by: currentUserResult.data.user.id,
+                notes: `Import Excel - ${format(new Date(), 'dd/MM/yyyy HH:mm')}`,
+              })
+              .select('id')
+              .single();
+
+            if (insertError) throw insertError;
+            timesheetId = insertedTimesheet.id;
+          }
+
+          const { data: existingSessions, error: orderError } = await supabase
+            .from('timesheet_sessions')
+            .select('session_order')
+            .eq('timesheet_id', timesheetId)
+            .order('session_order', { ascending: false })
+            .limit(1);
+
+          if (orderError) throw orderError;
+
+          const nextOrder = ((existingSessions?.[0]?.session_order as number | null) ?? -1) + 1;
+
+          const { error: sessionError } = await supabase
+            .from('timesheet_sessions')
+            .insert({
+              timesheet_id: timesheetId,
+              start_time: startTimestamp,
+              end_time: endTimestamp,
+              pause_minutes: row.pause_minutes ?? null,
+              notes: row.notes || null,
+              session_order: nextOrder,
+            });
+
+          if (sessionError) throw sessionError;
+          successCount += 1;
+        } catch (rowError) {
+          console.error('Import row error:', rowError);
+          errorCount += 1;
+          if (importMode === 'all_or_nothing') throw rowError;
+        }
+      }
+
+      if (interval) clearInterval(interval);
       
       setProgress(100);
       setStep('complete');
       
       toast({
         title: "🎉 Import completato!",
-        description: `Importate ${data?.success_count ?? 0} sessioni con successo`,
+        description: `Importate ${successCount} sessioni con successo${errorCount ? `, ${errorCount} non importate` : ''}`,
       });
       
       if (onImportComplete) {
@@ -351,6 +498,7 @@ export function TimesheetImportDialog({
       }
       
     } catch (error) {
+      if (interval) clearInterval(interval);
       console.error('Import error:', error);
       toast({
         title: "Errore import",
