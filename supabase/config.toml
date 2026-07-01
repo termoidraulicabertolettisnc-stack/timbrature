@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.generate-export]
 verify_jwt = true
+
+[functions.import-timesheets]
+verify_jwt = true
