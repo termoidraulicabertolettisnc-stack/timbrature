@@ -295,19 +295,19 @@ export function TimesheetImportDialog({
     try {
       setBatchId(crypto.randomUUID());
 
-      const fiscalCodes = [...new Set(data.map(row => row.employee_code?.trim()).filter(Boolean))];
+      const fiscalCodes = [...new Set(data.map(row => row.employee_code?.trim().toUpperCase()).filter(Boolean))];
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('user_id, first_name, last_name, codice_fiscale')
-        .in('codice_fiscale', fiscalCodes);
+        .or(fiscalCodes.map(cf => `codice_fiscale.ilike.${cf}`).join(','));
 
       if (profilesError) throw profilesError;
 
-      const profileByCode = new Map((profiles ?? []).map(profile => [profile.codice_fiscale, profile]));
+      const profileByCode = new Map((profiles ?? []).map(profile => [profile.codice_fiscale?.toUpperCase(), profile]));
 
       const results: ValidationResult[] = data.map((row, index) => {
         const messages: ValidationResult['messages'] = [];
-        const employeeCode = row.employee_code?.trim();
+        const employeeCode = row.employee_code?.trim().toUpperCase();
         const profile = employeeCode ? profileByCode.get(employeeCode) : null;
         const hours = calculateHours(row.date, row.start_time, row.end_time);
 
