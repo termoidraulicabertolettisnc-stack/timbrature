@@ -636,6 +636,8 @@ export default function AdminTimesheets() {
         setMassAbsenceDialogOpen={setMassAbsenceDialogOpen}
         massTimesheetDialogOpen={massTimesheetDialogOpen}
         setMassTimesheetDialogOpen={setMassTimesheetDialogOpen}
+        massDeleteDialogOpen={massDeleteDialogOpen}
+        setMassDeleteDialogOpen={setMassDeleteDialogOpen}
         importDialogOpen={importDialogOpen}
         setImportDialogOpen={setImportDialogOpen}
         dayEditDialogOpen={dayEditDialogOpen}
