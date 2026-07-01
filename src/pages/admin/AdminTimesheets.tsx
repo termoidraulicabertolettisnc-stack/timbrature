@@ -86,6 +86,7 @@ export default function AdminTimesheets() {
   const [absenceDialogOpen, setAbsenceDialogOpen] = useState(false);
   const [massAbsenceDialogOpen, setMassAbsenceDialogOpen] = useState(false);
   const [massTimesheetDialogOpen, setMassTimesheetDialogOpen] = useState(false);
+  const [massDeleteDialogOpen, setMassDeleteDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [dayEditDialogOpen, setDayEditDialogOpen] = useState(false);
   const [editingTimesheet, setEditingTimesheet] = useState<TimesheetWithProfile | null>(null);
