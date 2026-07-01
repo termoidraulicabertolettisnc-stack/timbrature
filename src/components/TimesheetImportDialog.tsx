@@ -76,6 +76,15 @@ interface ImportStats {
   errors: number;
 }
 
+interface ImportFunctionResult {
+  results?: ValidationResult[];
+  stats?: ImportStats;
+  success_count?: number;
+  error_count?: number;
+  warning_count?: number;
+  error?: string;
+}
+
 interface TimesheetImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -249,61 +258,24 @@ export function TimesheetImportDialog({
     setStep('preview');
     
     try {
-      // Generate batch ID
-      const newBatchId = crypto.randomUUID();
-      setBatchId(newBatchId);
-      
-      // Get current user
-      const { data: userData } = await supabase.auth.getUser();
-      const currentUserId = userData?.user?.id;
-      
-      // Insert all rows into staging table
-      const { error: insertError } = await (supabase as any)
-        .from('import_staging')
-        .insert(
-          data.map((row, index) => ({
-            batch_id: newBatchId,
-            row_number: index + 1,
-            ...row,
-            imported_by: currentUserId
-          }))
-        );
-      
-      if (insertError) throw insertError;
-      
-      // Fetch validation results
-      const { data: validationData, error: validationError } = await (supabase as any)
-        .from('import_preview')
-        .select('*')
-        .eq('batch_id', newBatchId)
-        .order('row_number');
-      
-      if (validationError) throw validationError;
-      
-      // Transform to ValidationResult format
-      const results: ValidationResult[] = validationData.map((v: any) => ({
-        row_number: v.row_number,
-        status: v.validation_status,
-        messages: v.validation_messages || [],
-        data: {
-          employee_code: v.employee_code,
-          date: v.date,
-          start_time: v.start_time,
-          end_time: v.end_time,
-          pause_minutes: v.pause_minutes,
-          notes: v.notes,
-          site_code: v.site_code,
-          project_code: v.project_code,
-          source_row_index: v.row_number + 1
+      setBatchId(crypto.randomUUID());
+
+      const { data: validationData, error: validationError } = await supabase.functions.invoke<ImportFunctionResult>('import-timesheets', {
+        body: {
+          action: 'validate',
+          rows: data,
         },
-        employee_name: v.employee_name,
-        calculated_hours: v.calculated_hours
-      }));
+      });
+
+      if (validationError) throw validationError;
+      if (validationData?.error) throw new Error(validationData.error);
+
+      const results = validationData?.results ?? [];
       
       setValidationResults(results);
       
       // Calculate stats
-      const newStats = {
+      const newStats = validationData?.stats ?? {
         total: results.length,
         valid: results.filter(r => r.status === 'valid').length,
         warnings: results.filter(r => r.status === 'warning').length,
@@ -341,41 +313,37 @@ export function TimesheetImportDialog({
   // IMPORT EXECUTION
   // =====================================================
   const executeImport = async () => {
-    if (!batchId) return;
+    if (!batchId || mappedData.length === 0) return;
     
     setStep('importing');
     setLoading(true);
     setProgress(0);
     
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const currentUserId = userData?.user?.id;
-      
       // Simula progresso
       const interval = setInterval(() => {
         setProgress(prev => Math.min(prev + 10, 90));
       }, 200);
       
-      // Call the process function
-      const { data, error } = await (supabase as any)
-        .rpc('process_import_batch', {
-          p_batch_id: batchId,
-          p_mode: importMode,
-          p_user_id: currentUserId
-        });
+      const { data, error } = await supabase.functions.invoke<ImportFunctionResult>('import-timesheets', {
+        body: {
+          action: 'execute',
+          rows: mappedData,
+          mode: importMode,
+        },
+      });
       
       clearInterval(interval);
       
       if (error) throw error;
-      
-      const result = data[0];
+      if (data?.error) throw new Error(data.error);
       
       setProgress(100);
       setStep('complete');
       
       toast({
         title: "🎉 Import completato!",
-        description: `Importate ${result.success_count} sessioni con successo`,
+        description: `Importate ${data?.success_count ?? 0} sessioni con successo`,
       });
       
       if (onImportComplete) {
