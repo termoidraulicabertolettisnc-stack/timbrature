@@ -390,26 +390,115 @@ export function TimesheetImportDialog({
       const interval = setInterval(() => {
         setProgress(prev => Math.min(prev + 10, 90));
       }, 200);
-      
-      const { data, error } = await supabase.functions.invoke<ImportFunctionResult>('import-timesheets', {
-        body: {
-          action: 'execute',
-          rows: mappedData,
-          mode: importMode,
-        },
-      });
-      
+
+      if (importMode === 'all_or_nothing' && stats.errors > 0) {
+        throw new Error('Correggi gli errori prima di importare');
+      }
+
+      const currentUserResult = await supabase.auth.getUser();
+      if (currentUserResult.error || !currentUserResult.data.user) {
+        throw new Error('Utente non autenticato');
+      }
+
+      const validRows = validationResults.filter(result =>
+        result.status !== 'error' && result.user_id
+      );
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const result of validRows) {
+        try {
+          const row = result.data;
+          const endDate = row.end_time < row.start_time ? addDays(row.date, 1) : row.date;
+          const startTimestamp = localDateTimeToUtcIso(row.date, row.start_time);
+          const endTimestamp = localDateTimeToUtcIso(endDate, row.end_time);
+
+          if (!startTimestamp || !endTimestamp || !result.user_id) {
+            throw new Error(`Riga ${result.row_number}: data/ora non valida`);
+          }
+
+          const { data: existingTimesheet, error: existingError } = await supabase
+            .from('timesheets')
+            .select('id, notes')
+            .eq('user_id', result.user_id)
+            .eq('date', row.date)
+            .maybeSingle();
+
+          if (existingError) throw existingError;
+
+          let timesheetId = existingTimesheet?.id;
+          if (timesheetId) {
+            const nextNotes = existingTimesheet.notes?.includes('Import')
+              ? existingTimesheet.notes
+              : `${existingTimesheet.notes ? `${existingTimesheet.notes} | ` : ''}Import aggiuntivo`;
+
+            const { error: updateError } = await supabase
+              .from('timesheets')
+              .update({
+                updated_at: new Date().toISOString(),
+                notes: nextNotes,
+                updated_by: currentUserResult.data.user.id,
+              })
+              .eq('id', timesheetId);
+
+            if (updateError) throw updateError;
+          } else {
+            const { data: insertedTimesheet, error: insertError } = await supabase
+              .from('timesheets')
+              .insert({
+                user_id: result.user_id,
+                date: row.date,
+                created_by: currentUserResult.data.user.id,
+                updated_by: currentUserResult.data.user.id,
+                notes: `Import Excel - ${format(new Date(), 'dd/MM/yyyy HH:mm')}`,
+              })
+              .select('id')
+              .single();
+
+            if (insertError) throw insertError;
+            timesheetId = insertedTimesheet.id;
+          }
+
+          const { data: existingSessions, error: orderError } = await supabase
+            .from('timesheet_sessions')
+            .select('session_order')
+            .eq('timesheet_id', timesheetId)
+            .order('session_order', { ascending: false })
+            .limit(1);
+
+          if (orderError) throw orderError;
+
+          const nextOrder = ((existingSessions?.[0]?.session_order as number | null) ?? -1) + 1;
+
+          const { error: sessionError } = await supabase
+            .from('timesheet_sessions')
+            .insert({
+              timesheet_id: timesheetId,
+              start_time: startTimestamp,
+              end_time: endTimestamp,
+              pause_minutes: row.pause_minutes ?? null,
+              notes: row.notes || null,
+              session_order: nextOrder,
+            });
+
+          if (sessionError) throw sessionError;
+          successCount += 1;
+        } catch (rowError) {
+          console.error('Import row error:', rowError);
+          errorCount += 1;
+          if (importMode === 'all_or_nothing') throw rowError;
+        }
+      }
+
       clearInterval(interval);
-      
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
       
       setProgress(100);
       setStep('complete');
       
       toast({
         title: "🎉 Import completato!",
-        description: `Importate ${data?.success_count ?? 0} sessioni con successo`,
+        description: `Importate ${successCount} sessioni con successo${errorCount ? `, ${errorCount} non importate` : ''}`,
       });
       
       if (onImportComplete) {
