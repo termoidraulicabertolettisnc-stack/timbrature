@@ -36,6 +36,8 @@ interface TimesheetDialogsProps {
   setMassAbsenceDialogOpen: (open: boolean) => void;
   massTimesheetDialogOpen: boolean;
   setMassTimesheetDialogOpen: (open: boolean) => void;
+  massDeleteDialogOpen: boolean;
+  setMassDeleteDialogOpen: (open: boolean) => void;
   // Import
   importDialogOpen: boolean;
   setImportDialogOpen: (open: boolean) => void;
