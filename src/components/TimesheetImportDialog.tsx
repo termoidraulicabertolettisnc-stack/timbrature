@@ -241,7 +241,7 @@ export function TimesheetImportDialog({
         const sede = row['Luogo di lavoro'] || row['Sede'] || '';
         
         return {
-          employee_code: codiceFiscale.trim(),
+          employee_code: codiceFiscale.trim().toUpperCase(),
           date: date,
           start_time: start_time,
           end_time: end_time,
