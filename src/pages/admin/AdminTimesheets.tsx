@@ -531,6 +531,7 @@ export default function AdminTimesheets() {
         }}
         onMassTimesheet={() => setMassTimesheetDialogOpen(true)}
         onMassAbsence={() => setMassAbsenceDialogOpen(true)}
+        onMassDelete={() => setMassDeleteDialogOpen(true)}
         onImport={() => setImportDialogOpen(true)}
       />
 
