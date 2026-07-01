@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { fromZonedTime } from 'date-fns-tz';
 
 // =====================================================
 // TYPES & INTERFACES
@@ -67,6 +68,7 @@ interface ValidationResult {
   data: ImportRow;
   employee_name?: string;
   calculated_hours?: number;
+  user_id?: string;
 }
 
 interface ImportStats {
@@ -84,6 +86,48 @@ interface ImportFunctionResult {
   warning_count?: number;
   error?: string;
 }
+
+const TZ = 'Europe/Rome';
+
+const parseDate = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
+  if (!match) return null;
+  const [, year, month, day] = match;
+  return { year: Number(year), month: Number(month), day: Number(day) };
+};
+
+const parseTime = (value: string) => {
+  const match = /^(\d{1,2}):(\d{2})/.exec(value || '');
+  if (!match) return null;
+  const [, hour, minute] = match;
+  const parsed = { hour: Number(hour), minute: Number(minute) };
+  if (parsed.hour > 23 || parsed.minute > 59) return null;
+  return parsed;
+};
+
+const addDays = (date: string, days: number) => {
+  const parsed = parseDate(date);
+  if (!parsed) return date;
+  const utc = new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day + days));
+  return utc.toISOString().slice(0, 10);
+};
+
+const localDateTimeToUtcIso = (date: string, time: string) => {
+  const parsedDate = parseDate(date);
+  const parsedTime = parseTime(time);
+  if (!parsedDate || !parsedTime) return null;
+
+  const localDateTime = `${date}T${String(parsedTime.hour).padStart(2, '0')}:${String(parsedTime.minute).padStart(2, '0')}:00`;
+  return fromZonedTime(new Date(localDateTime), TZ).toISOString();
+};
+
+const calculateHours = (date: string, startTime: string, endTime: string) => {
+  const endDate = endTime < startTime ? addDays(date, 1) : date;
+  const start = localDateTimeToUtcIso(date, startTime);
+  const end = localDateTimeToUtcIso(endDate, endTime);
+  if (!start || !end) return null;
+  return (new Date(end).getTime() - new Date(start).getTime()) / 36e5;
+};
 
 interface TimesheetImportDialogProps {
   open: boolean;
