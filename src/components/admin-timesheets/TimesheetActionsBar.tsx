@@ -1,11 +1,12 @@
 import { Button } from "@/components/ui/button";
-import { Plus, UserPlus, Users, FileSpreadsheet } from "lucide-react";
+import { Plus, UserPlus, Users, FileSpreadsheet, Trash2 } from "lucide-react";
 
 interface TimesheetActionsBarProps {
   onNewTimesheet: () => void;
   onNewAbsence: () => void;
   onMassTimesheet: () => void;
   onMassAbsence: () => void;
+  onMassDelete: () => void;
   onImport: () => void;
 }
 
@@ -14,6 +15,7 @@ export function TimesheetActionsBar({
   onNewAbsence,
   onMassTimesheet,
   onMassAbsence,
+  onMassDelete,
   onImport,
 }: TimesheetActionsBarProps) {
   return (
@@ -41,6 +43,10 @@ export function TimesheetActionsBar({
         <Button variant="secondary" onClick={onMassAbsence} className="gap-2">
           <Users className="h-4 w-4" />
           Assenze Multiple
+        </Button>
+        <Button variant="destructive" onClick={onMassDelete} className="gap-2">
+          <Trash2 className="h-4 w-4" />
+          Cancellazione Multipla
         </Button>
         <Button variant="outline" onClick={onImport} className="gap-2">
           <FileSpreadsheet className="h-4 w-4" />
